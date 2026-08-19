@@ -1,0 +1,79 @@
+export enum PlatformRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
+}
+
+export enum TenantRole {
+  OWNER = 'OWNER',
+  MANAGER = 'MANAGER',
+  CASHIER = 'CASHIER',
+  KITCHEN_STAFF = 'KITCHEN_STAFF',
+}
+
+export enum MembershipStatus {
+  INVITED = 'INVITED',
+  ACTIVE = 'ACTIVE',
+  SUSPENDED = 'SUSPENDED',
+  REVOKED = 'REVOKED',
+}
+
+export enum OrderType {
+  DINE_IN = 'DINE_IN',
+  PICKUP = 'PICKUP',
+  POS = 'POS',
+}
+
+export enum OrderStatus {
+  DRAFT = 'DRAFT',
+  PENDING_PAYMENT = 'PENDING_PAYMENT',
+  PENDING_CONFIRMATION = 'PENDING_CONFIRMATION',
+  CONFIRMED = 'CONFIRMED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  READY = 'READY',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+  VOIDED = 'VOIDED',
+}
+
+export enum PaymentMethod {
+  CASH = 'CASH',
+  MANUAL_TRANSFER = 'MANUAL_TRANSFER',
+  GATEWAY = 'GATEWAY',
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  PENDING_VERIFICATION = 'PENDING_VERIFICATION',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum TicketStatus {
+  QUEUED = 'QUEUED',
+  IN_PROGRESS = 'IN_PROGRESS',
+  READY = 'READY',
+  COMPLETED = 'COMPLETED',
+  RECALLED = 'RECALLED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum InventoryMovementType {
+  RECEIVE = 'RECEIVE',
+  DEDUCT = 'DEDUCT',
+  ADJUST = 'ADJUST',
+  VOID_RESTORE = 'VOID_RESTORE',
+  WASTE = 'WASTE',
+  TRANSFER = 'TRANSFER',
+}
+
+export enum FeatureKey {
+  PAYMENT_GATEWAY = 'PAYMENT_GATEWAY',
+  TABLE_QR_ORDERING = 'TABLE_QR_ORDERING',
+  KDS = 'KDS',
+  BATCH_INVENTORY = 'BATCH_INVENTORY',
+}
+
+export const CURRENCY = 'ETB' as const;
+export const DEFAULT_TIMEZONE = 'Africa/Addis_Ababa' as const;

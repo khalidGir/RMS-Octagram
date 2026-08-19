@@ -1,0 +1,23 @@
+{
+  "name": "@rms/cdk",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy:staging": "cdk deploy --all -c environment=staging",
+    "deploy:production": "cdk deploy --all -c environment=production",
+    "diff": "cdk diff"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.173.0",
+    "constructs": "^10.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "ts-node": "^10.9.2"
+  }
+}

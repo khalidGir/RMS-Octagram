@@ -1,0 +1,39 @@
+{
+  "name": "rms",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Restaurant Management System - Multi-tenant POS, ordering, kitchen, and inventory platform",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:e2e": "turbo test:e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "db:migrate": "pnpm --filter @rms/database migrate",
+    "db:migrate:deploy": "pnpm --filter @rms/database migrate:deploy",
+    "db:migrate:status": "pnpm --filter @rms/database migrate:status",
+    "db:generate": "pnpm --filter @rms/database generate",
+    "db:seed": "pnpm --filter @rms/database seed",
+    "db:studio": "pnpm --filter @rms/database studio",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.2.11",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  }
+}

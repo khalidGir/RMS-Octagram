@@ -1,0 +1,99 @@
+import type { NestMiddleware} from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
+import type { Request, Response, NextFunction } from 'express';
+import type { JwtService } from '@nestjs/jwt';
+import type { PrismaService } from '../prisma/prisma.service';
+import type { JwtPayload } from '../auth/auth.service';
+import type { TenantContext } from '../auth/types';
+
+@Injectable()
+export class TenantContextMiddleware implements NestMiddleware {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  async use(req: Request, _res: Response, next: NextFunction) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      req.tenantContext = undefined;
+      return next();
+    }
+
+    try {
+      const token = authHeader.slice(7);
+      const payload = this.jwtService.verify<JwtPayload>(token);
+
+      const ctx: TenantContext = {
+        userId: payload.sub,
+        email: payload.email,
+        platformRole: payload.platformRole,
+      };
+
+      // Resolve tenant from x-tenant-id header
+      const tenantId = req.headers['x-tenant-id'] as string;
+
+      if (tenantId) {
+        // Verify tenant is active
+        const tenant = await this.prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { id: true, status: true },
+        });
+
+        if (!tenant) {
+          throw new ForbiddenException('Tenant not found');
+        }
+
+        if (tenant.status !== 'ACTIVE') {
+          throw new ForbiddenException('Tenant is not active');
+        }
+
+        // Verify membership exists and is active
+        const membership = await this.prisma.tenantMembership.findUnique({
+          where: {
+            tenantId_userId: { tenantId, userId: payload.sub },
+          },
+          select: {
+            role: true,
+            status: true,
+            branchAssignments: {
+              select: {
+                branchId: true,
+                branch: {
+                  select: { id: true, isActive: true },
+                },
+              },
+            },
+          },
+        });
+
+        if (!membership) {
+          throw new ForbiddenException('Not a member of this tenant');
+        }
+
+        if (membership.status !== 'ACTIVE') {
+          throw new ForbiddenException('Membership is not active');
+        }
+
+        // Filter to active branches only
+        const activeBranchIds = membership.branchAssignments
+          .filter((a) => a.branch.isActive)
+          .map((a) => a.branchId);
+
+        ctx.tenantId = tenantId;
+        ctx.tenantRole = membership.role as TenantContext['tenantRole'];
+        ctx.branchIds = activeBranchIds;
+      }
+
+      req.tenantContext = ctx;
+    } catch (error) {
+      // Re-throw ForbiddenException, swallow JWT errors
+      if (error instanceof ForbiddenException) {
+        throw error;
+      }
+      req.tenantContext = undefined;
+    }
+
+    next();
+  }
+}

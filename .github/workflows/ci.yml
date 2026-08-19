@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rms
+          POSTGRES_PASSWORD: rms_test
+          POSTGRES_DB: rms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build packages
+        run: pnpm build
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test
+        env:
+          DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
+
+      - name: Run e2e security tests
+        run: pnpm test:e2e
+        env:
+          DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
+          NODE_ENV: test
+
+      - name: Validate migrations
+        run: pnpm db:migrate:deploy
+        env:
+          DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
