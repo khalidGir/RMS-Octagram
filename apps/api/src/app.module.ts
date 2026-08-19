@@ -8,6 +8,9 @@ import { TenancyModule } from './modules/tenancy/tenancy.module';
 import { PlatformAdminModule } from './modules/platform/platform-admin.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ObservabilityModule } from './modules/observability/observability.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
+import { TablesModule } from './modules/tables/tables.module';
+import { PublicMenuModule } from './modules/public-menu/public-menu.module';
 import { CorrelationMiddleware } from './modules/observability/correlation.middleware';
 import { HttpLoggerMiddleware } from './modules/observability/http-logger.middleware';
 import { TenantContextMiddleware } from './modules/auth/tenant-context.middleware';
@@ -24,12 +27,15 @@ import { JwtStrategy } from './modules/auth/jwt.strategy';
     PlatformAdminModule,
     AuditModule,
     ObservabilityModule,
+    CatalogModule,
+    TablesModule,
+    PublicMenuModule,
   ],
   providers: [JwtStrategy],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(CorrelationMiddleware, HttpLoggerMiddleware).forRoutes('*');
-    consumer.apply(TenantContextMiddleware).forRoutes('*');
+    consumer.apply(TenantContextMiddleware).forRoutes('api/v1');
   }
 }

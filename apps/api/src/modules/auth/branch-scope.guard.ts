@@ -1,8 +1,9 @@
-import type { CanActivate, ExecutionContext} from '@nestjs/common';
+import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
+import type { Request } from 'express';
+import { TenantRole } from '@rms/contracts';
 import { BRANCH_SCOPED_KEY, type TenantContext } from './types';
-import { TenantRole, PlatformRole } from '@rms/contracts';
 
 @Injectable()
 export class BranchScopeGuard implements CanActivate {
@@ -18,27 +19,31 @@ export class BranchScopeGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<Request>();
     const ctx = request.tenantContext as TenantContext | undefined;
 
-    if (!ctx) {
+    if (!ctx || !ctx.tenantId) {
       throw new ForbiddenException('No tenant context');
     }
 
-    // Platform admins only bypass for platform endpoints (no tenantId)
-    if (ctx.platformRole === PlatformRole.SUPER_ADMIN && !ctx.tenantId) {
+    // Super Admin bypass only for platform endpoints (no tenant scope)
+    if (ctx.platformRole === 'SUPER_ADMIN' && !ctx.tenantId) {
       return true;
     }
 
-    // Owners have access to all branches in their tenant
+    const branchId = (request.params as Record<string, string>).branchId;
+    if (!branchId) {
+      throw new ForbiddenException('Branch ID required');
+    }
+
+    // Owner sees all branches in tenant
     if (ctx.tenantRole === TenantRole.OWNER) {
       return true;
     }
 
-    // Check branch assignment from route params
-    const branchId = request.params?.branchId;
-    if (branchId && ctx.branchIds && !ctx.branchIds.includes(branchId)) {
-      throw new ForbiddenException('Access denied to this branch');
+    // Manager/Cashier/Kitchen must be assigned to this branch
+    if (!ctx.branchIds || !ctx.branchIds.includes(branchId)) {
+      throw new ForbiddenException('You are not assigned to this branch');
     }
 
     return true;
