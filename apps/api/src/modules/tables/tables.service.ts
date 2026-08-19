@@ -154,24 +154,18 @@ export class TablesService {
             },
           });
 
-          // Audit record written inside the transaction using tx client directly.
-          // This保证 audit is committed atomically with the rotation.
-          // Best-effort: if audit write fails, the rotation still commits.
-          try {
-            await tx.auditLog.create({
-              data: {
-                actorUserId: actorUserId || null,
-                tenantId,
-                branchId,
-                action: 'QR_TOKEN_ROTATE',
-                entityType: 'TableQrToken',
-                entityId: token.id,
-                afterJson: { tableId, branchId, version: nextVersion, reason },
-              },
-            });
-          } catch {
-            // Audit failure must not block rotation
-          }
+          // Audit written via tx client so failure rolls back the rotation
+          await tx.auditLog.create({
+            data: {
+              actorUserId: actorUserId || null,
+              tenantId,
+              branchId,
+              action: 'QR_TOKEN_ROTATE',
+              entityType: 'TableQrToken',
+              entityId: token.id,
+              afterJson: { tableId, branchId, version: nextVersion, reason },
+            },
+          });
 
           return { raw, token, version: nextVersion };
         });

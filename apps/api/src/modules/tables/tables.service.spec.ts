@@ -177,6 +177,24 @@ describe('TablesService', () => {
 
       await expect(service.generateQrToken('t1', tenantId, branchId)).rejects.toThrow(ConflictException);
     });
+
+    it('rolls back rotation when audit write fails', async () => {
+      mockPrisma.restaurantTable.findFirst.mockResolvedValue({ id: 't1' });
+      const mockTx = {
+        $queryRaw: vi.fn().mockResolvedValue([{ version: 1 }]),
+        tableQrToken: {
+          updateMany: vi.fn().mockResolvedValue({}),
+          create: vi.fn().mockResolvedValue({ id: 'qt2', tokenHash: 'h2' }),
+        },
+        auditLog: {
+          create: vi.fn().mockRejectedValue(new Error('Disk full')),
+        },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockTx));
+
+      await expect(service.generateQrToken('t1', tenantId, branchId)).rejects.toThrow('Disk full');
+      // The transaction should have been rolled back — $transaction itself rejects
+    });
   });
 
   describe('getActiveToken', () => {
