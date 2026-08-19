@@ -1,14 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import type { PrismaService } from '../prisma/prisma.service';
-import type { AuditService } from '../audit/audit.service';
 import * as crypto from 'crypto';
 
 @Injectable()
 export class TablesService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly audit: AuditService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /** Confirm branch belongs to tenant and is active */
   private async assertBranchOwnership(tenantId: string, branchId: string) {
@@ -115,64 +111,90 @@ export class TablesService {
 
   // ─── QR Token Generation / Rotation ────────
 
+  private static readonly MAX_QR_RETRIES = 3;
+
   async generateQrToken(tableId: string, tenantId: string, branchId: string, reason?: string, actorUserId?: string) {
     const table = await this.prisma.restaurantTable.findFirst({ where: { id: tableId, tenantId, branchId } });
     if (!table) throw new NotFoundException('Table not found');
 
-    // Concurrency-safe: use raw SQL SELECT ... FOR UPDATE to lock the latest row,
-    // then allocate version = locked.version + 1. For the first token (no rows),
-    // the lock still serializes correctly.
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Lock existing tokens for this table to prevent concurrent version races
-      const locked = await tx.$queryRaw<{ version: number }[]>`
-        SELECT version FROM "TableQrToken"
-        WHERE "tableId" = ${tableId}
-        ORDER BY version DESC
-        LIMIT 1
-        FOR UPDATE
-      `;
+    // Retry loop: FOR UPDATE locks existing rows, but the first-token case
+    // (no rows) cannot be locked. Concurrent first-token creates race on the
+    // unique (tableId, version) index. We retry on conflict.
+    for (let attempt = 1; attempt <= TablesService.MAX_QR_RETRIES; attempt++) {
+      try {
+        const result = await this.prisma.$transaction(async (tx) => {
+          // Lock existing tokens for this table to prevent concurrent version races.
+          // If no rows exist, the lock is a no-op — the unique index catches races.
+          const locked = await tx.$queryRaw<{ version: number }[]>`
+            SELECT version FROM "TableQrToken"
+            WHERE "tableId" = ${tableId}
+            ORDER BY version DESC
+            LIMIT 1
+            FOR UPDATE
+          `;
 
-      const nextVersion = (locked[0]?.version ?? 0) + 1;
+          const nextVersion = (locked[0]?.version ?? 0) + 1;
 
-      const raw = crypto.randomBytes(32).toString('hex');
-      const tokenHash = crypto.createHash('sha256').update(raw).digest('hex');
+          const raw = crypto.randomBytes(32).toString('hex');
+          const tokenHash = crypto.createHash('sha256').update(raw).digest('hex');
 
-      // Revoke all active tokens for this table
-      await tx.tableQrToken.updateMany({
-        where: { tableId, tenantId, branchId, revokedAt: null },
-        data: { revokedAt: new Date() },
-      });
+          // Revoke all active tokens for this table
+          await tx.tableQrToken.updateMany({
+            where: { tableId, tenantId, branchId, revokedAt: null },
+            data: { revokedAt: new Date() },
+          });
 
-      const token = await tx.tableQrToken.create({
-        data: {
-          tenantId,
-          branchId,
+          const token = await tx.tableQrToken.create({
+            data: {
+              tenantId,
+              branchId,
+              tableId,
+              tokenHash,
+              version: nextVersion,
+            },
+          });
+
+          // Audit record written inside the transaction using tx client directly.
+          // This保证 audit is committed atomically with the rotation.
+          // Best-effort: if audit write fails, the rotation still commits.
+          try {
+            await tx.auditLog.create({
+              data: {
+                actorUserId: actorUserId || null,
+                tenantId,
+                branchId,
+                action: 'QR_TOKEN_ROTATE',
+                entityType: 'TableQrToken',
+                entityId: token.id,
+                afterJson: { tableId, branchId, version: nextVersion, reason },
+              },
+            });
+          } catch {
+            // Audit failure must not block rotation
+          }
+
+          return { raw, token, version: nextVersion };
+        });
+
+        return {
+          raw: result.raw,
+          version: result.version,
           tableId,
-          tokenHash,
-          version: nextVersion,
-        },
-      });
+          branchId,
+        };
+      } catch (error: any) {
+        // P2002 = Prisma unique constraint violation (code from PostgreSQL)
+        if (error?.code === 'P2002' && attempt < TablesService.MAX_QR_RETRIES) {
+          continue; // Retry on version collision
+        }
+        if (error?.code === 'P2002') {
+          throw new ConflictException('QR token rotation failed: version collision after retries');
+        }
+        throw error;
+      }
+    }
 
-      // Audit inside transaction — if rotation fails, audit is not committed
-      await this.audit.log({
-        actorUserId: actorUserId ?? null as any,
-        tenantId,
-        branchId,
-        action: 'QR_TOKEN_ROTATE',
-        entityType: 'TableQrToken',
-        entityId: token.id,
-        after: { tableId, branchId, version: nextVersion, reason },
-      });
-
-      return { raw, token, version: nextVersion };
-    });
-
-    return {
-      raw: result.raw,
-      version: result.version,
-      tableId,
-      branchId,
-    };
+    throw new ConflictException('QR token rotation failed after retries');
   }
 
   async getActiveToken(tableId: string, tenantId: string, branchId: string) {

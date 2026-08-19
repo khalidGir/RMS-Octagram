@@ -1,30 +1,26 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { TablesService } from './tables.service';
 import type { PrismaService } from '../prisma/prisma.service';
-import type { AuditService } from '../audit/audit.service';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, ConflictException } from '@nestjs/common';
 
 const mockPrisma = {
   diningArea: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
   restaurantTable: { findMany: vi.fn(), findFirst: vi.fn(), create: vi.fn(), update: vi.fn(), count: vi.fn() },
-  tableQrToken: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn(), count: vi.fn(), aggregate: vi.fn() },
+  tableQrToken: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
   branch: { findFirst: vi.fn() },
   $transaction: vi.fn(),
   $queryRaw: vi.fn(),
 };
 
-const mockAudit = { log: vi.fn() };
-
 const tenantId = 't1';
 const branchId = 'b1';
-const userId = 'u1';
 
 describe('TablesService', () => {
   let service: TablesService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new TablesService(mockPrisma as unknown as PrismaService, mockAudit as unknown as AuditService);
+    service = new TablesService(mockPrisma as unknown as PrismaService);
   });
 
   // ─── Branch Ownership ────────────────────────
@@ -101,50 +97,85 @@ describe('TablesService', () => {
 
     it('generates token with FOR UPDATE locking and audit inside transaction', async () => {
       mockPrisma.restaurantTable.findFirst.mockResolvedValue({ id: 't1' });
-
-      let auditCalledInsideTx = false;
       const mockTx = {
         $queryRaw: vi.fn().mockResolvedValue([{ version: 2 }]),
         tableQrToken: {
           updateMany: vi.fn().mockResolvedValue({}),
-          create: vi.fn().mockImplementation(async (data: any) => {
-            // Simulate audit being called inside the transaction
-            auditCalledInsideTx = true;
-            return { id: 'qt3', tokenHash: 'h3', version: data.data.version };
-          }),
+          create: vi.fn().mockResolvedValue({ id: 'qt3', tokenHash: 'h3' }),
+        },
+        auditLog: {
+          create: vi.fn().mockResolvedValue({}),
         },
       };
-      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
-        const result = await fn(mockTx);
-        // Audit is called inside the transaction callback
-        await mockAudit.log(expect.objectContaining({ actorUserId: userId }));
-        auditCalledInsideTx = true;
-        return result;
-      });
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockTx));
 
-      const result = await service.generateQrToken('t1', tenantId, branchId, 'reprint', userId);
+      const result = await service.generateQrToken('t1', tenantId, branchId, 'reprint', 'u1');
       expect(result.raw).toBeDefined();
       expect(result.version).toBe(3);
-      expect(mockTx.$queryRaw).toHaveBeenCalled();
       // Verify FOR UPDATE was used in the raw query
-      const queryCall = mockTx.$queryRaw.mock.calls[0][0];
-      expect(queryCall.join('')).toContain('FOR UPDATE');
+      const queryParts = mockTx.$queryRaw.mock.calls[0][0];
+      const queryStr = queryParts.join('');
+      expect(queryStr).toContain('FOR UPDATE');
+      // Verify audit was written via tx client
+      expect(mockTx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ action: 'QR_TOKEN_ROTATE' }),
+      }));
     });
 
     it('version uses locked value (concurrent-safe)', async () => {
       mockPrisma.restaurantTable.findFirst.mockResolvedValue({ id: 't1' });
-      // Simulate no existing tokens
       const mockTx = {
-        $queryRaw: vi.fn().mockResolvedValue([]),
+        $queryRaw: vi.fn().mockResolvedValue([]), // no existing tokens
         tableQrToken: {
           updateMany: vi.fn().mockResolvedValue({}),
-          create: vi.fn().mockResolvedValue({ id: 'qt1', tokenHash: 'h1', version: 1 }),
+          create: vi.fn().mockResolvedValue({ id: 'qt1', tokenHash: 'h1' }),
         },
+        auditLog: { create: vi.fn().mockResolvedValue({}) },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockTx));
 
       const result = await service.generateQrToken('t1', tenantId, branchId);
       expect(result.version).toBe(1); // 0 + 1
+    });
+
+    it('retries on unique constraint conflict (first-token race)', async () => {
+      mockPrisma.restaurantTable.findFirst.mockResolvedValue({ id: 't1' });
+      let callCount = 0;
+
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        callCount++;
+        if (callCount === 1) {
+          // First attempt: conflict on unique (tableId, version)
+          const err = new Error('Unique constraint') as any;
+          err.code = 'P2002';
+          throw err;
+        }
+        // Second attempt: success
+        const mockTx = {
+          $queryRaw: vi.fn().mockResolvedValue([{ version: 1 }]),
+          tableQrToken: {
+            updateMany: vi.fn().mockResolvedValue({}),
+            create: vi.fn().mockResolvedValue({ id: 'qt2', tokenHash: 'h2' }),
+          },
+          auditLog: { create: vi.fn().mockResolvedValue({}) },
+        };
+        return fn(mockTx);
+      });
+
+      const result = await service.generateQrToken('t1', tenantId, branchId);
+      expect(result.version).toBe(2);
+      expect(callCount).toBe(2);
+    });
+
+    it('throws ConflictException after exhausting retries', async () => {
+      mockPrisma.restaurantTable.findFirst.mockResolvedValue({ id: 't1' });
+      mockPrisma.$transaction.mockImplementation(async () => {
+        const err = new Error('Unique constraint') as any;
+        err.code = 'P2002';
+        throw err;
+      });
+
+      await expect(service.generateQrToken('t1', tenantId, branchId)).rejects.toThrow(ConflictException);
     });
   });
 

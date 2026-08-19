@@ -93,16 +93,21 @@ describe('PublicMenuService', () => {
       expect(result.categories).toHaveLength(0);
     });
 
-    it('respects availableFrom/availableUntil window using branch timezone', async () => {
+    it('normalizes @db.Time Date objects for availability window', async () => {
       mockPrisma.tenant.findFirst.mockResolvedValue({ id: tenantId, name: 'T1' });
       mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main', timezone: 'Africa/Addis_Ababa' });
 
-      // Item only available 08:00-10:00
+      // Prisma returns Date objects for @db.Time fields (epoch 1970-01-01 + time)
+      // 08:00 → Date with hours=8, minutes=0
+      const from8am = new Date('1970-01-01T08:00:00Z');
+      // 10:00 → Date with hours=10, minutes=0
+      const until10am = new Date('1970-01-01T10:00:00Z');
+
       mockPrisma.branchMenuItem.findMany.mockResolvedValue([
         {
           priceOverrideMinor: null,
-          availableFrom: '08:00:00',
-          availableUntil: '10:00:00',
+          availableFrom: from8am,
+          availableUntil: until10am,
           menuItem: {
             id: 'i1',
             name: 'Breakfast',
@@ -117,10 +122,35 @@ describe('PublicMenuService', () => {
         },
       ]);
 
-      // We can't control time easily, but we can verify the logic doesn't throw
-      // and that items are filtered based on current UTC time
+      // Verify no crash — Date objects are properly normalized to HH:MM
       const result = await service.getBranchMenu(branchId, tenantId);
-      // The item may or may not appear depending on current time — just verify no crash
+      expect(result).toHaveProperty('categories');
+    });
+
+    it('handles string @db.Time values for availability window', async () => {
+      mockPrisma.tenant.findFirst.mockResolvedValue({ id: tenantId, name: 'T1' });
+      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main', timezone: 'Africa/Addis_Ababa' });
+
+      mockPrisma.branchMenuItem.findMany.mockResolvedValue([
+        {
+          priceOverrideMinor: null,
+          availableFrom: '08:00:00',
+          availableUntil: '10:00:00',
+          menuItem: {
+            id: 'i1',
+            name: 'Brunch',
+            description: null,
+            sku: null,
+            isActive: true,
+            deletedAt: null,
+            category: { id: 'c1', name: 'Food', sortOrder: 0, isActive: true },
+            variants: [{ id: 'v1', name: 'Default', basePriceMinor: BigInt(3000), sku: null, isDefault: true }],
+            modifierGroups: [],
+          },
+        },
+      ]);
+
+      const result = await service.getBranchMenu(branchId, tenantId);
       expect(result).toHaveProperty('categories');
     });
 
