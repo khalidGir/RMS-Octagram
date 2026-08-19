@@ -1,23 +1,20 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
+import { Providers } from '@/components/providers';
 import './globals.css';
 
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
+
 export const metadata: Metadata = {
-  title: 'RMS - Restaurant Management System',
-  description: 'Multi-tenant POS, ordering, kitchen, and inventory platform',
+  title: { default: 'Buna House · RMS', template: '%s · Buna House' },
+  description: 'Restaurant operations, point of sale, kitchen, and inventory.',
+  applicationName: 'RMS',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'RMS' },
 };
 
-export const viewport: Viewport = {
-  width: 'device-width',
-  initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: '#0f172a',
-};
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#121816' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body className="bg-slate-950 text-slate-50 antialiased">{children}</body>
-    </html>
-  );
+  return <html lang="en" className={inter.variable}><body><Providers>{children}</Providers></body></html>;
 }
