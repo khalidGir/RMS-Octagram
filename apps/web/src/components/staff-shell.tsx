@@ -7,8 +7,8 @@ import { BrandMark } from './brand-mark';
 import { ConnectivityIndicator } from './connectivity-indicator';
 
 const nav = [
-  ['Overview', '◫', '/'], ['Point of sale', '▦', '/pos'], ['Orders', '◇', '#'], ['Kitchen display', '◧', '#'],
-  ['Menu', '⌑', '/order/bole-main'], ['Inventory', '▤', '#'], ['Reports', '↗', '#'], ['Team & settings', '⚙', '#'],
+  ['Overview', '◫', '/'], ['Point of sale', '▦', '/pos'], ['Orders', '◇', '/orders'], ['Kitchen display', '◧', '/kitchen'],
+  ['Menu', '⌑', '/menu'], ['Inventory', '▤', '/inventory'], ['Reports', '↗', '/reports'], ['Team & settings', '⚙', '/settings'],
 ] as const;
 
 export function StaffShell({ children }: { children: React.ReactNode }) {
@@ -21,7 +21,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
         <div className="px-2"><BrandMark /></div>
         <nav className="mt-9 space-y-1" aria-label="Staff navigation">
           {nav.map(([label, icon, href]) => {
-            const active = href !== '#' && pathname === href;
+            const active = pathname === href;
             return (
             <Link key={label} href={href} onClick={() => setOpen(false)} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition ${active ? 'bg-white text-[#18201d] shadow-sm' : 'text-white/62 hover:bg-white/[0.08] hover:text-white'}`}>
               <span className={`grid size-7 place-items-center rounded-lg text-base ${active ? 'bg-brand/12 text-brand' : 'text-white/50'}`}>{icon}</span>{label}
