@@ -6,6 +6,11 @@ export interface RecentOrder { id: string; number: string; customer: string; typ
 export interface PopularItem { id: string; name: string; category: string; sold: number; revenueMinor: number; color: string; }
 export interface DashboardData { restaurantName: string; branches: BranchSummary[]; activeBranchId: string; metrics: DashboardMetric[]; recentOrders: RecentOrder[]; popularItems: PopularItem[]; }
 
+export interface MenuCategory { id: string; name: string; }
+export interface MenuItem { id: string; name: string; description: string; categoryId: string; priceMinor: number; available: boolean; badge?: string; initials: string; tone: string; }
+export interface CartLine { item: MenuItem; quantity: number; note?: string; }
+export interface MenuData { categories: MenuCategory[]; items: MenuItem[]; }
+
 export interface TenantTheme {
   logoUrl?: string;
   compactLogoUrl?: string;

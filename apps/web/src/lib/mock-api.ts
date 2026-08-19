@@ -1,4 +1,4 @@
-import type { DashboardData } from './types';
+import type { DashboardData, MenuData } from './types';
 
 const dashboardFixture: DashboardData = {
   restaurantName: 'Buna House',
@@ -27,11 +27,36 @@ const dashboardFixture: DashboardData = {
 };
 
 export interface DashboardApi { getDashboard(): Promise<DashboardData>; }
+export interface MenuApi { getMenu(): Promise<MenuData>; }
 
 export const mockDashboardApi: DashboardApi = {
   async getDashboard() {
     await new Promise((resolve) => setTimeout(resolve, 180));
     return dashboardFixture;
+  },
+};
+
+const menuFixture: MenuData = {
+  categories: [
+    { id: 'all', name: 'All items' }, { id: 'popular', name: 'Popular' }, { id: 'mains', name: 'Main dishes' },
+    { id: 'breakfast', name: 'Breakfast' }, { id: 'drinks', name: 'Drinks' }, { id: 'dessert', name: 'Dessert' },
+  ],
+  items: [
+    { id: 'tibs', name: 'Special Tibs', description: 'Tender beef, rosemary, onion and peppers', categoryId: 'mains', priceMinor: 40000, available: true, badge: 'Popular', initials: 'ST', tone: '#B4532A' },
+    { id: 'shiro', name: 'Shiro Wot', description: 'Slow-simmered chickpea stew with injera', categoryId: 'mains', priceMinor: 29000, available: true, badge: 'Vegetarian', initials: 'SW', tone: '#D39A3E' },
+    { id: 'beyaynetu', name: 'Beyaynetu', description: 'A generous selection of fasting favourites', categoryId: 'mains', priceMinor: 35000, available: true, initials: 'BY', tone: '#31584A' },
+    { id: 'firfir', name: 'Special Firfir', description: 'Injera tossed in rich berbere sauce', categoryId: 'breakfast', priceMinor: 26000, available: true, initials: 'SF', tone: '#8E4A38' },
+    { id: 'chechebsa', name: 'Chechebsa', description: 'Spiced flatbread with honey and yoghurt', categoryId: 'breakfast', priceMinor: 24000, available: true, initials: 'CH', tone: '#B77B3B' },
+    { id: 'buna', name: 'Buna Ceremony', description: 'Traditional Ethiopian coffee service', categoryId: 'drinks', priceMinor: 15000, available: true, badge: 'House favourite', initials: 'BC', tone: '#49362D' },
+    { id: 'spris', name: 'Fresh Spris', description: 'Layered seasonal fruit juice', categoryId: 'drinks', priceMinor: 13000, available: true, initials: 'FS', tone: '#D16C3B' },
+    { id: 'baklava', name: 'House Baklava', description: 'Honey, pistachio and crisp pastry', categoryId: 'dessert', priceMinor: 12000, available: false, initials: 'HB', tone: '#A67C45' },
+  ],
+};
+
+export const mockMenuApi: MenuApi = {
+  async getMenu() {
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    return menuFixture;
   },
 };
 

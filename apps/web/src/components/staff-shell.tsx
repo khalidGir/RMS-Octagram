@@ -1,28 +1,32 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { BrandMark } from './brand-mark';
 import { ConnectivityIndicator } from './connectivity-indicator';
 
 const nav = [
-  ['Overview', '◫'], ['Point of sale', '▦'], ['Orders', '◇'], ['Kitchen display', '◧'],
-  ['Menu', '⌑'], ['Inventory', '▤'], ['Reports', '↗'], ['Team & settings', '⚙'],
+  ['Overview', '◫', '/'], ['Point of sale', '▦', '/pos'], ['Orders', '◇', '#'], ['Kitchen display', '◧', '#'],
+  ['Menu', '⌑', '/order/bole-main'], ['Inventory', '▤', '#'], ['Reports', '↗', '#'], ['Team & settings', '⚙', '#'],
 ] as const;
 
 export function StaffShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
   return (
     <div className="min-h-screen bg-[#f6f3ed] lg:grid lg:grid-cols-[250px_1fr]">
       {open && <button className="fixed inset-0 z-30 bg-black/45 lg:hidden" aria-label="Close navigation" onClick={() => setOpen(false)} />}
       <aside className={`fixed inset-y-0 left-0 z-40 flex w-[250px] flex-col bg-[#121816] px-4 py-5 text-white transition-transform lg:sticky lg:top-0 lg:h-screen ${open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
         <div className="px-2"><BrandMark /></div>
         <nav className="mt-9 space-y-1" aria-label="Staff navigation">
-          {nav.map(([label, icon], index) => (
-            <Link key={label} href={index === 0 ? '/' : '#'} onClick={() => setOpen(false)} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition ${index === 0 ? 'bg-white text-[#18201d] shadow-sm' : 'text-white/62 hover:bg-white/[0.08] hover:text-white'}`}>
-              <span className={`grid size-7 place-items-center rounded-lg text-base ${index === 0 ? 'bg-brand/12 text-brand' : 'text-white/50'}`}>{icon}</span>{label}
+          {nav.map(([label, icon, href]) => {
+            const active = href !== '#' && pathname === href;
+            return (
+            <Link key={label} href={href} onClick={() => setOpen(false)} className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition ${active ? 'bg-white text-[#18201d] shadow-sm' : 'text-white/62 hover:bg-white/[0.08] hover:text-white'}`}>
+              <span className={`grid size-7 place-items-center rounded-lg text-base ${active ? 'bg-brand/12 text-brand' : 'text-white/50'}`}>{icon}</span>{label}
             </Link>
-          ))}
+          )})}
         </nav>
         <div className="mt-auto rounded-2xl border border-white/10 bg-white/[0.055] p-3.5">
           <p className="text-xs font-bold text-white/45">Current shift</p>
