@@ -38,7 +38,7 @@ describe('PublicMenuService', () => {
 
     it('serializes BigInt prices as strings', async () => {
       mockPrisma.tenant.findFirst.mockResolvedValue({ id: tenantId, name: 'T1' });
-      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main' });
+      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main', timezone: 'Africa/Addis_Ababa' });
       mockPrisma.branchMenuItem.findMany.mockResolvedValue([
         {
           priceOverrideMinor: null,
@@ -69,7 +69,7 @@ describe('PublicMenuService', () => {
 
     it('excludes inactive categories', async () => {
       mockPrisma.tenant.findFirst.mockResolvedValue({ id: tenantId, name: 'T1' });
-      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main' });
+      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main', timezone: 'Africa/Addis_Ababa' });
       mockPrisma.branchMenuItem.findMany.mockResolvedValue([
         {
           priceOverrideMinor: null,
@@ -93,9 +93,9 @@ describe('PublicMenuService', () => {
       expect(result.categories).toHaveLength(0);
     });
 
-    it('respects availableFrom/availableUntil window', async () => {
+    it('respects availableFrom/availableUntil window using branch timezone', async () => {
       mockPrisma.tenant.findFirst.mockResolvedValue({ id: tenantId, name: 'T1' });
-      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main' });
+      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main', timezone: 'Africa/Addis_Ababa' });
 
       // Item only available 08:00-10:00
       mockPrisma.branchMenuItem.findMany.mockResolvedValue([
@@ -126,7 +126,7 @@ describe('PublicMenuService', () => {
 
     it('branch price override applies only to default variant', async () => {
       mockPrisma.tenant.findFirst.mockResolvedValue({ id: tenantId, name: 'T1' });
-      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main' });
+      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main', timezone: 'Africa/Addis_Ababa' });
       mockPrisma.branchMenuItem.findMany.mockResolvedValue([
         {
           priceOverrideMinor: BigInt(9999),
@@ -159,7 +159,7 @@ describe('PublicMenuService', () => {
 
     it('serializes modifier option prices as strings', async () => {
       mockPrisma.tenant.findFirst.mockResolvedValue({ id: tenantId, name: 'T1' });
-      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main' });
+      mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId, name: 'Main', timezone: 'Africa/Addis_Ababa' });
       mockPrisma.branchMenuItem.findMany.mockResolvedValue([
         {
           priceOverrideMinor: null,

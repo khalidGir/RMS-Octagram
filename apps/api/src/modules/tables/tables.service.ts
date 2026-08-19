@@ -76,31 +76,31 @@ export class TablesService {
       if (!area) throw new NotFoundException('Dining area not found');
     }
 
-    // Create table and QR token in a transaction
-    const table = await this.prisma.$transaction(async (tx) => {
-      const t = await tx.restaurantTable.create({
+    // Create table and QR token in a transaction; return raw token once
+    const result = await this.prisma.$transaction(async (tx) => {
+      const table = await tx.restaurantTable.create({
         data: { tenantId, branchId, label: data.label, capacity: data.capacity, diningAreaId: data.diningAreaId },
       });
 
-      // Generate QR token within same transaction
       const raw = crypto.randomBytes(32).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(raw).digest('hex');
-      const count = await tx.tableQrToken.count({ where: { tableId: t.id } });
+      const count = await tx.tableQrToken.count({ where: { tableId: table.id } });
 
       await tx.tableQrToken.create({
         data: {
           tenantId,
           branchId,
-          tableId: t.id,
+          tableId: table.id,
           tokenHash,
           version: count + 1,
         },
       });
 
-      return t;
+      return { table, raw };
     });
 
-    return this.getTable(table.id, tenantId, branchId);
+    const full = await this.getTable(result.table.id, tenantId, branchId);
+    return { ...full, qrTokenRaw: result.raw };
   }
 
   async updateTable(tableId: string, tenantId: string, branchId: string, data: { label?: string; capacity?: number; diningAreaId?: string; isActive?: boolean }) {
@@ -119,23 +119,29 @@ export class TablesService {
     const table = await this.prisma.restaurantTable.findFirst({ where: { id: tableId, tenantId, branchId } });
     if (!table) throw new NotFoundException('Table not found');
 
-    // Transactional: revoke old + create new + audit
+    // Concurrency-safe: use raw SQL SELECT ... FOR UPDATE to lock the latest row,
+    // then allocate version = locked.version + 1. For the first token (no rows),
+    // the lock still serializes correctly.
     const result = await this.prisma.$transaction(async (tx) => {
+      // Lock existing tokens for this table to prevent concurrent version races
+      const locked = await tx.$queryRaw<{ version: number }[]>`
+        SELECT version FROM "TableQrToken"
+        WHERE "tableId" = ${tableId}
+        ORDER BY version DESC
+        LIMIT 1
+        FOR UPDATE
+      `;
+
+      const nextVersion = (locked[0]?.version ?? 0) + 1;
+
       const raw = crypto.randomBytes(32).toString('hex');
       const tokenHash = crypto.createHash('sha256').update(raw).digest('hex');
 
-      // Revoke existing active tokens atomically
+      // Revoke all active tokens for this table
       await tx.tableQrToken.updateMany({
         where: { tableId, tenantId, branchId, revokedAt: null },
         data: { revokedAt: new Date() },
       });
-
-      // Concurrency-safe version: use max+1 within transaction
-      const maxVersion = await tx.tableQrToken.aggregate({
-        where: { tableId },
-        _max: { version: true },
-      });
-      const nextVersion = (maxVersion._max.version ?? 0) + 1;
 
       const token = await tx.tableQrToken.create({
         data: {
@@ -147,17 +153,18 @@ export class TablesService {
         },
       });
 
-      return { raw, token, version: nextVersion };
-    });
+      // Audit inside transaction — if rotation fails, audit is not committed
+      await this.audit.log({
+        actorUserId: actorUserId ?? null as any,
+        tenantId,
+        branchId,
+        action: 'QR_TOKEN_ROTATE',
+        entityType: 'TableQrToken',
+        entityId: token.id,
+        after: { tableId, branchId, version: nextVersion, reason },
+      });
 
-    await this.audit.log({
-      actorUserId: actorUserId ?? null as any,
-      tenantId,
-      branchId,
-      action: 'QR_TOKEN_ROTATE',
-      entityType: 'TableQrToken',
-      entityId: result.token.id,
-      after: { tableId, branchId, version: result.version, reason },
+      return { raw, token, version: nextVersion };
     });
 
     return {

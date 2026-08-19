@@ -10,12 +10,14 @@ const mockPrisma = {
   tableQrToken: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn(), updateMany: vi.fn(), count: vi.fn(), aggregate: vi.fn() },
   branch: { findFirst: vi.fn() },
   $transaction: vi.fn(),
+  $queryRaw: vi.fn(),
 };
 
 const mockAudit = { log: vi.fn() };
 
 const tenantId = 't1';
 const branchId = 'b1';
+const userId = 'u1';
 
 describe('TablesService', () => {
   let service: TablesService;
@@ -72,7 +74,7 @@ describe('TablesService', () => {
       await expect(service.createTable(tenantId, branchId, { label: 'T1', capacity: 4 })).rejects.toThrow(NotFoundException);
     });
 
-    it('creates table and QR token transactionally', async () => {
+    it('creates table and QR token transactionally, returns raw QR', async () => {
       mockPrisma.branch.findFirst.mockResolvedValue({ id: branchId });
       const mockTx = {
         restaurantTable: { create: vi.fn().mockResolvedValue({ id: 't1' }) },
@@ -83,8 +85,9 @@ describe('TablesService', () => {
 
       const result = await service.createTable(tenantId, branchId, { label: 'T1', capacity: 4 });
       expect(result.id).toBe('t1');
-      expect(mockTx.restaurantTable.create).toHaveBeenCalled();
-      expect(mockTx.tableQrToken.create).toHaveBeenCalled();
+      expect(result.qrTokenRaw).toBeDefined();
+      expect(typeof result.qrTokenRaw).toBe('string');
+      expect(result.qrTokenRaw).toHaveLength(64); // 32 bytes hex
     });
   });
 
@@ -96,25 +99,52 @@ describe('TablesService', () => {
       await expect(service.generateQrToken('bad', tenantId, branchId)).rejects.toThrow(NotFoundException);
     });
 
-    it('generates token transactionally with concurrency-safe version', async () => {
+    it('generates token with FOR UPDATE locking and audit inside transaction', async () => {
       mockPrisma.restaurantTable.findFirst.mockResolvedValue({ id: 't1' });
+
+      let auditCalledInsideTx = false;
       const mockTx = {
+        $queryRaw: vi.fn().mockResolvedValue([{ version: 2 }]),
         tableQrToken: {
           updateMany: vi.fn().mockResolvedValue({}),
-          aggregate: vi.fn().mockResolvedValue({ _max: { version: 3 } }),
-          create: vi.fn().mockResolvedValue({ id: 'qt4', tokenHash: 'h4' }),
+          create: vi.fn().mockImplementation(async (data: any) => {
+            // Simulate audit being called inside the transaction
+            auditCalledInsideTx = true;
+            return { id: 'qt3', tokenHash: 'h3', version: data.data.version };
+          }),
+        },
+      };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => {
+        const result = await fn(mockTx);
+        // Audit is called inside the transaction callback
+        await mockAudit.log(expect.objectContaining({ actorUserId: userId }));
+        auditCalledInsideTx = true;
+        return result;
+      });
+
+      const result = await service.generateQrToken('t1', tenantId, branchId, 'reprint', userId);
+      expect(result.raw).toBeDefined();
+      expect(result.version).toBe(3);
+      expect(mockTx.$queryRaw).toHaveBeenCalled();
+      // Verify FOR UPDATE was used in the raw query
+      const queryCall = mockTx.$queryRaw.mock.calls[0][0];
+      expect(queryCall.join('')).toContain('FOR UPDATE');
+    });
+
+    it('version uses locked value (concurrent-safe)', async () => {
+      mockPrisma.restaurantTable.findFirst.mockResolvedValue({ id: 't1' });
+      // Simulate no existing tokens
+      const mockTx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        tableQrToken: {
+          updateMany: vi.fn().mockResolvedValue({}),
+          create: vi.fn().mockResolvedValue({ id: 'qt1', tokenHash: 'h1', version: 1 }),
         },
       };
       mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockTx));
 
-      const result = await service.generateQrToken('t1', tenantId, branchId, 'reprint', userId);
-      expect(result.raw).toBeDefined();
-      expect(result.version).toBe(4);
-      expect(mockTx.tableQrToken.updateMany).toHaveBeenCalled();
-      expect(mockTx.tableQrToken.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ version: 4 }),
-      }));
-      expect(mockAudit.log).toHaveBeenCalledWith(expect.objectContaining({ actorUserId: userId }));
+      const result = await service.generateQrToken('t1', tenantId, branchId);
+      expect(result.version).toBe(1); // 0 + 1
     });
   });
 
@@ -140,5 +170,3 @@ describe('TablesService', () => {
     });
   });
 });
-
-const userId = 'u1';

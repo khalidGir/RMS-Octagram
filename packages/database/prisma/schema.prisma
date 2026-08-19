@@ -341,6 +341,7 @@ model TableQrToken {
 
   table       RestaurantTable @relation(fields: [tableId], references: [id])
 
+  @@unique([tableId, version])
   @@index([tenantId, branchId])
   @@index([tokenHash])
 }

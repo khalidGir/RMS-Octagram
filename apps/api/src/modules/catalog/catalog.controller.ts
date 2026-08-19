@@ -9,7 +9,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { BranchScopeGuard } from '../auth/branch-scope.guard';
 import { Roles, BranchScoped, type TenantContext } from '../auth/types';
-import type {
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DTOs must be value imports for class-validator decorator metadata
+import {
   CreateCategoryDto,
   UpdateCategoryDto,
   CreateItemDto,

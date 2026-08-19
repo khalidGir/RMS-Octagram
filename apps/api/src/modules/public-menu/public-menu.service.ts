@@ -8,6 +8,23 @@ function serializePrice(value: bigint | number | null): string | null {
   return BigInt(value).toString();
 }
 
+/**
+ * Get current time as HH:MM in the given IANA timezone.
+ * Uses Intl.DateTimeFormat — no external dependencies.
+ */
+function localTimeInTimezone(timezone: string): string {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: timezone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const hh = parts.find(p => p.type === 'hour')?.value ?? '00';
+  const mm = parts.find(p => p.type === 'minute')?.value ?? '00';
+  return `${hh}:${mm}`;
+}
+
 export interface PublicBranchMenu {
   tenant: { id: string; name: string };
   branch: { id: string; name: string };
@@ -81,8 +98,9 @@ export class PublicMenuService {
       },
     });
 
-    const now = new Date();
-    const currentTime = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`;
+    // Current time in the branch's configured timezone (e.g. Africa/Addis_Ababa = UTC+3)
+    const branchTimezone = branch.timezone || 'Africa/Addis_Ababa';
+    const currentTime = localTimeInTimezone(branchTimezone);
 
     // Group by category
     const categoryMap = new Map<string, { id: string; name: string; sortOrder: number; items: any[] }>();
