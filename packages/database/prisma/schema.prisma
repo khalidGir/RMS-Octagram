@@ -808,7 +808,9 @@ model IdempotencyRecord {
   expiresAt     DateTime
   createdAt     DateTime  @default(now())
 
-  @@unique([tenantId, operation, key])
+  // Partial unique indexes enforced by migration (not expressible in Prisma):
+  // - UNIQUE(tenantId, operation, key) WHERE branchId IS NULL
+  // - UNIQUE(tenantId, branchId, operation, key) WHERE branchId IS NOT NULL
   @@index([tenantId, operation])
 }
 

@@ -23,7 +23,7 @@ export function parseBigInt(value: string): bigint {
 
 /**
  * Canonical JSON serializer that handles BigInt and Date normalization.
- * Used for idempotency request hashing — keys are sorted for stability.
+ * Keys are sorted recursively for deterministic hashing (idempotency).
  */
 export function canonicalStringify(value: unknown): string {
   return JSON.stringify(value, bigintDateReplacer);
@@ -32,5 +32,13 @@ export function canonicalStringify(value: unknown): string {
 function bigintDateReplacer(_key: string, value: unknown): unknown {
   if (typeof value === 'bigint') return value.toString();
   if (value instanceof Date) return value.toISOString();
+  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((sorted, k) => {
+        sorted[k] = (value as Record<string, unknown>)[k];
+        return sorted;
+      }, {});
+  }
   return value;
 }

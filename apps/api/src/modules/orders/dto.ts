@@ -7,6 +7,7 @@ import {
   IsArray,
   IsIn,
   ValidateNested,
+  ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -43,8 +44,13 @@ export class OrderLineDto {
 // ─── Create Table Order ──────────────────────
 
 export class CreateTableOrderDto {
+  @ApiProperty({ description: 'QR token from table QR code' })
+  @IsString()
+  qrToken!: string;
+
   @ApiProperty({ type: [OrderLineDto], description: 'Order lines' })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => OrderLineDto)
   lines!: OrderLineDto[];
@@ -79,6 +85,7 @@ export class CreateTableOrderDto {
   })
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   quotedTotal?: string;
 }
 
@@ -87,6 +94,7 @@ export class CreateTableOrderDto {
 export class CreatePosOrderDto {
   @ApiProperty({ type: [OrderLineDto], description: 'Order lines' })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => OrderLineDto)
   lines!: OrderLineDto[];
@@ -106,7 +114,7 @@ export class CreatePosOrderDto {
   @IsIn(['POS', 'DINE_IN', 'PICKUP'])
   orderType!: string;
 
-  @ApiPropertyOptional({ description: 'Table ID for dine-in orders' })
+  @ApiPropertyOptional({ description: 'Table ID for dine-in orders (required when orderType is DINE_IN)' })
   @IsOptional()
   @IsString()
   tableId?: string;
@@ -119,9 +127,11 @@ export class CreatePosOrderDto {
 
   @ApiPropertyOptional({
     description: 'Quoted total for stale-cart detection (string BigInt minor units)',
+    example: '15000',
   })
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   quotedTotal?: string;
 }
 
@@ -130,6 +140,7 @@ export class CreatePosOrderDto {
 export class EditOrderDto {
   @ApiProperty({ type: [OrderLineDto], description: 'Replacement order lines' })
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => OrderLineDto)
   lines!: OrderLineDto[];
@@ -165,6 +176,46 @@ export class CancelOrderDto {
   @IsString()
   @MaxLength(500)
   reason?: string;
+
+  @ApiProperty({ description: 'Expected order version for optimistic locking', example: 1 })
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+// ─── List Orders ─────────────────────────────
+
+export class ListOrdersDto {
+  @ApiPropertyOptional({ description: 'Filter by order status' })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by order type' })
+  @IsOptional()
+  @IsString()
+  orderType?: string;
+
+  @ApiPropertyOptional({ description: 'Filter orders created after this ISO datetime' })
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Filter orders created before this ISO datetime' })
+  @IsOptional()
+  @IsString()
+  to?: string;
+
+  @ApiPropertyOptional({ description: 'Page size (1-100)', default: 20 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  limit?: number;
+
+  @ApiPropertyOptional({ description: 'Cursor for pagination (ISO datetime of last item)' })
+  @IsOptional()
+  @IsString()
+  after?: string;
 }
 
 // ─── Confirm Order (disabled in 3A) ──────────

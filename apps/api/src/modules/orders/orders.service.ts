@@ -39,13 +39,16 @@ export class OrdersService {
     idempotencyKey?: string;
     quotedTotal?: string;
   }): Promise<{ order: Record<string, unknown>; trackingTokenRaw: string }> {
-    const { tenantId, branchId, tableId, lines, idempotencyKey } = params;
+    const { tenantId, branchId, tableId, idempotencyKey } = params;
 
     // Verify branch is active
     await this.assertBranchActive(tenantId, branchId);
 
     // Verify TABLE_QR_ORDERING feature is enabled
     await this.assertFeatureEnabled(tenantId, branchId, FeatureKey.TABLE_QR_ORDERING);
+
+    // Merge duplicate lines (same variant + modifiers → sum quantity, keep first notes)
+    const lines = this.deduplicateLines(params.lines);
 
     // Calculate cart
     const calculation = await this.priceCalc.calculateCart(tenantId, branchId, lines);
@@ -121,7 +124,7 @@ export class OrdersService {
               unitPriceMinor: line.unitPriceMinor,
               quantity: line.quantity,
               lineTotalMinor: line.lineTotalMinor,
-              notes: params.lines.find((l) => l.variantId === line.variantId)?.notes ?? null,
+              notes: lines.find((l) => l.variantId === line.variantId)?.notes ?? null,
             },
           });
 
@@ -213,7 +216,8 @@ export class OrdersService {
         },
         execute,
       );
-      return { order: result.body as Record<string, unknown>, trackingTokenRaw };
+      const body = result.body as Record<string, unknown>;
+      return { order: body, trackingTokenRaw: body.trackingToken as string };
     }
 
     const result = await execute();
@@ -234,9 +238,17 @@ export class OrdersService {
     idempotencyKey?: string;
     quotedTotal?: string;
   }): Promise<{ order: Record<string, unknown> }> {
-    const { tenantId, branchId, lines, createdByUserId, idempotencyKey } = params;
+    const { tenantId, branchId, createdByUserId, idempotencyKey } = params;
 
     await this.assertBranchActive(tenantId, branchId);
+
+    // POS DINE_IN requires tableId
+    if (params.orderType === 'DINE_IN' && !params.tableId) {
+      throw new ConflictException('tableId is required for DINE_IN orders');
+    }
+
+    // Merge duplicate lines (same variant + modifiers → sum quantity, keep first notes)
+    const lines = this.deduplicateLines(params.lines);
 
     // Calculate cart
     const calculation = await this.priceCalc.calculateCart(tenantId, branchId, lines);
@@ -296,7 +308,7 @@ export class OrdersService {
               unitPriceMinor: line.unitPriceMinor,
               quantity: line.quantity,
               lineTotalMinor: line.lineTotalMinor,
-              notes: params.lines.find((l) => l.variantId === line.variantId)?.notes ?? null,
+              notes: lines.find((l) => l.variantId === line.variantId)?.notes ?? null,
             },
           });
 
@@ -399,7 +411,7 @@ export class OrdersService {
     idempotencyKey?: string;
     quotedTotal?: string;
   }): Promise<{ order: Record<string, unknown> }> {
-    const { orderId, tenantId, branchId, lines, expectedVersion, actorUserId } = params;
+    const { orderId, tenantId, branchId, expectedVersion, actorUserId } = params;
 
     // Load existing order
     const existing = await this.prisma.order.findFirst({
@@ -423,6 +435,7 @@ export class OrdersService {
     }
 
     // Calculate new cart
+    const lines = this.deduplicateLines(params.lines);
     const calculation = await this.priceCalc.calculateCart(tenantId, branchId, lines);
 
     // Check stale-cart detection
@@ -465,7 +478,7 @@ export class OrdersService {
               unitPriceMinor: line.unitPriceMinor,
               quantity: line.quantity,
               lineTotalMinor: line.lineTotalMinor,
-              notes: params.lines.find((l) => l.variantId === line.variantId)?.notes ?? null,
+              notes: lines.find((l) => l.variantId === line.variantId)?.notes ?? null,
             },
           });
 
@@ -561,8 +574,9 @@ export class OrdersService {
     branchId: string;
     actorUserId: string;
     reason?: string;
+    expectedVersion: number;
   }): Promise<{ order: Record<string, unknown> }> {
-    const { orderId, tenantId, branchId, actorUserId, reason } = params;
+    const { orderId, tenantId, branchId, actorUserId, reason, expectedVersion } = params;
 
     const existing = await this.prisma.order.findFirst({
       where: { id: orderId, tenantId, branchId },
@@ -573,6 +587,14 @@ export class OrdersService {
       throw new ConflictException(
         `Cannot cancel order in status ${existing.status}`,
       );
+    }
+
+    if (existing.version !== expectedVersion) {
+      throw new ConflictException({
+        code: 'VERSION_CONFLICT',
+        message: 'The order has been modified by another request. Please refresh.',
+        currentVersion: existing.version,
+      });
     }
 
     const order = await this.prisma.$transaction(async (tx) => {
@@ -830,5 +852,26 @@ export class OrdersService {
     }
 
     return 'PREPAY_REQUIRED';
+  }
+
+  private deduplicateLines(lines: LineInput[]): LineInput[] {
+    const merged = new Map<string, LineInput>();
+
+    for (const line of lines) {
+      const key = [
+        line.variantId,
+        [...(line.modifierOptionIds ?? [])].sort().join(','),
+      ].join('|');
+
+      const existing = merged.get(key);
+      if (existing) {
+        existing.quantity += line.quantity;
+        // Keep first occurrence's notes
+      } else {
+        merged.set(key, { ...line });
+      }
+    }
+
+    return [...merged.values()];
   }
 }

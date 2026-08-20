@@ -172,6 +172,7 @@ export class OrdersController {
       branchId: (order as any).branchId,
       actorUserId: ctx.userId,
       reason: dto.reason,
+      expectedVersion: dto.expectedVersion,
     });
     return { data: result };
   }
