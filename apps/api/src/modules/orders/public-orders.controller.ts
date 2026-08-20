@@ -52,9 +52,14 @@ export class PublicOrdersController {
       throw new BadRequestException('Table is not active');
     }
 
+    // Defense in depth: verify token's tenant/branch match the table's actual relations
+    if (qrRecord.table.tenantId !== qrRecord.tenantId || qrRecord.table.branchId !== qrRecord.branchId) {
+      throw new BadRequestException('QR token does not match table context');
+    }
+
     const result = await this.orders.createTableOrder({
-      tenantId: qrRecord.tenantId,
-      branchId: qrRecord.branchId,
+      tenantId: qrRecord.table.tenantId,
+      branchId: qrRecord.table.branchId,
       tableId: qrRecord.tableId,
       lines: dto.lines,
       notes: dto.notes,

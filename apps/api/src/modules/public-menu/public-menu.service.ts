@@ -1,48 +1,12 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import type { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
+import { normalizeTimeValue, localTimeInTimezone, isWithinTimeWindow } from '../shared/time.utils';
 
 /** Convert BigInt values to strings for JSON serialization */
 function serializePrice(value: bigint | number | null): string | null {
   if (value === null || value === undefined) return null;
   return BigInt(value).toString();
-}
-
-/**
- * Get current time as HH:MM in the given IANA timezone.
- * Uses Intl.DateTimeFormat — no external dependencies.
- */
-function localTimeInTimezone(timezone: string): string {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: timezone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(now);
-  const hh = parts.find(p => p.type === 'hour')?.value ?? '00';
-  const mm = parts.find(p => p.type === 'minute')?.value ?? '00';
-  return `${hh}:${mm}`;
-}
-
-/**
- * Normalize a Prisma @db.Time value to "HH:MM" string.
- * Prisma returns a Date object for PostgreSQL TIME fields
- * (date portion is epoch 1970-01-01, time is the actual value).
- */
-function normalizeTimeValue(value: unknown): string | null {
-  if (!value) return null;
-  if (typeof value === 'string') {
-    // Already a string — extract HH:MM
-    return value.slice(0, 5);
-  }
-  if (value instanceof Date) {
-    // Prisma TIME → Date: hours/minutes are the actual time values
-    const hh = String(value.getUTCHours()).padStart(2, '0');
-    const mm = String(value.getUTCMinutes()).padStart(2, '0');
-    return `${hh}:${mm}`;
-  }
-  return null;
 }
 
 export interface PublicBranchMenu {
@@ -133,13 +97,8 @@ export class PublicMenuService {
       if (bm.availableFrom && bm.availableUntil) {
         const from = normalizeTimeValue(bm.availableFrom);
         const until = normalizeTimeValue(bm.availableUntil);
-        if (from && until) {
-          if (from <= until) {
-            if (currentTime < from || currentTime > until) continue;
-          } else {
-            // Wraps midnight (e.g. 22:00 - 06:00)
-            if (currentTime < from && currentTime > until) continue;
-          }
+        if (from && until && !isWithinTimeWindow(currentTime, from, until)) {
+          continue;
         }
       }
 

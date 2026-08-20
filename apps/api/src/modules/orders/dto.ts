@@ -8,6 +8,7 @@ import {
   IsIn,
   ValidateNested,
   ArrayMinSize,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -86,6 +87,7 @@ export class CreateTableOrderDto {
   @IsOptional()
   @IsString()
   @MaxLength(20)
+  @Matches(/^\d+$/, { message: 'quotedTotal must be a numeric string' })
   quotedTotal?: string;
 }
 
@@ -132,6 +134,7 @@ export class CreatePosOrderDto {
   @IsOptional()
   @IsString()
   @MaxLength(20)
+  @Matches(/^\d+$/, { message: 'quotedTotal must be a numeric string' })
   quotedTotal?: string;
 }
 
@@ -165,6 +168,7 @@ export class EditOrderDto {
   @ApiPropertyOptional({ description: 'Quoted total for stale-cart detection' })
   @IsOptional()
   @IsString()
+  @Matches(/^\d+$/, { message: 'quotedTotal must be a numeric string' })
   quotedTotal?: string;
 }
 

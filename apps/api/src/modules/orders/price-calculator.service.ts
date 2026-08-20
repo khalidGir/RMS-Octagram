@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import type { PrismaService } from '../prisma/prisma.service';
+import { normalizeTimeValue, localTimeInTimezone, isWithinTimeWindow } from '../shared/time.utils';
 
 export interface LineInput {
   variantId: string;
@@ -75,15 +76,23 @@ export class PriceCalculatorService {
 
     const variantMap = new Map(variants.map((v) => [v.id, v]));
 
-    // 2. Load branch availability for all items
+    // 2. Load branch availability for all items + branch timezone
     const menuItemIds = [...new Set(variants.map((v) => v.menuItemId))];
-    const branchItems = await this.prisma.branchMenuItem.findMany({
-      where: {
-        branchId,
-        menuItemId: { in: menuItemIds },
-      },
-    });
+    const [branchItems, branch] = await Promise.all([
+      this.prisma.branchMenuItem.findMany({
+        where: {
+          branchId,
+          menuItemId: { in: menuItemIds },
+        },
+      }),
+      this.prisma.branch.findFirst({
+        where: { id: branchId, tenantId },
+        select: { timezone: true },
+      }),
+    ]);
     const branchItemMap = new Map(branchItems.map((bi) => [bi.menuItemId, bi]));
+    const branchTimezone = branch?.timezone || 'Africa/Addis_Ababa';
+    const currentTime = localTimeInTimezone(branchTimezone);
 
     // 3. Load modifier groups linked to each item
     const modifierGroupLinks = await this.prisma.menuItemModifierGroup.findMany({
@@ -151,33 +160,14 @@ export class PriceCalculatorService {
         );
       }
 
-      // Branch time window check
+      // Branch time window check (using branch timezone, not UTC)
       if (branchItem?.availableFrom && branchItem?.availableUntil) {
-        const now = new Date();
-        const hours = now.getUTCHours();
-        const minutes = now.getUTCMinutes();
-        const currentTime = hours * 60 + minutes; // minutes since midnight UTC
-
-        const fromParts = (branchItem.availableFrom as unknown as string).split(':');
-        const fromMinutes = parseInt(fromParts[0], 10) * 60 + parseInt(fromParts[1], 10);
-
-        const untilParts = (branchItem.availableUntil as unknown as string).split(':');
-        const untilMinutes = parseInt(untilParts[0], 10) * 60 + parseInt(untilParts[1], 10);
-
-        if (fromMinutes <= untilMinutes) {
-          // Same-day window (e.g., 09:00 - 21:00)
-          if (currentTime < fromMinutes || currentTime > untilMinutes) {
-            throw new ConflictException(
-              `Item "${variant.menuItem.name}" is only available from ${fromParts.join(':')} to ${untilParts.join(':')}`,
-            );
-          }
-        } else {
-          // Overnight window (e.g., 22:00 - 06:00)
-          if (currentTime < fromMinutes && currentTime > untilMinutes) {
-            throw new ConflictException(
-              `Item "${variant.menuItem.name}" is only available from ${fromParts.join(':')} to ${untilParts.join(':')}`,
-            );
-          }
+        const from = normalizeTimeValue(branchItem.availableFrom);
+        const until = normalizeTimeValue(branchItem.availableUntil);
+        if (from && until && !isWithinTimeWindow(currentTime, from, until)) {
+          throw new ConflictException(
+            `Item "${variant.menuItem.name}" is only available from ${from} to ${until} (${branchTimezone})`,
+          );
         }
       }
 

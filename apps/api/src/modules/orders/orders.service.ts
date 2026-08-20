@@ -199,7 +199,7 @@ export class OrdersService {
 
       return {
         status: 201 as const,
-        body: { ...this.serializeOrder(order) },
+        body: { ...this.serializeOrder(order), trackingToken: trackingTokenRaw },
         resourceId: order.id,
       };
     };
@@ -217,11 +217,14 @@ export class OrdersService {
         execute,
       );
       const body = result.body as Record<string, unknown>;
-      return { order: body, trackingTokenRaw: body.trackingToken as string };
+      const { trackingToken: _token, ...orderBody } = body;
+      return { order: orderBody, trackingTokenRaw: _token as string };
     }
 
     const result = await execute();
-    return { order: result.body as Record<string, unknown>, trackingTokenRaw };
+    const body = result.body as Record<string, unknown>;
+    const { trackingToken: _token, ...orderBody } = body;
+    return { order: orderBody, trackingTokenRaw: _token as string };
   }
 
   // ─── CREATE POS ORDER ───────────────────────
@@ -242,9 +245,24 @@ export class OrdersService {
 
     await this.assertBranchActive(tenantId, branchId);
 
-    // POS DINE_IN requires tableId
+    // Reject tableId for POS and PICKUP order types
+    if ((params.orderType === 'POS' || params.orderType === 'PICKUP') && params.tableId) {
+      throw new ConflictException(`tableId is not allowed for ${params.orderType} orders`);
+    }
+
+    // DINE_IN requires tableId
     if (params.orderType === 'DINE_IN' && !params.tableId) {
       throw new ConflictException('tableId is required for DINE_IN orders');
+    }
+
+    // Validate table belongs to this tenant/branch and is active
+    if (params.tableId) {
+      const table = await this.prisma.restaurantTable.findFirst({
+        where: { id: params.tableId, tenantId, branchId, isActive: true },
+      });
+      if (!table) {
+        throw new NotFoundException('Table not found or inactive');
+      }
     }
 
     // Merge duplicate lines (same variant + modifiers → sum quantity, keep first notes)
@@ -858,15 +876,16 @@ export class OrdersService {
     const merged = new Map<string, LineInput>();
 
     for (const line of lines) {
+      // Include notes in key: same variant+modifiers with different notes = distinct lines
       const key = [
         line.variantId,
         [...(line.modifierOptionIds ?? [])].sort().join(','),
+        line.notes ?? '',
       ].join('|');
 
       const existing = merged.get(key);
       if (existing) {
         existing.quantity += line.quantity;
-        // Keep first occurrence's notes
       } else {
         merged.set(key, { ...line });
       }

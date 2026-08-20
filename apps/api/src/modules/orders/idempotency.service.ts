@@ -1,4 +1,5 @@
 import { Injectable, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { canonicalStringify } from '@rms/contracts';
 import * as crypto from 'crypto';
@@ -10,10 +11,10 @@ import * as crypto from 'crypto';
  * 1. Attempt atomic reserve (INSERT ... ON CONFLICT)
  * 2. If insert succeeds → new reservation, proceed to execute handler
  * 3. If conflict → read existing record:
- *    a. Same hash + completed → return stored result (replay)
+ *    a. Same hash + completed (responseStatus !== null) → return stored result (replay)
  *    b. Same hash + in-progress → 409 Conflict
  *    c. Different hash → 409 Conflict
- *    d. Expired reservation → delete and retry atomic reserve
+ *    d. Expired reservation → atomic UPDATE to take over, then execute
  * 4. Execute handler → store result with tracking token for replay
  * 5. Failed handler → expire reservation immediately (allow retry)
  *
@@ -39,11 +40,11 @@ export class IdempotencyService {
     const expiresAt = new Date(Date.now() + (params.ttlMinutes ?? 60) * 60_000);
 
     // Atomic reserve: try to insert, catch conflict on partial unique index
-    let reservation: { id: string; requestHash: string | null; expiresAt: Date } | null = null;
+    let reservationId: string | null = null;
     let isNew = false;
 
     try {
-      reservation = await this.prisma.idempotencyRecord.create({
+      const record = await this.prisma.idempotencyRecord.create({
         data: {
           tenantId: params.tenantId,
           branchId: params.branchId ?? null,
@@ -52,22 +53,17 @@ export class IdempotencyService {
           requestHash,
           expiresAt,
         },
-        select: { id: true, requestHash: true, expiresAt: true },
+        select: { id: true },
       });
+      reservationId = record.id;
       isNew = true;
     } catch (error: unknown) {
-      // P2002 = unique constraint violation (concurrent insert won the race)
-      if (
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error as { code: string }).code === 'P2002'
-      ) {
+      if (this.isPrismaP2002(error)) {
         // Another request inserted first — read the winning record
         const existing = await this.prisma.idempotencyRecord.findFirst({
           where: {
             tenantId: params.tenantId,
-            branchId: params.branchId ?? undefined,
+            branchId: params.branchId,
             operation: params.operation,
             key: params.key,
           },
@@ -75,7 +71,6 @@ export class IdempotencyService {
         });
 
         if (!existing) {
-          // Should not happen — the conflicting record was deleted between insert and read
           throw new ConflictException('Idempotency conflict with no existing record');
         }
 
@@ -83,7 +78,8 @@ export class IdempotencyService {
           throw new ConflictException('Idempotency key reused with different payload');
         }
 
-        if (existing.responseStatus && existing.responseBody) {
+        // Completed → replay
+        if (existing.responseStatus !== null && existing.responseBody) {
           return {
             result: {
               status: existing.responseStatus,
@@ -94,11 +90,29 @@ export class IdempotencyService {
           };
         }
 
+        // Expired → atomic takeover (UPDATE own fields, no delete race)
         if (existing.expiresAt < new Date()) {
-          await this.prisma.idempotencyRecord.delete({ where: { id: existing.id } });
-          // After cleanup, fall through to retry reservation below
-          reservation = null;
-          isNew = false;
+          const updated = await this.prisma.idempotencyRecord.updateMany({
+            where: {
+              id: existing.id,
+              expiresAt: { lt: new Date() },
+            },
+            data: {
+              requestHash,
+              expiresAt,
+              responseStatus: null,
+              responseBody: Prisma.DbNull,
+              resourceId: null,
+            },
+          });
+
+          if (updated.count === 1) {
+            reservationId = existing.id;
+            isNew = true;
+          } else {
+            // Lost the race to another concurrent takeover
+            throw new ConflictException('Request in progress');
+          }
         } else {
           throw new ConflictException('Request in progress');
         }
@@ -107,40 +121,11 @@ export class IdempotencyService {
       }
     }
 
-    // If we cleaned up an expired reservation, retry the atomic reserve
-    if (!reservation) {
-      try {
-        reservation = await this.prisma.idempotencyRecord.create({
-          data: {
-            tenantId: params.tenantId,
-            branchId: params.branchId ?? null,
-            operation: params.operation,
-            key: params.key,
-            requestHash,
-            expiresAt,
-          },
-          select: { id: true, requestHash: true, expiresAt: true },
-        });
-        isNew = true;
-      } catch (error: unknown) {
-        if (
-          typeof error === 'object' &&
-          error !== null &&
-          'code' in error &&
-          (error as { code: string }).code === 'P2002'
-        ) {
-          throw new ConflictException('Request in progress');
-        }
-        throw error;
-      }
-    }
-
-    if (!isNew) {
+    if (!isNew || !reservationId) {
       throw new ConflictException('Request in progress');
     }
 
-    // Execute handler — reservation is guaranteed non-null here
-    const reservationId = reservation!.id;
+    // Execute handler
     try {
       const result = await handler();
 
@@ -163,6 +148,15 @@ export class IdempotencyService {
       });
       throw error;
     }
+  }
+
+  private isPrismaP2002(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code: string }).code === 'P2002'
+    );
   }
 
   private canonicalHash(payload: unknown): string {

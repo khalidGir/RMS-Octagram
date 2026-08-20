@@ -26,6 +26,7 @@ import {
   EditOrderDto,
   CancelOrderDto,
   ConfirmOrderDto,
+  ListOrdersDto,
 } from './dto';
 
 @ApiTags('Orders')
@@ -69,19 +70,16 @@ export class OrdersController {
   async listOrders(
     @Req() req: Request,
     @Param('branchId') branchId: string,
-    @Query('status') status?: string,
-    @Query('orderType') orderType?: string,
-    @Query('limit') limit?: string,
-    @Query('after') after?: string,
+    @Query() dto: ListOrdersDto,
   ) {
     const ctx = req.tenantContext as TenantContext;
     const result = await this.orders.listOrders({
       tenantId: ctx.tenantId!,
       branchId,
-      status,
-      orderType,
-      limit: Math.min(parseInt(limit || '50') || 50, 100),
-      after,
+      status: dto.status,
+      orderType: dto.orderType,
+      limit: Math.min(dto.limit ?? 50, 100),
+      after: dto.after,
     });
     return { data: result };
   }
