@@ -11,6 +11,7 @@ import { ObservabilityModule } from './modules/observability/observability.modul
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { TablesModule } from './modules/tables/tables.module';
 import { PublicMenuModule } from './modules/public-menu/public-menu.module';
+import { OrdersModule } from './modules/orders/orders.module';
 import { CorrelationMiddleware } from './modules/observability/correlation.middleware';
 import { HttpLoggerMiddleware } from './modules/observability/http-logger.middleware';
 import { TenantContextMiddleware } from './modules/auth/tenant-context.middleware';
@@ -30,6 +31,7 @@ import { JwtStrategy } from './modules/auth/jwt.strategy';
     CatalogModule,
     TablesModule,
     PublicMenuModule,
+    OrdersModule,
   ],
   providers: [JwtStrategy],
 })

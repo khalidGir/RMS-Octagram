@@ -116,6 +116,8 @@ model Branch {
   inventoryItems  InventoryItem[]
   paymentInstructions PaymentInstruction[]
   branchMenuItems BranchMenuItem[]
+  orderCounter     BranchOrderCounter?
+  stationCounters  StationTicketCounter[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
@@ -133,6 +135,17 @@ model BranchAssignment {
 
   @@id([branchId, membershipId])
   @@index([tenantId])
+}
+
+model BranchOrderCounter {
+  branchId   String   @id
+  lastNumber BigInt   @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  branch     Branch   @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
 }
 
 model FeatureSetting {
@@ -646,6 +659,18 @@ model KitchenTicketHistory {
   ticket      KitchenTicket  @relation(fields: [ticketId], references: [id])
 
   @@index([tenantId, branchId, ticketId])
+}
+
+model StationTicketCounter {
+  branchId   String
+  stationId  String
+  lastNumber BigInt   @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  branch     Branch   @relation(fields: [branchId], references: [id])
+
+  @@id([branchId, stationId])
 }
 
 // ─── Inventory ─────────────────────────────
