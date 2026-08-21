@@ -1,5 +1,6 @@
 import {
   Controller,
+  Inject,
   Post,
   Get,
   Body,
@@ -8,17 +9,20 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
-import type { AuthService } from './auth.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
-import type { LoginDto } from './dto';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- LoginDto uses class-validator decorators
+import { LoginDto } from './dto';
 
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -27,6 +31,9 @@ export class AuthController {
     @Body() body: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    if (!body || typeof body.email !== 'string' || typeof body.password !== 'string' || !body.email || !body.password) {
+      throw new BadRequestException('Email and password are required');
+    }
     const tokens = await this.authService.login(body.email, body.password);
 
     res.cookie('refresh_token', tokens.refreshToken, {

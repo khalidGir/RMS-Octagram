@@ -1,16 +1,18 @@
-import type { NestMiddleware} from '@nestjs/common';
+import { Inject, type NestMiddleware} from '@nestjs/common';
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import type { Request, Response, NextFunction } from 'express';
-import type { JwtService } from '@nestjs/jwt';
-import type { PrismaService } from '../prisma/prisma.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- JwtService is used as constructor value for NestJS DI
+import { JwtService } from '@nestjs/jwt';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- PrismaService is used as constructor value for NestJS DI
+import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from '../auth/auth.service';
 import type { TenantContext } from '../auth/types';
 
 @Injectable()
 export class TenantContextMiddleware implements NestMiddleware {
   constructor(
-    private readonly jwtService: JwtService,
-    private readonly prisma: PrismaService,
+    @Inject(JwtService) private readonly jwtService: JwtService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
 
   async use(req: Request, _res: Response, next: NextFunction) {

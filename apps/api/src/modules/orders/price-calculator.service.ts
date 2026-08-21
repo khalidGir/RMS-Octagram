@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import type { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
 import { normalizeTimeValue, localTimeInTimezone, isWithinTimeWindow } from '../shared/time.utils';
 
 export interface LineInput {
@@ -49,7 +50,7 @@ export interface CartCalculation {
  */
 @Injectable()
 export class PriceCalculatorService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async calculateCart(
     tenantId: string,

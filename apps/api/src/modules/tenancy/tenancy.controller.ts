@@ -6,6 +6,7 @@ import {
   Put,
   Body,
   Param,
+  Inject,
   UseGuards,
   Req,
   HttpCode,
@@ -14,7 +15,8 @@ import {
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantRole } from '@rms/contracts';
-import type { TenancyService } from './tenancy.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { TenancyService } from './tenancy.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles, type TenantContext } from '../auth/types';
@@ -31,7 +33,7 @@ import type {
 @ApiTags('Tenancy')
 @Controller()
 export class TenancyController {
-  constructor(private readonly tenancyService: TenancyService) {}
+  constructor(@Inject(TenancyService) private readonly tenancyService: TenancyService) {}
 
   @Get('tenants/current')
   @UseGuards(JwtAuthGuard)

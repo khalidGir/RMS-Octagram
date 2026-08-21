@@ -1,16 +1,18 @@
 import {
   Injectable,
+  Inject,
   type NestMiddleware,
   Logger,
 } from '@nestjs/common';
 import type { Request, Response, NextFunction } from 'express';
-import type { CorrelationService } from './correlation.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- CorrelationService is used as constructor value for NestJS DI
+import { CorrelationService } from './correlation.service';
 
 @Injectable()
 export class CorrelationMiddleware implements NestMiddleware {
   private readonly logger = new Logger('HTTP');
 
-  constructor(private readonly correlationService: CorrelationService) {}
+  constructor(@Inject(CorrelationService) private readonly correlationService: CorrelationService) {}
 
   use(req: Request, res: Response, next: NextFunction) {
     const correlationId =

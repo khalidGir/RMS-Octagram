@@ -1,13 +1,13 @@
-import type { CanActivate, ExecutionContext } from '@nestjs/common';
-import { Injectable, ForbiddenException } from '@nestjs/common';
-import type { Reflector } from '@nestjs/core';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { type CanActivate, type ExecutionContext, Injectable, ForbiddenException, Inject } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { TenantRole } from '@rms/contracts';
 import { BRANCH_SCOPED_KEY, type TenantContext } from './types';
 
 @Injectable()
 export class BranchScopeGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(@Inject(Reflector) private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
     const isBranchScoped = this.reflector.getAllAndOverride<boolean>(BRANCH_SCOPED_KEY, [

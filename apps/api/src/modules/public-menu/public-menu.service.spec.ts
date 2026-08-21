@@ -2,7 +2,6 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { PublicMenuService } from './public-menu.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
-import * as crypto from 'crypto';
 
 const mockPrisma = {
   tenant: { findFirst: vi.fn() },

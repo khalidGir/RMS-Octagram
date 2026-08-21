@@ -1,10 +1,11 @@
 import {
-  Controller, Get, Post, Patch, Delete, Put, Body, Param, UseGuards, Req,
+  Controller, Get, Post, Patch, Delete, Put, Body, Param, Inject, UseGuards, Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantRole } from '@rms/contracts';
-import type { CatalogService } from './catalog.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { CatalogService } from './catalog.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { BranchScopeGuard } from '../auth/branch-scope.guard';
@@ -28,7 +29,7 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard, BranchScopeGuard)
 @ApiCookieAuth()
 export class CatalogController {
-  constructor(private readonly catalog: CatalogService) {}
+  constructor(@Inject(CatalogService) private readonly catalog: CatalogService) {}
 
   // ─── Categories ────────────────────────────
 

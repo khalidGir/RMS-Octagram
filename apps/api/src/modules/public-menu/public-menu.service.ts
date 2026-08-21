@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import type { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Inject, NotFoundException, ForbiddenException } from '@nestjs/common';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
 import { normalizeTimeValue, localTimeInTimezone, isWithinTimeWindow } from '../shared/time.utils';
 
@@ -52,7 +53,7 @@ export interface PublicTableContext {
 
 @Injectable()
 export class PublicMenuService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async getBranchMenu(branchId: string, tenantId: string): Promise<PublicBranchMenu> {
     const tenant = await this.prisma.tenant.findFirst({ where: { id: tenantId, status: 'ACTIVE' } });

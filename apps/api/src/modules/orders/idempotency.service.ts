@@ -1,6 +1,7 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, Inject, ConflictException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { PrismaService } from '../prisma/prisma.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
 import { canonicalStringify } from '@rms/contracts';
 import * as crypto from 'crypto';
 
@@ -11,19 +12,20 @@ import * as crypto from 'crypto';
  * 1. Attempt atomic reserve (INSERT ... ON CONFLICT)
  * 2. If insert succeeds → new reservation, proceed to execute handler
  * 3. If conflict → read existing record:
- *    a. Same hash + completed (responseStatus !== null) → return stored result (replay)
- *    b. Same hash + in-progress → 409 Conflict
- *    c. Different hash → 409 Conflict
+ *    a. Different hash → 409 Conflict (payload mismatch)
+ *    b. Same hash + completed (responseStatus !== null) → return stored result (replay)
+ *    c. Same hash + in-progress → 409 Conflict
  *    d. Expired reservation → atomic UPDATE to take over, then execute
  * 4. Execute handler → store result with tracking token for replay
  * 5. Failed handler → expire reservation immediately (allow retry)
  *
  * Concurrency: concurrent identical requests get 409 while first is in progress.
  * Replay: completed responses include raw tracking token for client replay.
+ * Payload safety: different payloads on the same key are always rejected.
  */
 @Injectable()
 export class IdempotencyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async withIdempotency<T extends { status: number; body: unknown; resourceId?: string }>(
     params: {
@@ -74,11 +76,12 @@ export class IdempotencyService {
           throw new ConflictException('Idempotency conflict with no existing record');
         }
 
+        // Different hash → always reject (idempotency key reused with different payload)
         if (existing.requestHash !== requestHash) {
           throw new ConflictException('Idempotency key reused with different payload');
         }
 
-        // Completed → replay
+        // Same hash + completed → replay
         if (existing.responseStatus !== null && existing.responseBody) {
           return {
             result: {

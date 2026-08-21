@@ -1,6 +1,8 @@
 import { Module, type NestModule, type MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const cookieParser = require('cookie-parser');
 import { PrismaModule } from './modules/prisma/prisma.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -33,11 +35,12 @@ import { JwtStrategy } from './modules/auth/jwt.strategy';
     PublicMenuModule,
     OrdersModule,
   ],
-  providers: [JwtStrategy],
+  providers: [JwtStrategy, TenantContextMiddleware],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
+    consumer.apply(cookieParser()).forRoutes('*');
     consumer.apply(CorrelationMiddleware, HttpLoggerMiddleware).forRoutes('*');
-    consumer.apply(TenantContextMiddleware).forRoutes('api/v1');
+    consumer.apply(TenantContextMiddleware).forRoutes('*');
   }
 }

@@ -9,7 +9,7 @@ import type { LineInput } from './price-calculator.service';
 
 function createMockPrisma() {
   return {
-    order: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+    order: { findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn().mockResolvedValue({ id: 'order-1', orderNumber: 1n, status: 'DRAFT', version: 1, lines: [] }), create: vi.fn(), update: vi.fn() },
     orderLine: { create: vi.fn(), deleteMany: vi.fn() },
     orderLineModifier: { create: vi.fn(), deleteMany: vi.fn() },
     orderStatusHistory: { create: vi.fn() },

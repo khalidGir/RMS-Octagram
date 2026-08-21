@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   ConflictException,
   ForbiddenException,
@@ -8,9 +9,12 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { createHash } from 'crypto';
-import type { PrismaService } from '../prisma/prisma.service';
-import type { AuthService } from '../auth/auth.service';
-import type { AuditService } from '../audit/audit.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuthService } from '../auth/auth.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditService } from '../audit/audit.service';
 import { TenantRole } from '@rms/contracts';
 
 /** Role hierarchy: who can grant what */
@@ -38,9 +42,9 @@ export class TenancyService {
   private readonly logger = new Logger(TenancyService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly authService: AuthService,
-    private readonly audit: AuditService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   /**

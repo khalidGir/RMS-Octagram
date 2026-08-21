@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import type { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
 
 @Injectable()
 export class TablesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   /** Confirm branch belongs to tenant and is active */
   private async assertBranchOwnership(tenantId: string, branchId: string) {

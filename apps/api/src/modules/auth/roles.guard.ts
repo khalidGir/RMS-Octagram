@@ -1,12 +1,12 @@
-import type { CanActivate, ExecutionContext} from '@nestjs/common';
-import { Injectable, ForbiddenException } from '@nestjs/common';
-import type { Reflector } from '@nestjs/core';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { type CanActivate, type ExecutionContext, Injectable, ForbiddenException, Inject } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ROLES_KEY, type TenantContext } from './types';
 import { TenantRole, PlatformRole } from '@rms/contracts';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(@Inject(Reflector) private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<(TenantRole | PlatformRole)[]>(ROLES_KEY, [

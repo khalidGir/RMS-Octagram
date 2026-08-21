@@ -1,10 +1,11 @@
 import {
-  Controller, Get, Post, Patch, Body, Param, UseGuards, Req,
+  Controller, Get, Post, Patch, Body, Param, Inject, UseGuards, Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantRole } from '@rms/contracts';
-import type { TablesService } from './tables.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { TablesService } from './tables.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { BranchScopeGuard } from '../auth/branch-scope.guard';
@@ -23,7 +24,7 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard, BranchScopeGuard)
 @ApiCookieAuth()
 export class TablesController {
-  constructor(private readonly tables: TablesService) {}
+  constructor(@Inject(TablesService) private readonly tables: TablesService) {}
 
   // ─── Dining Areas ──────────────────────────
 

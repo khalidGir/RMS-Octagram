@@ -1,12 +1,27 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import * as request from 'supertest';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const request = require('supertest');
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
 
-const prisma = new PrismaClient();
+// ─── TEST DATABASE SAFETY ─────────────────────────────────────────
+const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
+if (!TEST_DATABASE_URL) {
+  throw new Error('TEST_DATABASE_URL is required.');
+}
+if (!TEST_DATABASE_URL.includes('test')) {
+  throw new Error(`TEST_DATABASE_URL must contain "test". Got: ${TEST_DATABASE_URL}`);
+}
+
+const prisma = new PrismaClient({ datasources: { db: { url: TEST_DATABASE_URL } } });
+
+// Override DATABASE_URL so the NestJS PrismaService connects to the test DB
+process.env.DATABASE_URL = TEST_DATABASE_URL;
+process.env.JWT_ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || 'test-access-secret';
+process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test-refresh-secret';
 
 describe('Auth & Tenancy Security (e2e)', () => {
   let app: INestApplication;
@@ -85,11 +100,15 @@ describe('Auth & Tenancy Security (e2e)', () => {
   }, 30000);
 
   afterAll(async () => {
-    // Cleanup in reverse order
-    await prisma.branchAssignment.deleteMany({ where: { tenantId: { in: [tenantId, tenant2Id] } } });
-    await prisma.tenantMembership.deleteMany({ where: { tenantId: { in: [tenantId, tenant2Id] } } });
-    await prisma.branch.deleteMany({ where: { tenantId: { in: [tenantId, tenant2Id] } } });
-    await prisma.tenant.deleteMany({ where: { id: { in: [tenantId, tenant2Id] } } });
+    // Cleanup in reverse order — filter undefined tenant IDs (beforeAll may have failed early)
+    const tenantIds = [tenantId, tenant2Id].filter((id): id is string => !!id);
+    if (tenantIds.length > 0) {
+      await prisma.branchAssignment.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      await prisma.tenantMembership.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      await prisma.branch.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
+    }
+    await prisma.authSession.deleteMany({ where: { user: { email: { contains: 'se-' } } } });
     await prisma.user.deleteMany({ where: { email: { contains: 'se-' } } });
     await prisma.$disconnect();
     await app?.close();
@@ -222,6 +241,7 @@ describe('Auth & Tenancy Security (e2e)', () => {
 
       await prisma.tenantMembership.deleteMany({ where: { tenantId: suspended.id } });
       await prisma.tenant.delete({ where: { id: suspended.id } });
+      await prisma.authSession.deleteMany({ where: { userId: user.id } });
       await prisma.user.delete({ where: { id: user.id } });
     });
 
@@ -343,6 +363,7 @@ describe('Auth & Tenancy Security (e2e)', () => {
       // Cleanup
       await prisma.branchAssignment.deleteMany({ where: { membershipId: t1.id } });
       await prisma.tenantMembership.delete({ where: { id: t1.id } });
+      await prisma.authSession.deleteMany({ where: { userId: temp.id } });
       await prisma.user.delete({ where: { id: temp.id } });
     });
   });
@@ -392,13 +413,16 @@ describe('Auth & Tenancy Security (e2e)', () => {
     });
 
     it('invitation expires', async () => {
-      // Create membership with expired invitation
+      // Create membership with expired invitation — hash must match the token sent
+      const crypto = await import('crypto');
+      const expToken = `exp-token-${ts}`;
+      const expTokenHash = crypto.createHash('sha256').update(expToken).digest('hex');
       const pw = await argon2.hash('Test1234!');
       const u = await prisma.user.create({ data: { email: `exp-${ts}@test.com`, passwordHash: pw, displayName: 'Exp', status: 'ACTIVE' } });
       const m = await prisma.tenantMembership.create({
         data: {
           tenantId, userId: u.id, role: 'CASHIER', status: 'INVITED',
-          invitationTokenHash: 'expiredhash',
+          invitationTokenHash: expTokenHash,
           invitationExpiresAt: new Date(Date.now() - 1000),
         },
       });
@@ -407,11 +431,12 @@ describe('Auth & Tenancy Security (e2e)', () => {
         .post('/api/v1/memberships/accept-invitation')
         .set('Authorization', `Bearer ${ownerToken}`)
         .set('x-tenant-id', tenantId)
-        .send({ invitationToken: 'anything' });
+        .send({ invitationToken: expToken });
 
       expect(res.status).toBe(400);
 
       await prisma.tenantMembership.delete({ where: { id: m.id } });
+      await prisma.authSession.deleteMany({ where: { userId: u.id } });
       await prisma.user.delete({ where: { id: u.id } });
     });
 
@@ -449,6 +474,7 @@ describe('Auth & Tenancy Security (e2e)', () => {
 
       await prisma.branchAssignment.deleteMany({ where: { membershipId: m.id } });
       await prisma.tenantMembership.delete({ where: { id: m.id } });
+      await prisma.authSession.deleteMany({ where: { userId: u.id } });
       await prisma.user.delete({ where: { id: u.id } });
     });
   });

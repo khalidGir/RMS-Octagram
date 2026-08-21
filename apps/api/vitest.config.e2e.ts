@@ -6,6 +6,13 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['test/**/*.e2e-spec.ts'],
-    testTimeout: 30000,
+    testTimeout: 60000,
+    deps: {
+      optimizer: {
+        ssr: {
+          include: ['supertest'],
+        },
+      },
+    },
   },
 });

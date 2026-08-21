@@ -1,15 +1,17 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   ConflictException,
   NotImplementedException,
 } from '@nestjs/common';
-import type { PrismaService } from '../prisma/prisma.service';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- Services are used as constructor values
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { BranchOrderCounterService } from './branch-order-counter.service';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- Services are used as constructor values
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { IdempotencyService } from './idempotency.service';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- Services are used as constructor values
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PriceCalculatorService } from './price-calculator.service';
 import type { LineInput } from './price-calculator.service';
 import { canTransition3A, getInitialStatus } from './state-machine';
@@ -19,10 +21,10 @@ import { FeatureKey } from '@rms/contracts';
 @Injectable()
 export class OrdersService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly counter: BranchOrderCounterService,
-    private readonly idempotency: IdempotencyService,
-    private readonly priceCalc: PriceCalculatorService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(BranchOrderCounterService) private readonly counter: BranchOrderCounterService,
+    @Inject(IdempotencyService) private readonly idempotency: IdempotencyService,
+    @Inject(PriceCalculatorService) private readonly priceCalc: PriceCalculatorService,
   ) {}
 
   // ─── CREATE TABLE ORDER (Public) ─────────────
@@ -197,9 +199,14 @@ export class OrdersService {
         return order;
       });
 
+      const orderWithLines = await this.prisma.order.findUnique({
+        where: { id: order.id },
+        include: { lines: { include: { modifiers: true } } },
+      });
+
       return {
         status: 201 as const,
-        body: { ...this.serializeOrder(order), trackingToken: trackingTokenRaw },
+        body: { ...this.serializeOrder(orderWithLines!), trackingToken: trackingTokenRaw },
         resourceId: order.id,
       };
     };
@@ -395,7 +402,12 @@ export class OrdersService {
         return order;
       });
 
-      return { status: 201 as const, body: this.serializeOrder(order), resourceId: order.id };
+      const orderWithLines = await this.prisma.order.findUnique({
+        where: { id: order.id },
+        include: { lines: { include: { modifiers: true } } },
+      });
+
+      return { status: 201 as const, body: this.serializeOrder(orderWithLines!), resourceId: order.id };
     };
 
     if (idempotencyKey) {
@@ -563,7 +575,12 @@ export class OrdersService {
         return updated;
       });
 
-      return { status: 200 as const, body: this.serializeOrder(order), resourceId: order.id };
+      const orderWithLines = await this.prisma.order.findUnique({
+        where: { id: order.id },
+        include: { lines: { include: { modifiers: true } } },
+      });
+
+      return { status: 200 as const, body: this.serializeOrder(orderWithLines!), resourceId: order.id };
     };
 
     if (params.idempotencyKey) {

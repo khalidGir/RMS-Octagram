@@ -5,10 +5,12 @@ import {
   Body,
   Param,
   Query,
+  Inject,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
-import type { PlatformAdminService } from './platform-admin.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PlatformAdminService } from './platform-admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/types';
@@ -20,7 +22,7 @@ import { PlatformRole } from '@rms/contracts';
 @Roles(PlatformRole.SUPER_ADMIN)
 @ApiCookieAuth()
 export class PlatformAdminController {
-  constructor(private readonly platformAdminService: PlatformAdminService) {}
+  constructor(@Inject(PlatformAdminService) private readonly platformAdminService: PlatformAdminService) {}
 
   @Get('tenants')
   @ApiOperation({ summary: 'List tenants with aggregate counts' })

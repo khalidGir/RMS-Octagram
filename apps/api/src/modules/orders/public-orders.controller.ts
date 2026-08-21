@@ -1,19 +1,19 @@
-import { Controller, Post, Get, Body, Param, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, BadRequestException, Inject, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import * as crypto from 'crypto';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- PrismaService is used as constructor value
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PrismaService } from '../prisma/prisma.service';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- OrdersService is used as constructor value
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { OrdersService } from './orders.service';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DTOs must be value imports for class-validator decorator metadata
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { CreateTableOrderDto } from './dto';
 
 @ApiTags('Public Orders')
 @Controller('public')
 export class PublicOrdersController {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly orders: OrdersService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(OrdersService) private readonly orders: OrdersService,
   ) {}
 
   @Post('orders')

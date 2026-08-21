@@ -7,6 +7,8 @@ import {
   Body,
   Req,
   Query,
+  Inject,
+  BadRequestException,
   NotImplementedException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
@@ -18,9 +20,9 @@ import { RolesGuard } from '../auth/roles.guard';
 import { BranchScopeGuard } from '../auth/branch-scope.guard';
 import { Roles, BranchScoped } from '../auth/types';
 import type { TenantContext } from '../auth/types';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- OrdersService is used as constructor value
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { OrdersService } from './orders.service';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- DTOs must be value imports for class-validator decorator metadata
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import {
   CreatePosOrderDto,
   EditOrderDto,
@@ -34,7 +36,7 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard, BranchScopeGuard)
 @ApiCookieAuth()
 export class OrdersController {
-  constructor(private readonly orders: OrdersService) {}
+  constructor(@Inject(OrdersService) private readonly orders: OrdersService) {}
 
   // ─── CREATE POS ORDER ───────────────────────
 
@@ -73,11 +75,22 @@ export class OrdersController {
     @Query() dto: ListOrdersDto,
   ) {
     const ctx = req.tenantContext as TenantContext;
+
+    const parseDate = (value: string, field: string): Date => {
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) {
+        throw new BadRequestException(`Invalid date for "${field}"`);
+      }
+      return d;
+    };
+
     const result = await this.orders.listOrders({
       tenantId: ctx.tenantId!,
       branchId,
       status: dto.status,
       orderType: dto.orderType,
+      from: dto.from ? parseDate(dto.from, 'from') : undefined,
+      to: dto.to ? parseDate(dto.to, 'to') : undefined,
       limit: Math.min(dto.limit ?? 50, 100),
       after: dto.after,
     });

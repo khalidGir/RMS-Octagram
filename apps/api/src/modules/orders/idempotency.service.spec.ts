@@ -170,6 +170,24 @@ describe('IdempotencyService', () => {
       await expect(service.withIdempotency(baseParams, handler)).rejects.toThrow(ConflictException);
     });
 
+    it('rejects completed response when payload hash differs (regression)', async () => {
+      const p2002Error = Object.assign(new Error('Unique constraint'), { code: 'P2002' });
+      vi.mocked(prisma.idempotencyRecord.create).mockRejectedValue(p2002Error);
+
+      vi.mocked(prisma.idempotencyRecord.findFirst).mockResolvedValue({
+        id: 'rec-1',
+        requestHash: 'different-hash-value',
+        expiresAt: new Date(Date.now() + 3600_000),
+        responseStatus: 201,
+        responseBody: { id: 'order-1', trackingToken: 'token-abc' },
+        resourceId: 'order-1',
+      } as any);
+
+      const handler = vi.fn();
+      await expect(service.withIdempotency(baseParams, handler)).rejects.toThrow(ConflictException);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
     it('rejects while request is in progress', async () => {
       const p2002Error = Object.assign(new Error('Unique constraint'), { code: 'P2002' });
       vi.mocked(prisma.idempotencyRecord.create).mockRejectedValue(p2002Error);

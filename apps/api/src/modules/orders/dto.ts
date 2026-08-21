@@ -9,6 +9,7 @@ import {
   ValidateNested,
   ArrayMinSize,
   Matches,
+  IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -202,12 +203,12 @@ export class ListOrdersDto {
 
   @ApiPropertyOptional({ description: 'Filter orders created after this ISO datetime' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   from?: string;
 
   @ApiPropertyOptional({ description: 'Filter orders created before this ISO datetime' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   to?: string;
 
   @ApiPropertyOptional({ description: 'Page size (1-100)', default: 20 })
