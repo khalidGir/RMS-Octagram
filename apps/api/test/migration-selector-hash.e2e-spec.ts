@@ -38,7 +38,7 @@ describe('selectorHash migration on populated database (e2e)', () => {
     // No hash should be empty string (backfill must replace the default '')
     for (const h of hashes) {
       expect(h).not.toBe('');
-      expect(h.length).toBe(32); // md5() produces 32 hex chars
+      expect(h.length).toBe(64); // sha256() produces 64 hex chars
     }
   });
 

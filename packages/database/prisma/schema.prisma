@@ -520,52 +520,61 @@ model PaymentInstruction {
 }
 
 model Payment {
-  id                String    @id @default(uuid())
-  tenantId          String
-  branchId          String
-  orderId           String
-  method            String
-  status            String    @default("PENDING")
-  amountMinor       BigInt
-  currency          String    @default("ETB") @db.VarChar(3)
-  provider          String?
-  providerReference String?
-  customerReference String?
-  submittedAt       DateTime?
-  reviewedAt        DateTime?
-  reviewedByUserId  String?
-  reviewNote        String?
-  version           Int       @default(1)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  tenantId            String
+  branchId            String
+  orderId             String
+  method              String
+  status              String    @default("PENDING")
+  amountMinor         BigInt
+  currency            String    @default("ETB") @db.VarChar(3)
+  provider            String?
+  providerReference   String?
+  customerReference   String?
+  paymentTokenHash    String?
+  paymentTokenExpiresAt DateTime?
+  submittedAt         DateTime?
+  reviewedAt          DateTime?
+  reviewedByUserId    String?
+  reviewNote          String?
+  version             Int       @default(1)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  branch            Branch    @relation(fields: [branchId], references: [id])
-  order             Order     @relation(fields: [orderId], references: [id])
-  proofs            PaymentProof[]
+  branch              Branch    @relation(fields: [branchId], references: [id])
+  order               Order     @relation(fields: [orderId], references: [id])
+  proofs              PaymentProof[]
+  mediaObjects        MediaObject[]
 
   @@index([tenantId, branchId, status, submittedAt])
   @@index([tenantId, branchId, orderId])
+  @@index([tenantId, branchId, orderId, status]) // one active per order
 }
 
 model MediaObject {
   id            String    @id @default(uuid())
   tenantId      String
   branchId      String
+  paymentId     String?
   purpose       String
   bucket        String
   objectKey     String
   contentType   String
   sizeBytes     BigInt
   sha256        String?
-  scanStatus    String    @default("PENDING")
+  // Scan lifecycle: PENDING_UPLOAD (created, not yet uploaded) → PENDING_SCAN (uploaded, awaiting scan) → CLEAN | REJECTED
+  scanStatus    String    @default("PENDING_UPLOAD")
+  uploadExpiresAt DateTime?
   uploadedByUserId String?
   createdAt     DateTime  @default(now())
   deletedAt     DateTime?
 
   branch        Branch    @relation(fields: [branchId], references: [id])
+  payment       Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   paymentProofs PaymentProof[]
 
   @@index([tenantId, branchId])
+  @@index([tenantId, branchId, paymentId])
 }
 
 model PaymentProof {
@@ -625,6 +634,7 @@ model KitchenTicket {
   lines             KitchenTicketLine[]
   history           KitchenTicketHistory[]
 
+  @@unique([tenantId, branchId, orderId, stationId])
   @@index([tenantId, branchId, stationId, status, createdAt])
 }
 

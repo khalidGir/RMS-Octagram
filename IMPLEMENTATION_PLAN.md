@@ -85,32 +85,52 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 - Draft/unconfirmed edit rules.
 - Customer tracking token and status page.
 - Idempotency records and optimistic concurrency.
-- Cash payment confirmation.
+- Orders await payment (PENDING_PAYMENT) or staff confirmation (PENDING_CONFIRMATION).
 
 ### Exit criteria
 
 - Customer and cashier can create valid orders without duplicate submissions.
 - Server rejects stale prices and invalid modifiers safely.
-- Cash-confirmed order is ready for kitchen routing.
+- Orders reach PENDING_PAYMENT or PENDING_CONFIRMATION according to payment policy.
 - Money invariants and order state transitions have integration tests.
 
-## 7. Phase 4 - Manual Payment and KDS (Days 19-24)
+## 7. Phase 4 - Manual Payment and KDS (Days 19-28)
 
-### Deliverables
+### Phase 4A - Manual Transfer Payment Flow (Days 19-24)
 
-- Branch payment instructions.
-- Presigned private S3 upload/finalization.
-- Cashier review queue with proof viewer, approval, and rejection.
-- Transactional payment approval and order confirmation.
+#### Deliverables
+
+- Branch payment instruction CRUD (staff management and public read).
+- Presigned private S3 upload with upload-intent lifecycle (PENDING_UPLOAD → PENDING_SCAN → CLEAN).
+- Customer payment submission with server-derived context from opaque tokens.
+- Payment token with 24-hour expiry, terminal-state invalidation, and one-active-per-order constraint.
+- Cashier review queue with protected proof access (CLEAN-only read URLs).
+- Payment finalize atomically: claim upload intent, create proof, retire previous, transition status, audit, outbox.
+
+#### Exit criteria
+
+- Customer creates order, retrieves payment instructions, uploads proof, and sees PENDING_VERIFICATION.
+- Cashier sees pending review queue with order summary.
+- Unauthorized users cannot view proof images.
+- Expired payment tokens and upload intents are rejected.
+- Concurrent proof finalization produces exactly one current proof.
+- Cross-tenant and cross-branch access is denied.
+- Unit and E2E tests cover all 12 security/consistency scenarios.
+
+### Phase 4B - Payment Approval and KDS (Days 25-28)
+
+#### Deliverables
+
+- Cashier/Manager payment approval and rejection with idempotency.
+- Transactional order confirmation on payment approval.
 - Kitchen stations, tickets, queue, bump/ready/complete/recall.
 - WebSocket branch/station rooms and polling fallback.
-- Transactional outbox publisher.
+- Transactional outbox publisher for order.confirmed and ticket events.
 
-### Exit criteria
+#### Exit criteria
 
-- Customer uploads proof and sees pending review.
 - Cashier approval confirms exactly once and creates KDS ticket(s).
-- Unauthorized users cannot view proof.
+- Rejection notifies customer and allows resubmission.
 - KDS reconnects and reconciles without losing or duplicating tickets.
 
 ## 8. Phase 5 - Inventory and Reporting (Days 25-29)
@@ -189,10 +209,12 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 ### Integration tests
 
 - PostgreSQL repositories with RLS enabled.
-- Transactional payment approval to order/KDS/inventory/outbox.
-- Idempotency replay and conflicting payload.
-- Optimistic concurrency conflicts.
-- S3 upload authorization metadata using a local/fake adapter.
+- Transactional payment approval to order/KDS/inventory/outbox (Phase 4B).
+- Idempotency replay and conflicting payload (Phase 4A: manual-transfer creation and proof finalize).
+- Optimistic concurrency conflicts (Phase 4A: concurrent finalization produces one current proof).
+- S3 upload authorization metadata using a local/fake adapter (Phase 4A: presigned POST policies).
+- Upload intent lifecycle: PENDING_UPLOAD → PENDING_SCAN → CLEAN (Phase 4A).
+- Payment token expiry and terminal-state invalidation (Phase 4A).
 
 ### End-to-end tests
 
@@ -215,8 +237,12 @@ Before Phase 3 merge:
 
 Before Phase 4 merge:
 
-- Confirm exact payment instructions and supported proof/reference fields.
-- Confirm proof-image retention duration and authorized viewers.
+- Payment instructions use structured fields (label, method, accountHolder, accountIdentifier, instructions).
+- Proof images are not automatically deleted during MVP; retention is configurable.
+- Payment tokens expire after 24 hours and are invalidated on terminal payment state.
+- One current proof per payment enforced by partial unique index.
+- Upload intent lifecycle prevents unsafe proof viewing (CLEAN-only read URLs).
+- Presigned POST with exact key binding, 5 MB limit, accepted MIME types, and checksum.
 
 Before production:
 

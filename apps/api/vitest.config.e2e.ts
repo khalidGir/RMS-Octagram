@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.e2e-spec.ts'],
     testTimeout: 60000,
+    hookTimeout: 30000,
     deps: {
       optimizer: {
         ssr: {

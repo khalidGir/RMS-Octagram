@@ -14,6 +14,9 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { TablesModule } from './modules/tables/tables.module';
 import { PublicMenuModule } from './modules/public-menu/public-menu.module';
 import { OrdersModule } from './modules/orders/orders.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { KitchenModule } from './modules/kitchen/kitchen.module';
+import { OutboxModule } from './modules/outbox/outbox.module';
 import { CorrelationMiddleware } from './modules/observability/correlation.middleware';
 import { HttpLoggerMiddleware } from './modules/observability/http-logger.middleware';
 import { TenantContextMiddleware } from './modules/auth/tenant-context.middleware';
@@ -34,6 +37,9 @@ import { JwtStrategy } from './modules/auth/jwt.strategy';
     TablesModule,
     PublicMenuModule,
     OrdersModule,
+    PaymentsModule,
+    KitchenModule,
+    OutboxModule,
   ],
   providers: [JwtStrategy, TenantContextMiddleware],
 })

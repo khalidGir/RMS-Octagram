@@ -12,6 +12,12 @@ const envSchema = z.object({
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
   DEFAULT_TIMEZONE: z.string().default('Africa/Addis_Ababa'),
   DEFAULT_CURRENCY: z.string().default('ETB'),
+  // S3 configuration for payment proof uploads
+  S3_REGION: z.string().default('us-east-1'),
+  S3_PROOF_BUCKET: z.string().min(1),
+  S3_ENDPOINT: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
