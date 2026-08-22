@@ -6,6 +6,7 @@ const request = require('supertest');
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
+import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
 
 // ─── TEST DATABASE SAFETY ─────────────────────────────────────────
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
@@ -67,6 +68,7 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
     app.setGlobalPrefix('api/v1');
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
+    app.get(OutboxProcessor).stop();
 
     const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
 
@@ -117,6 +119,7 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
   }, 60000);
 
   afterAll(async () => {
+    await app?.close();
     // Cleanup in FK-reverse order (guard against undefined if seeding failed)
     // AuthSession must be deleted before User (FK RESTRICT)
     await prisma.authSession.deleteMany({ where: { user: { email: { contains: 'ord-' } } } });
@@ -155,7 +158,6 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
     }
     await prisma.user.deleteMany({ where: { email: { contains: 'ord-' } } });
     await prisma.$disconnect();
-    await app?.close();
   });
 
   // ═══════════════════════════════════════════════════════════════

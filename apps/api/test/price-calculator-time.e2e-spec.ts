@@ -5,6 +5,7 @@ import request from 'supertest';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
+import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
 import { localTimeInTimezone } from '../src/modules/shared/time.utils';
 
 // ─── TEST DATABASE SAFETY ─────────────────────────────────────────
@@ -52,6 +53,7 @@ describe('Price Calculator — @db.Time + Availability Windows (e2e)', () => {
     app.setGlobalPrefix('api/v1');
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
+    app.get(OutboxProcessor).stop();
 
     const passwordHash = await argon2.hash('Test1234!', { type: argon2.argon2id });
 
@@ -87,6 +89,7 @@ describe('Price Calculator — @db.Time + Availability Windows (e2e)', () => {
   }, 60000);
 
   afterAll(async () => {
+    await app?.close();
     if (tenantId) {
       await prisma.idempotencyRecord.deleteMany({ where: { tenantId } });
       await prisma.orderLineModifier.deleteMany({ where: { tenantId } });
@@ -124,7 +127,6 @@ describe('Price Calculator — @db.Time + Availability Windows (e2e)', () => {
     }
     await prisma.user.deleteMany({ where: { email: { contains: 'time-' } } });
     await prisma.$disconnect();
-    await app?.close();
   });
 
   // ─── HELPERS ────────────────────────────────────────────────────

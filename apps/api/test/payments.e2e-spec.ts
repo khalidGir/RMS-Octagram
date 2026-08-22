@@ -56,6 +56,9 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
     await app.init();
 
+    // Stop the outbox processor timer immediately; tests poll manually
+    app.get(OutboxProcessor).stop();
+
     const passwordHash = await argon2.hash('Test1234!', { type: argon2.argon2id });
 
     const tenant = await prisma.tenant.create({ data: { name: 'PaymentTest', slug: `payment-test-${ts}`, status: 'ACTIVE' } });
@@ -111,6 +114,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
   });
 
   afterAll(async () => {
+    await app.close();
     await prisma.paymentProof.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.mediaObject.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.payment.deleteMany({ where: { tenantId } }).catch(() => {});
@@ -130,7 +134,6 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     await prisma.branch.delete({ where: { id: branchId } }).catch(() => {});
     await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, managerEmail, cashierEmail] } } }).catch(() => {});
     await prisma.tenant.delete({ where: { id: tenantId } }).catch(() => {});
-    await app.close();
     await prisma.$disconnect();
   });
 
