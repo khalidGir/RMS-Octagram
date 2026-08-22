@@ -8,7 +8,7 @@ import { AppModule } from '../src/app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ProofStorage } from '../src/modules/payments/proof-storage.interface';
 import { InMemoryProofStorage } from '../src/modules/payments/in-memory-proof-storage';
-import { KitchenTicketsService } from '../src/modules/kitchen/kitchen-tickets.service';
+import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 if (!TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL is required.');
@@ -927,23 +927,12 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     });
 
     it('kitchen tickets were created for the confirmed order', async () => {
-      // Process outbox: call kitchen tickets service directly, then mark event published
-      const pendingEvents = await prisma.outboxEvent.findMany({
-        where: { publishedAt: null, eventType: 'order.confirmed' },
-      });
-      const kitchenService = app.get(KitchenTicketsService);
-      for (const evt of pendingEvents) {
-        const payload = evt.payload as { orderId: string; paymentId: string };
-        await kitchenService.createTicketsForOrder({
-          tenantId: evt.tenantId!,
-          branchId: evt.branchId!,
-          orderId: payload.orderId,
-        });
-        await prisma.outboxEvent.update({
-          where: { id: evt.id },
-          data: { publishedAt: new Date() },
-        });
-      }
+      // Exercise the real outbox processor path
+      const processor = app.get(OutboxProcessor);
+      processor.stop(); // prevent timer races in the test
+
+      // First poll: consumes order.confirmed, creates tickets, marks published
+      await processor.poll();
 
       const res = await request(app.getHttpServer())
         .get(`/api/v1/branches/${branchId}/kitchen-tickets`)
@@ -953,6 +942,20 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       expect(tickets.length).toBeGreaterThanOrEqual(1);
       expect(tickets[0].orderId).toBe(orderId);
       expect(tickets[0].status).toBe('QUEUED');
+
+      // Event should now be marked published
+      const evt = await prisma.outboxEvent.findFirst({
+        where: { eventType: 'order.confirmed', branchId },
+      });
+      expect(evt!.publishedAt).not.toBeNull();
+
+      // Second poll: idempotent — creates no duplicates
+      await processor.poll();
+      const res2 = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/kitchen-tickets`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res2.body.data.length).toBe(tickets.length);
     });
 
     it('kitchen staff can bump a QUEUED ticket to IN_PROGRESS', async () => {

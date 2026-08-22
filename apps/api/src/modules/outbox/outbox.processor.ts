@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PrismaService } from '../prisma/prisma.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -11,16 +11,13 @@ const MAX_ATTEMPTS = 5;
 export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(OutboxProcessor.name);
   private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private readonly prisma: PrismaService;
-  private readonly kitchenTickets: KitchenTicketsService;
 
   constructor(
-    prisma: PrismaService,
-    kitchenTickets: KitchenTicketsService,
-  ) {
-    this.prisma = prisma;
-    this.kitchenTickets = kitchenTickets;
-  }
+    @Inject(PrismaService)
+    private readonly prisma: PrismaService,
+    @Inject(KitchenTicketsService)
+    private readonly kitchenTickets: KitchenTicketsService,
+  ) {}
 
   onModuleInit() {
     this.start();
