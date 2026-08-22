@@ -21,3 +21,26 @@ export interface TenantTheme {
   fontFamily: 'inter' | 'manrope' | 'source-sans';
   coverImageUrl?: string;
 }
+
+export type FeatureKey = 'TABLE_QR_ORDERING' | 'PICKUP_ORDERING' | 'MANUAL_TRANSFER_PAYMENTS' | 'PAYMENT_GATEWAY' | 'KDS' | 'INVENTORY' | 'BATCH_INVENTORY' | 'ANALYTICS' | 'MULTI_BRANCH';
+export type EntitlementState = 'ENABLED' | 'DISABLED' | 'TRIAL' | 'SUSPENDED';
+export type BranchOverride = 'INHERIT' | 'ENABLED' | 'DISABLED';
+
+export interface FeatureDefinition {
+  key: FeatureKey;
+  name: string;
+  description: string;
+  category: 'Ordering' | 'Payments' | 'Operations' | 'Growth';
+  dependencies: FeatureKey[];
+  branchConfigurable: boolean;
+}
+
+export interface TenantFeatureControl {
+  featureKey: FeatureKey;
+  entitlement: EntitlementState;
+  tenantEnabled: boolean;
+  branchOverride: BranchOverride;
+  trialEndsAt?: string;
+  updatedAt: string;
+  updatedBy: string;
+}

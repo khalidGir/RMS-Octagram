@@ -1,1 +1,1 @@
-import { OperationsPage } from '@/components/operations-page'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><OperationsPage kind="settings"/></StaffShell>}
+import { SettingsWorkflow } from '@/components/advanced-operations'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><SettingsWorkflow/></StaffShell>}
