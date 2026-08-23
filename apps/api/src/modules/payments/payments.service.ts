@@ -13,6 +13,8 @@ import { ProofStorage } from './proof-storage.interface';
 import { IdempotencyService } from '../orders/idempotency.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { FeatureResolver } from '../features/feature-resolver.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { InventoryDeductionService } from '../inventory/inventory-deduction.service';
 import { generatePaymentToken, hashPaymentToken } from './payment-token.util';
 import { FeatureKey } from '@rms/contracts';
 
@@ -29,6 +31,7 @@ export class PaymentService {
     @Inject(ProofStorage) private readonly proofStorage: ProofStorage,
     @Inject(IdempotencyService) private readonly idempotency: IdempotencyService,
     @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
+    @Inject(InventoryDeductionService) private readonly deductionService: InventoryDeductionService,
   ) {}
 
   /**
@@ -752,7 +755,12 @@ export class PaymentService {
     const payment = await this.prisma.payment.findFirst({
       where: { id: paymentId, tenantId, branchId, method: 'CASH' },
       include: {
-        order: { select: { id: true, status: true, version: true, totalMinor: true, currency: true } },
+        order: {
+          select: {
+            id: true, status: true, version: true, totalMinor: true, currency: true,
+            lines: { select: { id: true, variantId: true, quantity: true } },
+          },
+        },
       },
     });
 
@@ -771,6 +779,7 @@ export class PaymentService {
     }
 
     const now = new Date();
+    const orderLines = payment.order.lines;
 
     const result = await this.prisma.$transaction(async (tx) => {
       const updatedPayment = await tx.payment.updateMany({
@@ -816,6 +825,19 @@ export class PaymentService {
           actorUserId,
         },
       });
+
+      // Synchronous inventory deduction — rolls back entire transaction on failure
+      if (orderLines.length > 0) {
+        await this.deductionService.deductForOrder(tx, {
+          tenantId,
+          branchId,
+          orderId: payment.order.id,
+          lines: orderLines
+            .filter((l) => l.variantId)
+            .map((l) => ({ variantId: l.variantId!, quantity: l.quantity })),
+          actorUserId,
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -883,7 +905,12 @@ export class PaymentService {
     const payment = await this.prisma.payment.findFirst({
       where: { id: paymentId, tenantId, branchId },
       include: {
-        order: { select: { id: true, status: true, version: true, totalMinor: true, currency: true } },
+        order: {
+          select: {
+            id: true, status: true, version: true, totalMinor: true, currency: true,
+            lines: { select: { id: true, variantId: true, quantity: true } },
+          },
+        },
       },
     });
 
@@ -905,6 +932,7 @@ export class PaymentService {
     }
 
     const now = new Date();
+    const orderLines = payment.order.lines;
 
     const result = await this.prisma.$transaction(async (tx) => {
       // Approve payment — conditional on expected version
@@ -953,6 +981,19 @@ export class PaymentService {
           actorUserId,
         },
       });
+
+      // Synchronous inventory deduction — rolls back entire transaction on failure
+      if (orderLines.length > 0) {
+        await this.deductionService.deductForOrder(tx, {
+          tenantId,
+          branchId,
+          orderId: payment.order.id,
+          lines: orderLines
+            .filter((l) => l.variantId)
+            .map((l) => ({ variantId: l.variantId!, quantity: l.quantity })),
+          actorUserId,
+        });
+      }
 
       // Audit
       await tx.auditLog.create({

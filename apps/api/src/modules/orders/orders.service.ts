@@ -19,6 +19,8 @@ import * as crypto from 'crypto';
 import { FeatureKey } from '@rms/contracts';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { FeatureResolver } from '../features/feature-resolver.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { InventoryDeductionService } from '../inventory/inventory-deduction.service';
 
 @Injectable()
 export class OrdersService {
@@ -28,6 +30,7 @@ export class OrdersService {
     @Inject(IdempotencyService) private readonly idempotency: IdempotencyService,
     @Inject(PriceCalculatorService) private readonly priceCalc: PriceCalculatorService,
     @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
+    @Inject(InventoryDeductionService) private readonly deductionService: InventoryDeductionService,
   ) {}
 
   // ─── CREATE PICKUP ORDER (Public) ──────────
@@ -886,6 +889,102 @@ export class OrdersService {
           entityId: orderId,
           beforeJson: { status: existing.status },
           afterJson: { status: 'CANCELLED', reason },
+        },
+      });
+
+      return updated;
+    });
+
+    return { order: this.serializeOrder(order) };
+  }
+
+  // ─── VOID ORDER (with inventory restoration) ──
+
+  async voidOrder(params: {
+    orderId: string;
+    tenantId: string;
+    branchId: string;
+    actorUserId: string;
+    reason?: string;
+    expectedVersion: number;
+  }): Promise<{ order: Record<string, unknown> }> {
+    const { orderId, tenantId, branchId, actorUserId, reason, expectedVersion } = params;
+
+    const existing = await this.prisma.order.findFirst({
+      where: { id: orderId, tenantId, branchId },
+    });
+    if (!existing) throw new NotFoundException('Order not found');
+
+    if (!canTransition3A(existing.status, 'VOIDED') && existing.status !== 'CONFIRMED' && existing.status !== 'IN_PROGRESS' && existing.status !== 'READY' && existing.status !== 'COMPLETED') {
+      if (existing.status === 'VOIDED') {
+        return { order: this.serializeOrder(existing) };
+      }
+      throw new ConflictException(
+        `Cannot void order in status ${existing.status}`,
+      );
+    }
+
+    if (existing.version !== expectedVersion) {
+      throw new ConflictException({
+        code: 'VERSION_CONFLICT',
+        message: 'The order has been modified by another request. Please refresh.',
+        currentVersion: existing.version,
+      });
+    }
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.order.update({
+        where: { id: orderId, version: existing.version },
+        data: {
+          status: 'VOIDED',
+          cancelledAt: new Date(),
+          version: { increment: 1 },
+        },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          tenantId,
+          branchId,
+          orderId,
+          fromStatus: existing.status,
+          toStatus: 'VOIDED',
+          actorUserId,
+          reason,
+        },
+      });
+
+      // Restore inventory for confirmed orders
+      if (['CONFIRMED', 'IN_PROGRESS', 'READY', 'COMPLETED'].includes(existing.status)) {
+        await this.deductionService.restoreForVoid(tx, {
+          tenantId,
+          branchId,
+          orderId,
+          actorUserId,
+        });
+      }
+
+      await tx.outboxEvent.create({
+        data: {
+          tenantId,
+          branchId,
+          aggregateType: 'Order',
+          aggregateId: orderId,
+          eventType: 'order.voided',
+          payload: { orderId, reason, previousStatus: existing.status },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId,
+          branchId,
+          action: 'ORDER_VOID',
+          entityType: 'Order',
+          entityId: orderId,
+          beforeJson: { status: existing.status },
+          afterJson: { status: 'VOIDED', reason },
         },
       });
 

@@ -5,6 +5,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { ProofStorage } from './proof-storage.interface';
 import type { IdempotencyService } from '../orders/idempotency.service';
 import type { FeatureResolver } from '../features/feature-resolver.service';
+import type { InventoryDeductionService } from '../inventory/inventory-deduction.service';
 
 function createMockPrisma() {
   const mockTx = {
@@ -73,6 +74,15 @@ function createMockFeatureResolver(): FeatureResolver {
   } as unknown as FeatureResolver;
 }
 
+function createMockDeductionService(): InventoryDeductionService {
+  return {
+    deductForOrder: vi.fn().mockResolvedValue({ movements: [], totalLines: 0 }),
+    restoreForVoid: vi.fn().mockResolvedValue({ movements: [], totalLines: 0 }),
+    adjustWithTransaction: vi.fn().mockResolvedValue({ movement: {}, idempotent: false }),
+    wasteWithTransaction: vi.fn().mockResolvedValue({ movement: {}, idempotent: false }),
+  } as unknown as InventoryDeductionService;
+}
+
 describe('PaymentService — Transaction Rollback', () => {
   let service: PaymentService;
   let prisma: ReturnType<typeof createMockPrisma>;
@@ -84,7 +94,8 @@ describe('PaymentService — Transaction Rollback', () => {
     proofStorage = createMockProofStorage();
     const idempotency = createMockIdempotency();
     const featureResolver = createMockFeatureResolver();
-    service = new PaymentService(prisma, proofStorage, idempotency, featureResolver);
+    const deductionService = createMockDeductionService();
+    service = new PaymentService(prisma, proofStorage, idempotency, featureResolver, deductionService);
   });
 
   describe('finalizeProof rollback', () => {
@@ -214,7 +225,8 @@ describe('PaymentService — Approve/Reject', () => {
     const proofStorage = createMockProofStorage();
     const idempotency = createMockIdempotency();
     const featureResolver = createMockFeatureResolver();
-    service = new PaymentService(prisma, proofStorage, idempotency, featureResolver);
+    const deductionService = createMockDeductionService();
+    service = new PaymentService(prisma, proofStorage, idempotency, featureResolver, deductionService);
   });
 
   describe('approvePayment', () => {
@@ -226,7 +238,7 @@ describe('PaymentService — Approve/Reject', () => {
         status: 'PENDING_VERIFICATION',
         version: 1,
         amountMinor: 500n,
-        order: { id: 'ord-1', status: 'PENDING_PAYMENT', version: 1, totalMinor: 500n, currency: 'ETB' },
+        order: { id: 'ord-1', status: 'PENDING_PAYMENT', version: 1, totalMinor: 500n, currency: 'ETB', lines: [] },
       });
 
       const tx = prisma._mockTx;
@@ -250,7 +262,7 @@ describe('PaymentService — Approve/Reject', () => {
         status: 'PENDING_VERIFICATION',
         version: 1,
         amountMinor: 500n,
-        order: { id: 'ord-1', status: 'PENDING_PAYMENT', version: 1, totalMinor: 500n, currency: 'ETB' },
+        order: { id: 'ord-1', status: 'PENDING_PAYMENT', version: 1, totalMinor: 500n, currency: 'ETB', lines: [] },
       });
 
       const tx = prisma._mockTx;

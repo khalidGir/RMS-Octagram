@@ -7,9 +7,10 @@ import { PriceCalculatorService } from './price-calculator.service';
 import { OrdersController } from './orders.controller';
 import { PublicOrdersController } from './public-orders.controller';
 import { FeaturesModule } from '../features/features.module';
+import { InventoryModule } from '../inventory/inventory.module';
 
 @Module({
-  imports: [PrismaModule, FeaturesModule],
+  imports: [PrismaModule, FeaturesModule, InventoryModule],
   controllers: [OrdersController, PublicOrdersController],
   providers: [
     OrdersService,

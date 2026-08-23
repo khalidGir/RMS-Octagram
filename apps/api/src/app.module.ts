@@ -16,6 +16,7 @@ import { PublicMenuModule } from './modules/public-menu/public-menu.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { KitchenModule } from './modules/kitchen/kitchen.module';
+import { InventoryModule } from './modules/inventory/inventory.module';
 import { OutboxModule } from './modules/outbox/outbox.module';
 import { FeaturesModule } from './modules/features/features.module';
 import { CorrelationMiddleware } from './modules/observability/correlation.middleware';
@@ -40,6 +41,7 @@ import { JwtStrategy } from './modules/auth/jwt.strategy';
     OrdersModule,
     PaymentsModule,
     KitchenModule,
+    InventoryModule,
     OutboxModule,
     FeaturesModule,
   ],

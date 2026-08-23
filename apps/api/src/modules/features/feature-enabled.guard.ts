@@ -9,7 +9,7 @@ import { FeatureResolver } from './feature-resolver.service';
 @Injectable()
 export class FeatureEnabledGuard implements CanActivate {
   constructor(
-    private readonly reflector: Reflector,
+    @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
   ) {}
 
