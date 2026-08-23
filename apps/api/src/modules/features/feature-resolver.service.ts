@@ -1,4 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable, Inject, ForbiddenException } from '@nestjs/common';
 import type { FeatureKey } from '@rms/contracts';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -105,18 +105,13 @@ export class FeatureResolver {
       const def = getFeatureDefinition(featureKey);
       const message = `${def?.name ?? featureKey} is not enabled for this restaurant.`;
 
-      const errorPayload = {
+      throw new ForbiddenException({
         statusCode: 403,
         code: state.disabledReason === 'DEPENDENCY_DISABLED' ? 'DEPENDENCY_DISABLED' : 'FEATURE_DISABLED',
         feature: featureKey,
         reason: state.disabledReason,
         message,
-      };
-
-      // Throw a proper NestJS HttpException-compatible error
-      const err = new Error(message) as Error & typeof errorPayload;
-      Object.assign(err, errorPayload);
-      throw err;
+      });
     }
   }
 

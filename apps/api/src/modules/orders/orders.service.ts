@@ -30,6 +30,209 @@ export class OrdersService {
     @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
   ) {}
 
+  // ─── CREATE PICKUP ORDER (Public) ──────────
+
+  async createPickupOrder(params: {
+    tenantId: string;
+    branchId: string;
+    customerName: string;
+    customerPhone: string;
+    pickupAt: string;
+    lines: LineInput[];
+    notes?: string;
+    idempotencyKey?: string;
+    quotedTotal?: string;
+  }): Promise<{ order: Record<string, unknown>; trackingTokenRaw: string }> {
+    const { tenantId, branchId, idempotencyKey } = params;
+
+    await this.assertBranchActive(tenantId, branchId);
+    await this.featureResolver.assertEffective(tenantId, FeatureKey.PICKUP_ORDERING, branchId);
+
+    const pickupDate = new Date(params.pickupAt);
+    if (Number.isNaN(pickupDate.getTime())) {
+      throw new ConflictException('pickupAt must be a valid ISO 8601 date');
+    }
+    if (pickupDate <= new Date()) {
+      throw new ConflictException('pickupAt must be in the future');
+    }
+
+    const minLeadMinutes = await this.getPickupLeadMinutes(tenantId, branchId);
+    const earliestAllowed = new Date(Date.now() + minLeadMinutes * 60_000);
+    if (pickupDate < earliestAllowed) {
+      throw new ConflictException(
+        `Pickup time must be at least ${minLeadMinutes} minutes from now`,
+      );
+    }
+
+    if (await this.isOutsidePickupHours(tenantId, branchId, pickupDate)) {
+      throw new ConflictException('Pickup time is outside branch pickup hours');
+    }
+
+    const lines = this.deduplicateLines(params.lines);
+    const calculation = await this.priceCalc.calculateCart(tenantId, branchId, lines);
+
+    if (params.quotedTotal) {
+      const quoted = BigInt(params.quotedTotal);
+      if (quoted !== calculation.subtotalMinor) {
+        throw new ConflictException({
+          code: 'PRICE_CHANGED',
+          message: 'Cart prices have changed. Please review and confirm.',
+          serverTotal: calculation.subtotalMinor.toString(),
+        });
+      }
+    }
+
+    const paymentPolicy = await this.getPaymentPolicy(tenantId, branchId);
+    const initialStatus = getInitialStatus(paymentPolicy);
+    const { raw: trackingTokenRaw, hash: trackingTokenHash } = this.generateTrackingToken();
+
+    const execute = async () => {
+      const order = await this.prisma.$transaction(async (tx) => {
+        const orderNumber = await this.counter.nextOrderNumber(tx, branchId);
+
+        const order = await tx.order.create({
+          data: {
+            tenantId,
+            branchId,
+            orderNumber,
+            orderType: 'PICKUP',
+            status: initialStatus,
+            customerName: params.customerName,
+            customerPhone: params.customerPhone,
+            pickupAt: pickupDate,
+            currency: 'ETB',
+            subtotalMinor: calculation.subtotalMinor,
+            discountMinor: 0n,
+            taxMinor: 0n,
+            serviceChargeMinor: 0n,
+            totalMinor: calculation.subtotalMinor,
+            notes: params.notes ?? null,
+            source: 'CUSTOMER_WEB',
+            trackingTokenHash,
+            version: 1,
+          },
+        });
+
+        for (const line of calculation.lines) {
+          const orderLine = await tx.orderLine.create({
+            data: {
+              tenantId,
+              branchId,
+              orderId: order.id,
+              menuItemId: line.menuItemId,
+              variantId: line.variantId,
+              itemNameSnapshot: line.itemNameSnapshot,
+              variantNameSnapshot: line.variantNameSnapshot,
+              skuSnapshot: line.skuSnapshot,
+              unitPriceMinor: line.unitPriceMinor,
+              quantity: line.quantity,
+              lineTotalMinor: line.lineTotalMinor,
+              notes: lines.find((l) => l.variantId === line.variantId)?.notes ?? null,
+            },
+          });
+
+          for (const mod of line.modifiers) {
+            await tx.orderLineModifier.create({
+              data: {
+                tenantId,
+                branchId,
+                orderLineId: orderLine.id,
+                modifierOptionId: mod.modifierOptionId,
+                nameSnapshot: mod.nameSnapshot,
+                unitPriceDeltaMinor: mod.unitPriceDeltaMinor,
+                quantity: mod.quantity,
+                totalDeltaMinor: mod.totalDeltaMinor,
+              },
+            });
+          }
+        }
+
+        await tx.orderStatusHistory.create({
+          data: {
+            tenantId,
+            branchId,
+            orderId: order.id,
+            fromStatus: null,
+            toStatus: initialStatus,
+            actorUserId: null,
+          },
+        });
+
+        await tx.outboxEvent.create({
+          data: {
+            tenantId,
+            branchId,
+            aggregateType: 'Order',
+            aggregateId: order.id,
+            eventType: 'order.created',
+            payload: {
+              orderId: order.id,
+              orderNumber: orderNumber.toString(),
+              status: initialStatus,
+              totalMinor: calculation.subtotalMinor.toString(),
+              orderType: 'PICKUP',
+            },
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            actorUserId: null,
+            tenantId,
+            branchId,
+            action: 'ORDER_CREATE_PICKUP',
+            entityType: 'Order',
+            entityId: order.id,
+            afterJson: {
+              orderNumber: orderNumber.toString(),
+              status: initialStatus,
+              totalMinor: calculation.subtotalMinor.toString(),
+              lineCount: calculation.lines.length,
+              source: 'CUSTOMER_WEB',
+              customerName: params.customerName,
+              customerPhone: params.customerPhone,
+              pickupAt: pickupDate.toISOString(),
+            },
+          },
+        });
+
+        return order;
+      });
+
+      const orderWithLines = await this.prisma.order.findUnique({
+        where: { id: order.id },
+        include: { lines: { include: { modifiers: true } } },
+      });
+
+      return {
+        status: 201 as const,
+        body: { ...this.serializeOrder(orderWithLines!), trackingToken: trackingTokenRaw },
+        resourceId: order.id,
+      };
+    };
+
+    if (idempotencyKey) {
+      const { result } = await this.idempotency.withIdempotency(
+        {
+          tenantId,
+          branchId,
+          operation: 'createPickupOrder',
+          key: idempotencyKey,
+          requestPayload: params,
+        },
+        execute,
+      );
+      const body = result.body as Record<string, unknown>;
+      const { trackingToken: _token, ...orderBody } = body;
+      return { order: orderBody, trackingTokenRaw: _token as string };
+    }
+
+    const result = await execute();
+    const body = result.body as Record<string, unknown>;
+    const { trackingToken: _token, ...orderBody } = body;
+    return { order: orderBody, trackingTokenRaw: _token as string };
+  }
+
   // ─── CREATE TABLE ORDER (Public) ─────────────
 
   async createTableOrder(params: {
@@ -870,6 +1073,56 @@ export class OrdersService {
     }
 
     return 'PREPAY_REQUIRED';
+  }
+
+  private async getPickupLeadMinutes(tenantId: string, branchId: string): Promise<number> {
+    const branchSetting = await this.prisma.featureSetting.findFirst({
+      where: { tenantId, branchId, featureKey: 'PICKUP_ORDERING' },
+    });
+    if (branchSetting?.configuration && typeof (branchSetting.configuration as any).leadMinutes === 'number') {
+      return (branchSetting.configuration as any).leadMinutes;
+    }
+
+    const tenantSetting = await this.prisma.featureSetting.findFirst({
+      where: { tenantId, branchId: null, featureKey: 'PICKUP_ORDERING' },
+    });
+    if (tenantSetting?.configuration && typeof (tenantSetting.configuration as any).leadMinutes === 'number') {
+      return (tenantSetting.configuration as any).leadMinutes;
+    }
+
+    return 15;
+  }
+
+  private async isOutsidePickupHours(tenantId: string, branchId: string, pickupDate: Date): Promise<boolean> {
+    const branchSetting = await this.prisma.featureSetting.findFirst({
+      where: { tenantId, branchId, featureKey: 'PICKUP_ORDERING' },
+    });
+    const config = branchSetting?.configuration as any;
+    if (!config?.pickupOpen || !config?.pickupClose) return false;
+
+    const branch = await this.prisma.branch.findFirst({
+      where: { id: branchId, tenantId },
+      select: { timezone: true },
+    });
+    const tz = branch?.timezone || 'Africa/Addis_Ababa';
+    const localTime = (() => {
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: tz,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).formatToParts(pickupDate);
+      const h = parts.find((p) => p.type === 'hour')?.value ?? '0';
+      const m = parts.find((p) => p.type === 'minute')?.value ?? '0';
+      return `${h}:${m}`;
+    })();
+
+    const open = config.pickupOpen as string;
+    const close = config.pickupClose as string;
+    if (open <= close) {
+      return localTime < open || localTime > close;
+    }
+    return localTime < open && localTime > close;
   }
 
   private deduplicateLines(lines: LineInput[]): LineInput[] {

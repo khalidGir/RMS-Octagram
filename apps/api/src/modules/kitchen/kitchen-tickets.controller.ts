@@ -8,6 +8,8 @@ import {
   Query,
   UseGuards,
   Inject,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
@@ -69,6 +71,7 @@ export class KitchenTicketsController {
   }
 
   @Post(':ticketId/bump')
+  @HttpCode(HttpStatus.OK)
   @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.KITCHEN_STAFF)
   @ApiOperation({ summary: 'Bump ticket forward (QUEUED→IN_PROGRESS→READY)' })
   async bumpTicket(
@@ -90,6 +93,7 @@ export class KitchenTicketsController {
   }
 
   @Post(':ticketId/recall')
+  @HttpCode(HttpStatus.OK)
   @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.KITCHEN_STAFF)
   @ApiOperation({ summary: 'Recall a READY ticket back to IN_PROGRESS' })
   async recallTicket(
@@ -111,6 +115,7 @@ export class KitchenTicketsController {
   }
 
   @Post(':ticketId/complete')
+  @HttpCode(HttpStatus.OK)
   @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.KITCHEN_STAFF)
   @ApiOperation({ summary: 'Mark ticket COMPLETED' })
   async completeTicket(

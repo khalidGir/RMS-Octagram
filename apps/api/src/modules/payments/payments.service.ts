@@ -641,6 +641,232 @@ export class PaymentService {
   // ─── APPROVE PAYMENT ─────────────────────
 
   /**
+   * Create a cash payment for a POS order.
+   * Idempotent: same key replays, different key on same order rejects.
+   */
+  async createCashPayment(params: {
+    tenantId: string;
+    branchId: string;
+    orderId: string;
+    idempotencyKey: string;
+    actorUserId: string;
+  }) {
+    const { tenantId, branchId, orderId, idempotencyKey, actorUserId } = params;
+
+    const { result: idempotencyResult, reused } = await this.idempotency.withIdempotency(
+      {
+        tenantId,
+        branchId,
+        operation: 'cash-payment',
+        key: idempotencyKey,
+        requestPayload: { orderId },
+        ttlMinutes: 60,
+      },
+      async () => {
+        const order = await this.prisma.order.findFirst({
+          where: { id: orderId, tenantId, branchId },
+        });
+        if (!order) throw new NotFoundException('Order not found');
+
+        if (!['PENDING_PAYMENT', 'PENDING_CONFIRMATION'].includes(order.status)) {
+          throw new ConflictException(`Order is ${order.status} and cannot accept new payments`);
+        }
+
+        const existing = await this.prisma.payment.findFirst({
+          where: {
+            tenantId,
+            branchId,
+            orderId,
+            method: 'CASH',
+            status: { notIn: TERMINAL_STATUSES },
+          },
+        });
+        if (existing) {
+          throw new ConflictException('A payment already exists for this order');
+        }
+
+        let payment;
+        try {
+          payment = await this.prisma.$transaction(async (tx) => {
+            const p = await tx.payment.create({
+              data: {
+                tenantId,
+                branchId,
+                orderId,
+                method: 'CASH',
+                status: 'PENDING',
+                amountMinor: order.totalMinor,
+                currency: order.currency,
+              },
+            });
+
+            await tx.auditLog.create({
+              data: {
+                actorUserId,
+                tenantId,
+                branchId,
+                action: 'PAYMENT_CREATE_CASH',
+                entityType: 'Payment',
+                entityId: p.id,
+                afterJson: {
+                  orderId,
+                  method: 'CASH',
+                  amountMinor: order.totalMinor.toString(),
+                  currency: order.currency,
+                },
+              },
+            });
+
+            return p;
+          });
+        } catch (err) {
+          if (this.isP2002(err)) {
+            throw new ConflictException('A payment already exists for this order');
+          }
+          throw err;
+        }
+
+        return {
+          status: 201,
+          body: this.serializePayment(payment),
+          resourceId: payment.id,
+        };
+      },
+    );
+
+    return { data: idempotencyResult.body, reused };
+  }
+
+  /**
+   * Confirm a cash payment: approve payment + confirm order atomically.
+   * Idempotent: already APPROVED returns without error.
+   */
+  async confirmCashPayment(params: {
+    tenantId: string;
+    branchId: string;
+    paymentId: string;
+    actorUserId: string;
+  }) {
+    const { tenantId, branchId, paymentId, actorUserId } = params;
+
+    const payment = await this.prisma.payment.findFirst({
+      where: { id: paymentId, tenantId, branchId, method: 'CASH' },
+      include: {
+        order: { select: { id: true, status: true, version: true, totalMinor: true, currency: true } },
+      },
+    });
+
+    if (!payment) throw new NotFoundException('Payment not found');
+
+    if (payment.status === 'APPROVED') {
+      return this.serializePayment(payment);
+    }
+
+    if (payment.status !== 'PENDING') {
+      throw new ConflictException(`Payment is ${payment.status}, expected PENDING`);
+    }
+
+    if (!['PENDING_PAYMENT', 'PENDING_CONFIRMATION'].includes(payment.order.status)) {
+      throw new ConflictException(`Order is ${payment.order.status} and cannot be confirmed`);
+    }
+
+    const now = new Date();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updatedPayment = await tx.payment.updateMany({
+        where: {
+          id: paymentId,
+          status: 'PENDING',
+          version: payment.version,
+        },
+        data: {
+          status: 'APPROVED',
+          reviewedAt: now,
+          reviewedByUserId: actorUserId,
+          version: { increment: 1 },
+        },
+      });
+
+      if (updatedPayment.count !== 1) {
+        throw new ConflictException('Payment version conflict or already processed');
+      }
+
+      const latestPayment = await tx.payment.findUnique({ where: { id: paymentId } });
+
+      await tx.order.updateMany({
+        where: {
+          id: payment.order.id,
+          status: payment.order.status,
+          version: payment.order.version,
+        },
+        data: {
+          status: 'CONFIRMED',
+          confirmedAt: now,
+          version: { increment: 1 },
+        },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          tenantId,
+          branchId,
+          orderId: payment.order.id,
+          fromStatus: payment.order.status,
+          toStatus: 'CONFIRMED',
+          actorUserId,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId,
+          branchId,
+          action: 'PAYMENT_CASH_CONFIRM',
+          entityType: 'Payment',
+          entityId: paymentId,
+          beforeJson: { status: 'PENDING' },
+          afterJson: { status: 'APPROVED', orderId: payment.order.id },
+        },
+      });
+
+      await tx.outboxEvent.create({
+        data: {
+          tenantId,
+          branchId,
+          aggregateType: 'Payment',
+          aggregateId: paymentId,
+          eventType: 'payment.approved',
+          payload: {
+            paymentId,
+            orderId: payment.order.id,
+            amountMinor: payment.amountMinor.toString(),
+          },
+        },
+      });
+
+      await tx.outboxEvent.create({
+        data: {
+          tenantId,
+          branchId,
+          aggregateType: 'Order',
+          aggregateId: payment.order.id,
+          eventType: 'order.confirmed',
+          payload: {
+            orderId: payment.order.id,
+            paymentId,
+            totalMinor: payment.order.totalMinor.toString(),
+          },
+        },
+      });
+
+      return latestPayment;
+    });
+
+    return this.serializePayment(result);
+  }
+
+  /**
    * Approve a PENDING_VERIFICATION payment.
    * Atomic: payment → APPROVED, order → CONFIRMED, audit, outbox.
    * Idempotent: already APPROVED returns the payment without error.

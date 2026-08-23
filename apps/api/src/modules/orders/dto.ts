@@ -10,6 +10,8 @@ import {
   ArrayMinSize,
   Matches,
   IsDateString,
+  IsNotEmpty,
+  IsDefined,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -231,4 +233,61 @@ export class ConfirmOrderDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+}
+
+// ─── Create Public Pickup Order ─────────────
+
+export class CreatePickupOrderDto {
+  @ApiProperty({ description: 'Branch ID to order from' })
+  @IsString()
+  branchId!: string;
+
+  @ApiProperty({ type: [OrderLineDto], description: 'Order lines' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => OrderLineDto)
+  lines!: OrderLineDto[];
+
+  @ApiProperty({ description: 'Customer name (required for pickup)', example: 'Abebe' })
+  @IsDefined()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  customerName!: string;
+
+  @ApiProperty({ description: 'Customer phone (required for pickup)', example: '+251911111111' })
+  @IsDefined()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(20)
+  customerPhone!: string;
+
+  @ApiProperty({ description: 'Pickup time (ISO 8601, must be in the future)', example: '2026-08-23T15:00:00Z' })
+  @IsDefined()
+  @IsString()
+  @IsNotEmpty()
+  pickupAt!: string;
+
+  @ApiPropertyOptional({ description: 'Order notes', example: 'No spicy' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+
+  @ApiPropertyOptional({ description: 'Idempotency key for safe retries' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  idempotencyKey?: string;
+
+  @ApiPropertyOptional({
+    description: 'Quoted total for stale-cart detection (string BigInt minor units)',
+    example: '15000',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  @Matches(/^\d+$/, { message: 'quotedTotal must be a numeric string' })
+  quotedTotal?: string;
 }

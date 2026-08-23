@@ -76,19 +76,27 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
           this.logger.warn(`Unknown outbox event type: ${event.eventType}`);
       }
 
-      await this.prisma.outboxEvent.update({
-        where: { id: event.id },
-        data: { publishedAt: new Date() },
-      });
+      try {
+        await this.prisma.outboxEvent.update({
+          where: { id: event.id },
+          data: { publishedAt: new Date() },
+        });
+      } catch {
+        this.logger.warn(`Outbox event ${event.id} already removed by another process`);
+      }
     } catch (err) {
       this.logger.error(`Failed to process outbox event ${event.id}: ${err}`);
-      await this.prisma.outboxEvent.update({
-        where: { id: event.id },
-        data: {
-          attemptCount: { increment: 1 },
-          lastError: err instanceof Error ? err.message : String(err),
-        },
-      });
+      try {
+        await this.prisma.outboxEvent.update({
+          where: { id: event.id },
+          data: {
+            attemptCount: { increment: 1 },
+            lastError: err instanceof Error ? err.message : String(err),
+          },
+        });
+      } catch {
+        this.logger.warn(`Outbox event ${event.id} already removed during error handling`);
+      }
     }
   }
 

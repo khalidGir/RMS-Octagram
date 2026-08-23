@@ -161,6 +161,47 @@ export class PaymentsController {
     return { data: result };
   }
 
+  // ─── Cash Payment ────────────────
+
+  @Post('payments/cash')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
+  @ApiOperation({ summary: 'Record cash payment for an order' })
+  async createCashPayment(
+    @Req() req: Request,
+    @Param('branchId') branchId: string,
+    @Body() body: StaffManualTransferDto,
+  ) {
+    const ctx = req.tenantContext as TenantContext;
+    const result = await this.paymentService.createCashPayment({
+      tenantId: ctx.tenantId!,
+      branchId,
+      orderId: body.orderId,
+      idempotencyKey: body.idempotencyKey,
+      actorUserId: ctx.userId,
+    });
+    return result;
+  }
+
+  @Post('payments/:paymentId/confirm-cash')
+  @HttpCode(HttpStatus.OK)
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
+  @ApiOperation({ summary: 'Confirm cash payment and approve order' })
+  async confirmCashPayment(
+    @Req() req: Request,
+    @Param('branchId') branchId: string,
+    @Param('paymentId') paymentId: string,
+  ) {
+    const ctx = req.tenantContext as TenantContext;
+    const payment = await this.paymentService.confirmCashPayment({
+      tenantId: ctx.tenantId!,
+      branchId,
+      paymentId,
+      actorUserId: ctx.userId,
+    });
+    return { data: payment };
+  }
+
   // ─── Payment Approval / Rejection ────────────────
 
   @Post('payments/manual-transfer')
@@ -184,6 +225,7 @@ export class PaymentsController {
   }
 
   @Post('payments/:paymentId/approve')
+  @HttpCode(HttpStatus.OK)
   @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
   @ApiOperation({ summary: 'Approve a payment (cashier/manager/owner)' })
   async approvePayment(

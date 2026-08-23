@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { OrdersService } from './orders.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import { CreateTableOrderDto } from './dto';
+import { CreateTableOrderDto, CreatePickupOrderDto } from './dto';
 
 @ApiTags('Public Orders')
 @Controller('public')
@@ -15,6 +15,47 @@ export class PublicOrdersController {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(OrdersService) private readonly orders: OrdersService,
   ) {}
+
+  @Post('pickup-orders')
+  @ApiOperation({ summary: 'Create pickup order from public branch page' })
+  async createPickupOrder(@Body() dto: CreatePickupOrderDto) {
+    if (!dto.customerName || !dto.customerName.trim()) {
+      throw new BadRequestException('customerName is required');
+    }
+    if (!dto.customerPhone || !dto.customerPhone.trim()) {
+      throw new BadRequestException('customerPhone is required');
+    }
+    if (!dto.pickupAt) {
+      throw new BadRequestException('pickupAt is required');
+    }
+
+    const tenant = await this.prisma.branch.findFirst({
+      where: { id: dto.branchId, isActive: true },
+      select: { tenantId: true, tenant: { select: { status: true } } },
+    });
+    if (!tenant || tenant.tenant.status !== 'ACTIVE') {
+      throw new NotFoundException('Branch not found');
+    }
+
+    const result = await this.orders.createPickupOrder({
+      tenantId: tenant.tenantId,
+      branchId: dto.branchId,
+      customerName: dto.customerName,
+      customerPhone: dto.customerPhone,
+      pickupAt: dto.pickupAt,
+      lines: dto.lines,
+      notes: dto.notes,
+      idempotencyKey: dto.idempotencyKey,
+      quotedTotal: dto.quotedTotal,
+    });
+
+    return {
+      data: {
+        order: result.order,
+        trackingToken: result.trackingTokenRaw,
+      },
+    };
+  }
 
   @Post('orders')
   @ApiOperation({ summary: 'Create table order from QR context' })
