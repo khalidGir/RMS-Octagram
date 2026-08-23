@@ -7,6 +7,7 @@ import * as argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
 import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
 import { localTimeInTimezone } from '../src/modules/shared/time.utils';
+import { seedEntitlements, cleanupEntitlements } from './entitlements-test-utils';
 
 // ─── TEST DATABASE SAFETY ─────────────────────────────────────────
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
@@ -61,6 +62,7 @@ describe('Price Calculator — @db.Time + Availability Windows (e2e)', () => {
       data: { name: `TimeTest ${ts}`, slug: `time-${ts}`, status: 'ACTIVE' },
     });
     tenantId = tenant.id;
+    await seedEntitlements(prisma, tenantId);
 
     const branch = await prisma.branch.create({
       data: { tenantId, name: 'Main', slug: `time-main-${ts}`, isActive: true, timezone: BRANCH_TIMEZONE },
@@ -116,6 +118,7 @@ describe('Price Calculator — @db.Time + Availability Windows (e2e)', () => {
       await prisma.branchAssignment.deleteMany({ where: { tenantId } });
       await prisma.tenantMembership.deleteMany({ where: { tenantId } });
       await prisma.branch.deleteMany({ where: { tenantId } });
+      await cleanupEntitlements(prisma, tenantId);
       await prisma.tenant.deleteMany({ where: { id: tenantId } });
     }
     await prisma.authSession.deleteMany({ where: { user: { email: { contains: 'time-' } } } });

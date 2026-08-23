@@ -9,6 +9,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ProofStorage } from '../src/modules/payments/proof-storage.interface';
 import { InMemoryProofStorage } from '../src/modules/payments/in-memory-proof-storage';
 import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
+import { seedEntitlements, cleanupEntitlements } from './entitlements-test-utils';
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 if (!TEST_DATABASE_URL) throw new Error('TEST_DATABASE_URL is required.');
@@ -63,6 +64,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
 
     const tenant = await prisma.tenant.create({ data: { name: 'PaymentTest', slug: `payment-test-${ts}`, status: 'ACTIVE' } });
     tenantId = tenant.id;
+    await seedEntitlements(prisma, tenantId);
 
     const branch = await prisma.branch.create({ data: { tenantId, name: 'Main', slug: 'main', isActive: true } });
     branchId = branch.id;
@@ -123,6 +125,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     await prisma.orderStatusHistory.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.order.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.featureSetting.deleteMany({ where: { tenantId } }).catch(() => {});
+    await cleanupEntitlements(prisma, tenantId);
     await prisma.branchAssignment.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.tenantMembership.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.restaurantTable.deleteMany({ where: { tenantId } }).catch(() => {});
@@ -754,6 +757,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       const ts2 = Date.now();
       const t2 = await prisma.tenant.create({ data: { name: 'OtherTenant', slug: `other-tenant-${ts2}`, status: 'ACTIVE' } });
       otherTenantId = t2.id;
+      await seedEntitlements(prisma, otherTenantId);
       const b2 = await prisma.branch.create({ data: { tenantId: otherTenantId, name: 'B1', slug: 'b1', isActive: true } });
       otherBranchId = b2.id;
       const u2 = await prisma.user.create({ data: { email: `other-owner-${ts2}@test.com`, passwordHash: await argon2.hash('Test1234!', { type: argon2.argon2id }), displayName: 'O2', status: 'ACTIVE' } });
@@ -766,6 +770,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       await prisma.branchAssignment.deleteMany({ where: { tenantId: otherTenantId } }).catch(() => {});
       await prisma.tenantMembership.deleteMany({ where: { tenantId: otherTenantId } }).catch(() => {});
       await prisma.branch.deleteMany({ where: { tenantId: otherTenantId } }).catch(() => {});
+      await cleanupEntitlements(prisma, otherTenantId);
       await prisma.tenant.delete({ where: { id: otherTenantId } }).catch(() => {});
     });
 

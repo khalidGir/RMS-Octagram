@@ -1,5 +1,5 @@
 import { SetMetadata } from '@nestjs/common';
-import { FeatureKey } from '@rms/contracts';
+import type { FeatureKey } from '@rms/contracts';
 
 export const FEATURE_ENABLED_KEY = 'featureEnabled';
 

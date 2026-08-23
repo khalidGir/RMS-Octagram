@@ -1,8 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException, Inject } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { FeatureKey } from '@rms/contracts';
-import { FEATURE_ENABLED_KEY } from './feature-enabled.decorator';
+import { Injectable, ForbiddenException, Inject } from '@nestjs/common';
+import type { CanActivate, ExecutionContext } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { Reflector } from '@nestjs/core';
+import type { FeatureKey } from '@rms/contracts';
+import { FEATURE_ENABLED_KEY } from './feature-enabled.decorator';
 import { FeatureResolver } from './feature-resolver.service';
 
 @Injectable()

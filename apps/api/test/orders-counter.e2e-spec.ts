@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
 import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
+import { seedEntitlements, cleanupEntitlements } from './entitlements-test-utils';
 
 // ─── TEST DATABASE SAFETY ─────────────────────────────────────────
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
@@ -77,6 +78,7 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
       data: { name: `OrdTest ${ts}`, slug: `ord-${ts}`, status: 'ACTIVE' },
     });
     tenantId = tenant.id;
+    await seedEntitlements(prisma, tenantId);
 
     const branch = await prisma.branch.create({
       data: { tenantId, name: 'Main', slug: `main-${ts}`, isActive: true, timezone: 'Africa/Addis_Ababa' },
@@ -143,6 +145,7 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
       await prisma.branchAssignment.deleteMany({ where: { tenantId } });
       await prisma.tenantMembership.deleteMany({ where: { tenantId } });
       await prisma.branch.deleteMany({ where: { tenantId } });
+      await cleanupEntitlements(prisma, tenantId);
       await prisma.tenant.deleteMany({ where: { id: tenantId } });
     }
     // Delete any leftover memberships for test users before deleting users

@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 
+const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
+if (!TEST_DATABASE_URL) {
+  throw new Error('TEST_DATABASE_URL is required.');
+}
+
 /**
  * Populated-database migration test for selectorHash backfill.
  *
@@ -9,7 +14,7 @@ import { PrismaClient } from '@prisma/client';
  * index succeeds even when the table already contains multiple AuthSession rows.
  */
 describe('selectorHash migration on populated database (e2e)', () => {
-  const prisma = new PrismaClient({ datasources: { db: { url: process.env.TEST_DATABASE_URL } } });
+  const prisma = new PrismaClient({ datasources: { db: { url: TEST_DATABASE_URL } } });
 
   beforeAll(async () => {
     await prisma.$connect();

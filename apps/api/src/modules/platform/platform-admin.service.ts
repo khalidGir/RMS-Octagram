@@ -1,9 +1,8 @@
 import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PrismaService } from '../prisma/prisma.service';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { FeatureResolver } from '../features/feature-resolver.service';
-import { PlatformRole, FeatureKey, EntitlementStatus } from '@rms/contracts';
+import { PlatformRole, EntitlementStatus } from '@rms/contracts';
+import type { FeatureKey } from '@rms/contracts';
 import { getAllFeatureKeys } from '../features/feature-catalog';
 
 function getValidStatuses(): string[] {

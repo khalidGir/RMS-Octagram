@@ -12,12 +12,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PlatformAdminService } from './platform-admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles, type TenantContext } from '../auth/types';
-import { PlatformRole, FeatureKey, EntitlementStatus } from '@rms/contracts';
+import { PlatformRole, EntitlementStatus } from '@rms/contracts';
+import type { FeatureKey } from '@rms/contracts';
 import { IsString, IsEnum, IsOptional, IsDateString } from 'class-validator';
 
 class SetEntitlementDto {

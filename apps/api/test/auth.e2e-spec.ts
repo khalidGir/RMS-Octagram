@@ -7,6 +7,7 @@ import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
 import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
+import { seedEntitlements, cleanupEntitlements } from './entitlements-test-utils';
 
 // ─── TEST DATABASE SAFETY ─────────────────────────────────────────
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
@@ -61,6 +62,7 @@ describe('Auth & Tenancy Security (e2e)', () => {
     // Tenant 1
     const t1 = await prisma.tenant.create({ data: { name: 'SecTest T1', slug: `sec-t1-${ts}`, status: 'ACTIVE' } });
     tenantId = t1.id;
+    await seedEntitlements(prisma, tenantId);
     const o1 = await prisma.user.create({ data: { email: ownerEmail, passwordHash, displayName: 'Owner1', status: 'ACTIVE' } });
     await prisma.tenantMembership.create({ data: { tenantId, userId: o1.id, role: 'OWNER', status: 'ACTIVE' } });
     const b1 = await prisma.branch.create({ data: { tenantId, name: 'Main', slug: 'main', isActive: true } });
@@ -86,6 +88,7 @@ describe('Auth & Tenancy Security (e2e)', () => {
     // Tenant 2
     const t2 = await prisma.tenant.create({ data: { name: 'SecTest T2', slug: `sec-t2-${ts}`, status: 'ACTIVE' } });
     tenant2Id = t2.id;
+    await seedEntitlements(prisma, tenant2Id);
     const o2 = await prisma.user.create({ data: { email: owner2Email, passwordHash, displayName: 'Owner2', status: 'ACTIVE' } });
     owner2UserId = o2.id;
     await prisma.tenantMembership.create({ data: { tenantId: tenant2Id, userId: o2.id, role: 'OWNER', status: 'ACTIVE' } });
@@ -109,6 +112,7 @@ describe('Auth & Tenancy Security (e2e)', () => {
       await prisma.branchAssignment.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.tenantMembership.deleteMany({ where: { tenantId: { in: tenantIds } } });
       await prisma.branch.deleteMany({ where: { tenantId: { in: tenantIds } } });
+      for (const tid of tenantIds) await cleanupEntitlements(prisma, tid);
       await prisma.tenant.deleteMany({ where: { id: { in: tenantIds } } });
     }
     await prisma.authSession.deleteMany({ where: { user: { email: { contains: 'se-' } } } });

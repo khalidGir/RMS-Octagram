@@ -1,6 +1,5 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { FeatureKey } from '@rms/contracts';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import type { FeatureKey } from '@rms/contracts';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   FEATURE_CATALOG,
@@ -30,7 +29,7 @@ export class FeatureResolver {
       where: { tenantId_featureKey: { tenantId, featureKey } },
     });
 
-    const platformStatus = entitlement?.status ?? 'ENABLED';
+    const platformStatus = entitlement?.status ?? 'DISABLED';
     const trialEndsAt = entitlement?.trialEndsAt ?? null;
 
     const platformAllows =
