@@ -15,6 +15,7 @@ import { PaymentService } from './payments.service';
 import { PaymentInstructionService } from './payment-instruction.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PrismaService } from '../prisma/prisma.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import {
   CreateManualTransferDto,
   ProofUploadIntentDto,

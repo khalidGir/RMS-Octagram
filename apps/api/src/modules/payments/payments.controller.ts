@@ -24,6 +24,7 @@ import { RolesGuard } from '../auth/roles.guard';
 import { BranchScopeGuard } from '../auth/branch-scope.guard';
 import { Roles, BranchScoped, type TenantContext } from '../auth/types';
 import { TenantRole } from '@rms/contracts';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import {
   PaymentReviewQueryDto,
   CreatePaymentInstructionDto,

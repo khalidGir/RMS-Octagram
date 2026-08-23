@@ -9,7 +9,6 @@ import { ValidationPipe } from '@nestjs/common';
 import { ProofStorage } from '../src/modules/payments/proof-storage.interface';
 import { InMemoryProofStorage } from '../src/modules/payments/in-memory-proof-storage';
 import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
-import { KitchenTicketsService } from '../src/modules/kitchen/kitchen-tickets.service';
 import { seedEntitlements, cleanupEntitlements } from './entitlements-test-utils';
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
@@ -23,6 +22,7 @@ process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test-refresh
 
 describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
   let app: any;
+  let outboxProcessor: OutboxProcessor;
   let ownerToken: string;
   let managerToken: string;
   let cashierToken: string;
@@ -59,7 +59,8 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     await app.init();
 
     // Stop the outbox processor timer immediately; tests poll manually
-    app.get(OutboxProcessor).stop();
+    outboxProcessor = app.get(OutboxProcessor);
+    outboxProcessor.stop();
 
     const passwordHash = await argon2.hash('Test1234!', { type: argon2.argon2id });
 
@@ -936,14 +937,13 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     });
 
     it('kitchen tickets were created for the confirmed order', async () => {
-      // Directly invoke ticket creation (avoids outbox race with concurrent test files)
-      const kitchenTicketsService = app.get(KitchenTicketsService);
-      await kitchenTicketsService.createTicketsForOrder({
-        tenantId,
-        branchId,
-        orderId,
-        actorUserId: undefined,
+      await outboxProcessor.poll();
+
+      const publishedEvent = await prisma.outboxEvent.findFirst({
+        where: { tenantId, aggregateId: orderId, eventType: 'order.confirmed' },
       });
+      expect(publishedEvent).not.toBeNull();
+      expect(publishedEvent!.publishedAt).not.toBeNull();
 
       const res = await request(app.getHttpServer())
         .get(`/api/v1/branches/${branchId}/kitchen-tickets`)
@@ -953,6 +953,13 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       expect(tickets.length).toBeGreaterThanOrEqual(1);
       expect(tickets[0].orderId).toBe(orderId);
       expect(tickets[0].status).toBe('QUEUED');
+
+      await outboxProcessor.poll();
+      const res2 = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/kitchen-tickets`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res2.body.data.length).toBe(tickets.length);
     });
 
     it('kitchen staff can bump a QUEUED ticket to IN_PROGRESS', async () => {

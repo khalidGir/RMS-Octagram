@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -7,7 +7,6 @@ import { Test } from '@nestjs/testing';
 import { AppModule } from '../src/app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
-import { KitchenTicketsService } from '../src/modules/kitchen/kitchen-tickets.service';
 import { ProofStorage } from '../src/modules/payments/proof-storage.interface';
 import { InMemoryProofStorage } from '../src/modules/payments/in-memory-proof-storage';
 import { seedEntitlements, cleanupEntitlements } from './entitlements-test-utils';
@@ -37,7 +36,6 @@ async function login(app: any, email: string): Promise<string> {
 describe('Pickup Order Flow — End-to-End (e2e)', () => {
   let app: any;
   let outboxProcessor: OutboxProcessor;
-  let kitchenTicketsService: KitchenTicketsService;
   let proofStorage: InMemoryProofStorage;
   let ownerToken: string;
   let managerToken: string;
@@ -76,7 +74,6 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
     await app.init();
     outboxProcessor = app.get(OutboxProcessor);
     outboxProcessor.stop();
-    kitchenTicketsService = app.get(KitchenTicketsService);
     proofStorage = app.get(ProofStorage) as unknown as InMemoryProofStorage;
 
     const passwordHash = await argon2.hash('Test1234!', { type: argon2.argon2id });
@@ -487,13 +484,12 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       });
       expect(orderOutbox.length).toBeGreaterThanOrEqual(1);
 
-      // Directly invoke ticket creation (avoids outbox race with concurrent test files)
-      await kitchenTicketsService.createTicketsForOrder({
-        tenantId,
-        branchId,
-        orderId: cashOrderId,
-        actorUserId: undefined,
+      await outboxProcessor.poll();
+
+      const publishedEvent = await prisma.outboxEvent.findFirst({
+        where: { tenantId, aggregateId: cashOrderId, eventType: 'order.confirmed' },
       });
+      expect(publishedEvent!.publishedAt).not.toBeNull();
     });
 
     it('9b. cash confirmation is idempotent', async () => {
@@ -509,8 +505,15 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       const tickets = await prisma.kitchenTicket.findMany({
         where: { tenantId, branchId, orderId: cashOrderId },
       });
-      expect(tickets.length).toBeGreaterThanOrEqual(1);
+      expect(tickets.length).toBe(1);
       expect(tickets[0].status).toBe('QUEUED');
+
+      await outboxProcessor.poll();
+
+      const ticketsAfterSecondPoll = await prisma.kitchenTicket.findMany({
+        where: { tenantId, branchId, orderId: cashOrderId },
+      });
+      expect(ticketsAfterSecondPoll.length).toBe(1);
     });
   });
 
@@ -593,12 +596,12 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       });
       expect(orderOutbox.length).toBeGreaterThanOrEqual(1);
 
-      await kitchenTicketsService.createTicketsForOrder({
-        tenantId,
-        branchId,
-        orderId,
-        actorUserId: undefined,
+      await outboxProcessor.poll();
+
+      const publishedEvent = await prisma.outboxEvent.findFirst({
+        where: { tenantId, aggregateId: orderId, eventType: 'order.confirmed' },
       });
+      expect(publishedEvent!.publishedAt).not.toBeNull();
     });
   });
 
@@ -634,17 +637,17 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
         .set('x-tenant-id', tenantId);
       expect(confirmRes.status).toBe(200);
 
-      await kitchenTicketsService.createTicketsForOrder({
-        tenantId,
-        branchId,
-        orderId: kdsOrderId,
-        actorUserId: undefined,
+      await outboxProcessor.poll();
+
+      const publishedEvent = await prisma.outboxEvent.findFirst({
+        where: { tenantId, aggregateId: kdsOrderId, eventType: 'order.confirmed' },
       });
+      expect(publishedEvent!.publishedAt).not.toBeNull();
 
       const tickets = await prisma.kitchenTicket.findMany({
         where: { tenantId, branchId, orderId: kdsOrderId },
       });
-      expect(tickets.length).toBeGreaterThanOrEqual(1);
+      expect(tickets.length).toBe(1);
       ticketId = tickets[0].id;
       ticketVersion = tickets[0].version;
     });
@@ -794,11 +797,18 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       const successCount = statuses.filter((s: number) => s === 201).length;
       const conflictCount = statuses.filter((s: number) => s === 409).length;
       expect(successCount).toBeGreaterThanOrEqual(1);
-      expect(conflictCount).toBeGreaterThanOrEqual(1);
       expect(successCount + conflictCount).toBe(3);
 
-      const created = results.find((r: any) => r.status === 201);
-      expect(created!.body.data.order.id).toBeDefined();
+      const successIds = results
+        .filter((r: any) => r.status === 201)
+        .map((r: any) => r.body.data.order.id);
+      const uniqueIds = [...new Set(successIds)];
+      expect(uniqueIds.length).toBe(1);
+
+      const dbOrder = await prisma.order.findUnique({ where: { id: uniqueIds[0] } });
+      expect(dbOrder).not.toBeNull();
+      expect(dbOrder!.tenantId).toBe(tenantId);
+      expect(dbOrder!.branchId).toBe(branchId);
     });
 
     it('6. same idempotency key and payload replays', async () => {
@@ -881,6 +891,63 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
         .set('x-tenant-id', tenantId);
       expect(doubleConfirm.status).toBe(200);
     });
+
+    it('18. failed confirmation leaves all state unchanged (transaction rollback)', async () => {
+      const rollbackOrderRes = await request(app.getHttpServer())
+        .post(`/api/v1/branches/${branchId}/orders`)
+        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('x-tenant-id', tenantId)
+        .send({ orderType: 'POS', lines: [{ variantId, quantity: 1 }] });
+      expect(rollbackOrderRes.status).toBe(201);
+      const rollbackOrderId = rollbackOrderRes.body.data.order.id;
+
+      const rollbackPayRes = await request(app.getHttpServer())
+        .post(`/api/v1/branches/${branchId}/payments/cash`)
+        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('x-tenant-id', tenantId)
+        .send({ orderId: rollbackOrderId, idempotencyKey: `rollback-isolation-${ts}` });
+      expect(rollbackPayRes.status).toBe(201);
+      const rollbackPaymentId = rollbackPayRes.body.data.id;
+
+      const prePayment = await prisma.payment.findUnique({ where: { id: rollbackPaymentId } });
+      const preOrder = await prisma.order.findUnique({ where: { id: rollbackOrderId } });
+      const preAuditCount = await prisma.auditLog.count({
+        where: { tenantId, entityId: rollbackPaymentId },
+      });
+      const preOutboxCount = await prisma.outboxEvent.count({
+        where: { tenantId, aggregateId: rollbackPaymentId },
+      });
+
+      const [success, failure] = await Promise.all([
+        request(app.getHttpServer())
+          .post(`/api/v1/branches/${branchId}/payments/${rollbackPaymentId}/confirm-cash`)
+          .set('Authorization', `Bearer ${cashierToken}`)
+          .set('x-tenant-id', tenantId),
+        request(app.getHttpServer())
+          .post(`/api/v1/branches/${branchId}/payments/${rollbackPaymentId}/confirm-cash`)
+          .set('Authorization', `Bearer ${cashierToken}`)
+          .set('x-tenant-id', tenantId),
+      ]);
+
+      const statuses = [success.status, failure.status].sort();
+      expect(statuses).toEqual([200, 409]);
+
+      const postPayment = await prisma.payment.findUnique({ where: { id: rollbackPaymentId } });
+      expect(postPayment!.status).toBe('APPROVED');
+
+      const postOrder = await prisma.order.findUnique({ where: { id: rollbackOrderId } });
+      expect(postOrder!.status).toBe('CONFIRMED');
+
+      const postAuditCount = await prisma.auditLog.count({
+        where: { tenantId, entityId: rollbackPaymentId, action: 'PAYMENT_CASH_CONFIRM' },
+      });
+      expect(postAuditCount).toBe(1);
+
+      const postOutboxCount = await prisma.outboxEvent.count({
+        where: { tenantId, aggregateId: rollbackPaymentId, eventType: 'payment.approved' },
+      });
+      expect(postOutboxCount).toBe(1);
+    });
   });
 
   // ─── SECTION 7: Tracking & Money Serialization ───────────
@@ -944,10 +1011,23 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       const order = await prisma.order.findUnique({ where: { id: noKdsOrderId } });
       expect(order!.status).toBe('CONFIRMED');
 
+      for (let i = 0; i < 20; i++) {
+        const pending = await prisma.outboxEvent.count({
+          where: { publishedAt: null, attemptCount: { lt: 5 } },
+        });
+        if (pending === 0) break;
+        await outboxProcessor.poll();
+      }
+
       const tickets = await prisma.kitchenTicket.findMany({
         where: { tenantId, branchId, orderId: noKdsOrderId },
       });
       expect(tickets.length).toBe(0);
+
+      const audit = await prisma.auditLog.findMany({
+        where: { tenantId, entityId: noKdsOrderId, action: 'OUTBOX_KDS_SKIP' },
+      });
+      expect(audit.length).toBe(1);
 
       await prisma.tenantEntitlement.update({
         where: { tenantId_featureKey: { tenantId, featureKey: 'KDS' } },
