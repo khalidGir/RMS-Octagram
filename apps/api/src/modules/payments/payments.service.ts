@@ -11,7 +11,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProofStorage } from './proof-storage.interface';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { IdempotencyService } from '../orders/idempotency.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { FeatureResolver } from '../features/feature-resolver.service';
 import { generatePaymentToken, hashPaymentToken } from './payment-token.util';
+import { FeatureKey } from '@rms/contracts';
 
 const PAYMENT_TOKEN_TTL_HOURS = 24;
 const UPLOAD_INTENT_TTL_MINUTES = 5;
@@ -25,6 +28,7 @@ export class PaymentService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ProofStorage) private readonly proofStorage: ProofStorage,
     @Inject(IdempotencyService) private readonly idempotency: IdempotencyService,
+    @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
   ) {}
 
   /**
@@ -40,6 +44,9 @@ export class PaymentService {
     customerReference?: string;
   }) {
     const { tenantId, branchId, orderId, idempotencyKey, customerReference } = params;
+
+    // Service-level feature assertion
+    await this.featureResolver.assertEffective(tenantId, FeatureKey.MANUAL_TRANSFER_PAYMENTS, branchId);
 
     const { result, reused } = await this.idempotency.withIdempotency(
       {
@@ -285,6 +292,9 @@ export class PaymentService {
     mediaObjectId: string;
     customerReference?: string;
   }): Promise<Record<string, unknown>> {
+    // Service-level feature assertion
+    await this.featureResolver.assertEffective(params.tenantId, FeatureKey.MANUAL_TRANSFER_PAYMENTS, params.branchId);
+
     const payment = await this.resolvePaymentByToken(params.paymentTokenRaw);
 
     if (payment.tenantId !== params.tenantId || payment.branchId !== params.branchId) {

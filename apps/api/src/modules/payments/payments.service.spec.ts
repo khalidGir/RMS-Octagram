@@ -4,6 +4,7 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ProofStorage } from './proof-storage.interface';
 import type { IdempotencyService } from '../orders/idempotency.service';
+import type { FeatureResolver } from '../features/feature-resolver.service';
 
 function createMockPrisma() {
   const mockTx = {
@@ -57,6 +58,21 @@ function createMockIdempotency(): IdempotencyService {
   } as unknown as IdempotencyService;
 }
 
+function createMockFeatureResolver(): FeatureResolver {
+  return {
+    resolve: vi.fn().mockResolvedValue({
+      effective: true,
+      platformStatus: 'ENABLED',
+      trialEndsAt: null,
+      tenantEnabled: true,
+      branchOverride: null,
+    }),
+    assertEffective: vi.fn().mockResolvedValue(undefined),
+    resolveAll: vi.fn().mockResolvedValue({}),
+    getCatalog: vi.fn().mockReturnValue([]),
+  } as unknown as FeatureResolver;
+}
+
 describe('PaymentService — Transaction Rollback', () => {
   let service: PaymentService;
   let prisma: ReturnType<typeof createMockPrisma>;
@@ -67,7 +83,8 @@ describe('PaymentService — Transaction Rollback', () => {
     prisma = createMockPrisma();
     proofStorage = createMockProofStorage();
     const idempotency = createMockIdempotency();
-    service = new PaymentService(prisma, proofStorage, idempotency);
+    const featureResolver = createMockFeatureResolver();
+    service = new PaymentService(prisma, proofStorage, idempotency, featureResolver);
   });
 
   describe('finalizeProof rollback', () => {
@@ -196,7 +213,8 @@ describe('PaymentService — Approve/Reject', () => {
     prisma = createMockPrisma();
     const proofStorage = createMockProofStorage();
     const idempotency = createMockIdempotency();
-    service = new PaymentService(prisma, proofStorage, idempotency);
+    const featureResolver = createMockFeatureResolver();
+    service = new PaymentService(prisma, proofStorage, idempotency, featureResolver);
   });
 
   describe('approvePayment', () => {

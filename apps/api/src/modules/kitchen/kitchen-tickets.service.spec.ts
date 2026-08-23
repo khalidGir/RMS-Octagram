@@ -49,7 +49,12 @@ describe('KitchenTicketsService', () => {
 
   beforeEach(() => {
     prisma = createMockPrisma();
-    service = new KitchenTicketsService(prisma as any);
+    service = new KitchenTicketsService(prisma as any, {
+      assertEffective: vi.fn().mockResolvedValue(undefined),
+      resolve: vi.fn().mockResolvedValue({ effective: true }),
+      resolveAll: vi.fn().mockResolvedValue({}),
+      getCatalog: vi.fn().mockReturnValue([]),
+    } as any);
   });
 
   describe('createTicketsForOrder', () => {

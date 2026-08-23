@@ -83,6 +83,9 @@ describe('Price Calculator — @db.Time + Availability Windows (e2e)', () => {
     ownerToken = loginRes.body.data.accessToken;
 
     // Enable table QR ordering
+    await prisma.featureSetting.deleteMany({
+      where: { tenantId, branchId, featureKey: 'TABLE_QR_ORDERING' },
+    });
     await prisma.featureSetting.create({
       data: { tenantId, branchId, featureKey: 'TABLE_QR_ORDERING', enabled: true, updatedByUserId: user.id },
     });

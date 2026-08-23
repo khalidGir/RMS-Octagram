@@ -1,6 +1,9 @@
 import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PrismaService } from '../prisma/prisma.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { FeatureResolver } from '../features/feature-resolver.service';
+import { FeatureKey } from '@rms/contracts';
 
 // ─── Ticket State Machine ──────────────────
 
@@ -20,6 +23,7 @@ function canTicketTransition(from: string, to: string): boolean {
 export class KitchenTicketsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
   ) {}
 
   // ─── Create Tickets for a Confirmed Order ──
@@ -246,6 +250,9 @@ export class KitchenTicketsService {
   }) {
     const { tenantId, branchId, ticketId, actorUserId, reason, expectedVersion } = params;
 
+    // Service-level feature assertion
+    await this.featureResolver.assertEffective(tenantId, FeatureKey.KDS, branchId);
+
     const ticket = await this.prisma.kitchenTicket.findFirst({
       where: { id: ticketId, tenantId, branchId },
     });
@@ -345,6 +352,9 @@ export class KitchenTicketsService {
   }) {
     const { tenantId, branchId, ticketId, actorUserId, reason, expectedVersion } = params;
 
+    // Service-level feature assertion
+    await this.featureResolver.assertEffective(tenantId, FeatureKey.KDS, branchId);
+
     const ticket = await this.prisma.kitchenTicket.findFirst({
       where: { id: ticketId, tenantId, branchId },
     });
@@ -435,6 +445,9 @@ export class KitchenTicketsService {
     expectedVersion: number;
   }) {
     const { tenantId, branchId, ticketId, actorUserId, expectedVersion } = params;
+
+    // Service-level feature assertion
+    await this.featureResolver.assertEffective(tenantId, FeatureKey.KDS, branchId);
 
     const ticket = await this.prisma.kitchenTicket.findFirst({
       where: { id: ticketId, tenantId, branchId },
@@ -563,6 +576,9 @@ export class KitchenTicketsService {
     expectedVersion: number;
   }) {
     const { tenantId, branchId, ticketId, actorUserId, reason, expectedVersion } = params;
+
+    // Service-level feature assertion
+    await this.featureResolver.assertEffective(tenantId, FeatureKey.KDS, branchId);
 
     const ticket = await this.prisma.kitchenTicket.findFirst({
       where: { id: ticketId, tenantId, branchId },

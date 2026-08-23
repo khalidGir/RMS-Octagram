@@ -7,6 +7,9 @@ function createMockPrisma() {
       findMany: vi.fn(),
       update: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn().mockResolvedValue({}),
+    },
   };
 }
 
@@ -16,16 +19,30 @@ function createMockKitchenTickets() {
   };
 }
 
+function createMockFeatureResolver() {
+  return {
+    resolve: vi.fn().mockResolvedValue({
+      effective: true,
+      platformStatus: 'ENABLED',
+      trialEndsAt: null,
+      tenantEnabled: true,
+      branchOverride: null,
+    }),
+  };
+}
+
 describe('OutboxProcessor', () => {
   let processor: OutboxProcessor;
   let prisma: ReturnType<typeof createMockPrisma>;
   let kitchenTickets: ReturnType<typeof createMockKitchenTickets>;
+  let featureResolver: ReturnType<typeof createMockFeatureResolver>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     prisma = createMockPrisma();
     kitchenTickets = createMockKitchenTickets();
-    processor = new OutboxProcessor(prisma as any, kitchenTickets as any);
+    featureResolver = createMockFeatureResolver();
+    processor = new OutboxProcessor(prisma as any, kitchenTickets as any, featureResolver as any);
   });
 
   afterEach(() => {
@@ -182,5 +199,54 @@ describe('OutboxProcessor', () => {
 
     expect(kitchenTickets.createTicketsForOrder).not.toHaveBeenCalled();
     expect(prisma.outboxEvent.update).not.toHaveBeenCalled();
+  });
+
+  it('skips kitchen ticket creation when KDS is disabled', async () => {
+    featureResolver.resolve.mockResolvedValue({
+      effective: false,
+      platformStatus: 'DISABLED',
+      trialEndsAt: null,
+      tenantEnabled: false,
+      branchOverride: null,
+      disabledReason: 'TENANT_DISABLED',
+    });
+
+    prisma.outboxEvent.findMany.mockResolvedValue([
+      {
+        id: 'evt-kds-disabled',
+        tenantId: 't1',
+        branchId: 'b1',
+        eventType: 'order.confirmed',
+        payload: { orderId: 'ord-kds-disabled', paymentId: 'pay-kds-disabled', totalMinor: '5000' },
+        attemptCount: 0,
+      },
+    ]);
+    prisma.outboxEvent.update.mockResolvedValue({});
+
+    await processor.poll();
+
+    // Should NOT create kitchen tickets
+    expect(kitchenTickets.createTicketsForOrder).not.toHaveBeenCalled();
+    // Should still mark as published (handled gracefully)
+    expect(prisma.outboxEvent.update).toHaveBeenCalledWith({
+      where: { id: 'evt-kds-disabled' },
+      data: { publishedAt: expect.any(Date) },
+    });
+    // Should audit the skip
+    expect(prisma.auditLog.create).toHaveBeenCalledWith({
+      data: {
+        actorUserId: null,
+        tenantId: 't1',
+        branchId: 'b1',
+        action: 'OUTBOX_KDS_SKIP',
+        entityType: 'Order',
+        entityId: 'ord-kds-disabled',
+        afterJson: {
+          reason: 'KDS_DISABLED',
+          disabledReason: 'TENANT_DISABLED',
+          orderId: 'ord-kds-disabled',
+        },
+      },
+    });
   });
 });

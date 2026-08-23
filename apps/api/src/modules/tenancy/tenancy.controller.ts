@@ -185,6 +185,34 @@ export class TenancyController {
     return { data: { success: true } };
   }
 
+  @Get('tenants/features')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Get tenant-level feature configuration with entitlement status' })
+  async getTenantFeatures(@Req() req: Request) {
+    const ctx = req.tenantContext as TenantContext;
+    const features = await this.tenancyService.getTenantFeatures(ctx.tenantId!);
+    return { data: features };
+  }
+
+  @Put('tenants/features/:featureKey')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TenantRole.OWNER)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Set tenant-level feature (entitlement-gated)' })
+  async setTenantFeature(
+    @Req() req: Request,
+    @Param('featureKey') featureKey: string,
+    @Body() body: SetFeatureDto,
+  ) {
+    const ctx = req.tenantContext as TenantContext;
+    const feature = await this.tenancyService.setTenantFeature(
+      ctx.tenantId!, featureKey, body.enabled, ctx.userId,
+    );
+    return { data: feature };
+  }
+
   @Get('branches/:branchId/features')
   @UseGuards(JwtAuthGuard)
   @ApiCookieAuth()

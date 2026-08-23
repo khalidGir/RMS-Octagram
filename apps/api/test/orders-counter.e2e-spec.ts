@@ -404,6 +404,9 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
       });
 
       // Enable table QR ordering for this tenant
+      await prisma.featureSetting.deleteMany({
+        where: { tenantId, branchId, featureKey: 'TABLE_QR_ORDERING' },
+      });
       await prisma.featureSetting.create({
         data: { tenantId, branchId, featureKey: 'TABLE_QR_ORDERING', enabled: true, updatedByUserId: userIds[0] },
       });
@@ -592,6 +595,9 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
       });
       await prisma.branchMenuItem.create({
         data: { tenantId, branchId, menuItemId: item.id, isAvailable: true },
+      });
+      await prisma.featureSetting.deleteMany({
+        where: { tenantId, branchId, featureKey: 'TABLE_QR_ORDERING' },
       });
       await prisma.featureSetting.create({
         data: { tenantId, branchId, featureKey: 'TABLE_QR_ORDERING', enabled: true, updatedByUserId: userIds[0] },

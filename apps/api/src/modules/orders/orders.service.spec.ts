@@ -6,6 +6,7 @@ import type { BranchOrderCounterService } from './branch-order-counter.service';
 import type { IdempotencyService } from './idempotency.service';
 import type { PriceCalculatorService } from './price-calculator.service';
 import type { LineInput } from './price-calculator.service';
+import type { FeatureResolver } from '../features/feature-resolver.service';
 
 function createMockPrisma() {
   return {
@@ -88,6 +89,12 @@ describe('OrdersService', () => {
       mockCounter,
       mockIdempotency,
       mockPriceCalc,
+      {
+        assertEffective: vi.fn().mockResolvedValue(undefined),
+        resolve: vi.fn().mockResolvedValue({ effective: true }),
+        resolveAll: vi.fn().mockResolvedValue({}),
+        getCatalog: vi.fn().mockReturnValue([]),
+      } as unknown as FeatureResolver,
     );
   });
 

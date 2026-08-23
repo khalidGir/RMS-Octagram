@@ -17,6 +17,7 @@ import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { KitchenModule } from './modules/kitchen/kitchen.module';
 import { OutboxModule } from './modules/outbox/outbox.module';
+import { FeaturesModule } from './modules/features/features.module';
 import { CorrelationMiddleware } from './modules/observability/correlation.middleware';
 import { HttpLoggerMiddleware } from './modules/observability/http-logger.middleware';
 import { TenantContextMiddleware } from './modules/auth/tenant-context.middleware';
@@ -40,6 +41,7 @@ import { JwtStrategy } from './modules/auth/jwt.strategy';
     PaymentsModule,
     KitchenModule,
     OutboxModule,
+    FeaturesModule,
   ],
   providers: [JwtStrategy, TenantContextMiddleware],
 })

@@ -2,19 +2,40 @@ import {
   Controller,
   Get,
   Patch,
+  Put,
   Body,
   Param,
   Query,
   Inject,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
+import type { Request } from 'express';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PlatformAdminService } from './platform-admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/types';
-import { PlatformRole } from '@rms/contracts';
+import { Roles, type TenantContext } from '../auth/types';
+import { PlatformRole, FeatureKey, EntitlementStatus } from '@rms/contracts';
+import { IsString, IsEnum, IsOptional, IsDateString } from 'class-validator';
+
+class SetEntitlementDto {
+  @IsEnum(EntitlementStatus)
+  status!: EntitlementStatus;
+
+  @IsOptional()
+  @IsDateString()
+  trialEndsAt?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @IsOptional()
+  @IsString()
+  internalNote?: string;
+}
 
 @ApiTags('Platform Admin')
 @Controller('platform')
@@ -64,5 +85,45 @@ export class PlatformAdminController {
   async deactivateUser(@Param('userId') userId: string) {
     const user = await this.platformAdminService.deactivateUser(userId);
     return { data: user };
+  }
+
+  // ─── ENTITLEMENTS ──────────────────────────
+
+  @Get('tenants/:tenantId/features')
+  @ApiOperation({ summary: 'List entitlements for a tenant (all 9 features with status)' })
+  async listEntitlements(@Param('tenantId') tenantId: string) {
+    const entitlements = await this.platformAdminService.listEntitlements(tenantId);
+    return { data: entitlements };
+  }
+
+  @Put('tenants/:tenantId/features/:featureKey')
+  @ApiOperation({ summary: 'Set a single feature entitlement for a tenant' })
+  async setEntitlement(
+    @Req() req: Request,
+    @Param('tenantId') tenantId: string,
+    @Param('featureKey') featureKey: FeatureKey,
+    @Body() body: SetEntitlementDto,
+  ) {
+    const ctx = req.tenantContext as TenantContext;
+    const entitlement = await this.platformAdminService.setEntitlement({
+      tenantId,
+      featureKey,
+      status: body.status,
+      trialEndsAt: body.trialEndsAt,
+      reason: body.reason,
+      internalNote: body.internalNote,
+      actorUserId: ctx.userId,
+    });
+    return { data: entitlement };
+  }
+
+  @Get('tenants/:tenantId/features/effective')
+  @ApiOperation({ summary: 'Compute effective feature map for a tenant' })
+  async getEffectiveFeatures(
+    @Param('tenantId') tenantId: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    const features = await this.platformAdminService.getEffectiveFeatures(tenantId, branchId);
+    return { data: features };
   }
 }

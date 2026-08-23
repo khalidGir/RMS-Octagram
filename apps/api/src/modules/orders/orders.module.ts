@@ -6,9 +6,10 @@ import { IdempotencyService } from './idempotency.service';
 import { PriceCalculatorService } from './price-calculator.service';
 import { OrdersController } from './orders.controller';
 import { PublicOrdersController } from './public-orders.controller';
+import { FeaturesModule } from '../features/features.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, FeaturesModule],
   controllers: [OrdersController, PublicOrdersController],
   providers: [
     OrdersService,

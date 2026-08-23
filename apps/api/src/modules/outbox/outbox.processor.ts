@@ -3,6 +3,9 @@ import { Inject, Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nest
 import { PrismaService } from '../prisma/prisma.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { KitchenTicketsService } from '../kitchen/kitchen-tickets.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { FeatureResolver } from '../features/feature-resolver.service';
+import { FeatureKey } from '@rms/contracts';
 const POLL_INTERVAL_MS = 2000;
 const BATCH_SIZE = 10;
 const MAX_ATTEMPTS = 5;
@@ -17,6 +20,8 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     @Inject(KitchenTicketsService)
     private readonly kitchenTickets: KitchenTicketsService,
+    @Inject(FeatureResolver)
+    private readonly featureResolver: FeatureResolver,
   ) {}
 
   onModuleInit() {
@@ -90,6 +95,39 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async handleOrderConfirmed(event: any) {
     const payload = event.payload as { orderId: string; paymentId: string };
+
+    // Check if KDS is effective for this tenant/branch
+    const kdsState = await this.featureResolver.resolve(
+      event.tenantId!,
+      FeatureKey.KDS,
+      event.branchId!,
+    );
+
+    if (!kdsState.effective) {
+      this.logger.log(
+        `KDS disabled for tenant ${event.tenantId} branch ${event.branchId} — skipping kitchen ticket creation for order ${payload.orderId}. Reason: ${kdsState.disabledReason}`,
+      );
+
+      // Audit trail: mark that we intentionally skipped ticket creation
+      await this.prisma.auditLog.create({
+        data: {
+          actorUserId: null,
+          tenantId: event.tenantId!,
+          branchId: event.branchId!,
+          action: 'OUTBOX_KDS_SKIP',
+          entityType: 'Order',
+          entityId: payload.orderId,
+          afterJson: {
+            reason: 'KDS_DISABLED',
+            disabledReason: kdsState.disabledReason,
+            orderId: payload.orderId,
+          },
+        },
+      });
+
+      return; // Mark handled without creating tickets
+    }
+
     await this.kitchenTickets.createTicketsForOrder({
       tenantId: event.tenantId!,
       branchId: event.branchId!,

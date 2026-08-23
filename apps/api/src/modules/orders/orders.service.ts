@@ -17,6 +17,8 @@ import type { LineInput } from './price-calculator.service';
 import { canTransition3A, getInitialStatus } from './state-machine';
 import * as crypto from 'crypto';
 import { FeatureKey } from '@rms/contracts';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { FeatureResolver } from '../features/feature-resolver.service';
 
 @Injectable()
 export class OrdersService {
@@ -25,6 +27,7 @@ export class OrdersService {
     @Inject(BranchOrderCounterService) private readonly counter: BranchOrderCounterService,
     @Inject(IdempotencyService) private readonly idempotency: IdempotencyService,
     @Inject(PriceCalculatorService) private readonly priceCalc: PriceCalculatorService,
+    @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
   ) {}
 
   // ─── CREATE TABLE ORDER (Public) ─────────────
@@ -47,7 +50,7 @@ export class OrdersService {
     await this.assertBranchActive(tenantId, branchId);
 
     // Verify TABLE_QR_ORDERING feature is enabled
-    await this.assertFeatureEnabled(tenantId, branchId, FeatureKey.TABLE_QR_ORDERING);
+    await this.featureResolver.assertEffective(tenantId, FeatureKey.TABLE_QR_ORDERING, branchId);
 
     // Merge duplicate lines (same variant + modifiers → sum quantity, keep first notes)
     const lines = this.deduplicateLines(params.lines);
@@ -260,6 +263,11 @@ export class OrdersService {
     // DINE_IN requires tableId
     if (params.orderType === 'DINE_IN' && !params.tableId) {
       throw new ConflictException('tableId is required for DINE_IN orders');
+    }
+
+    // Feature assertions for order types
+    if (params.orderType === 'PICKUP') {
+      await this.featureResolver.assertEffective(tenantId, FeatureKey.PICKUP_ORDERING, branchId);
     }
 
     // Validate table belongs to this tenant/branch and is active
@@ -842,31 +850,6 @@ export class OrdersService {
       where: { id: branchId, tenantId, isActive: true },
     });
     if (!branch) throw new NotFoundException('Branch not found or inactive');
-  }
-
-  private async assertFeatureEnabled(
-    tenantId: string,
-    branchId: string,
-    featureKey: FeatureKey,
-  ): Promise<void> {
-    // Check branch override first
-    const branchSetting = await this.prisma.featureSetting.findFirst({
-      where: { tenantId, branchId, featureKey },
-    });
-    if (branchSetting) {
-      if (!branchSetting.enabled) {
-        throw new ConflictException(`Feature ${featureKey} is disabled for this branch`);
-      }
-      return;
-    }
-
-    // Check tenant default
-    const tenantSetting = await this.prisma.featureSetting.findFirst({
-      where: { tenantId, branchId: null, featureKey },
-    });
-    if (tenantSetting && !tenantSetting.enabled) {
-      throw new ConflictException(`Feature ${featureKey} is disabled`);
-    }
   }
 
   private async getPaymentPolicy(tenantId: string, branchId: string): Promise<string> {

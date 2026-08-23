@@ -63,6 +63,7 @@ model Tenant {
   memberships     TenantMembership[]
   branches        Branch[]
   featureSettings FeatureSetting[]
+  entitlements    TenantEntitlement[]
   menuCategories  MenuCategory[]
   menuItems       MenuItem[]
   modifierGroups  ModifierGroup[]
@@ -163,6 +164,32 @@ model FeatureSetting {
   branch           Branch?   @relation(fields: [branchId], references: [id])
 
   @@index([tenantId, branchId])
+  // Partial unique indexes managed via raw SQL migration:
+  // CREATE UNIQUE INDEX "FeatureSetting_tenant_unique"
+  //   ON "FeatureSetting" ("tenantId", "featureKey") WHERE "branchId" IS NULL;
+  // CREATE UNIQUE INDEX "FeatureSetting_branch_unique"
+  //   ON "FeatureSetting" ("tenantId", "branchId", "featureKey") WHERE "branchId" IS NOT NULL;
+}
+
+// ─── Platform Entitlements ──────────────────
+
+model TenantEntitlement {
+  id               String    @id @default(uuid())
+  tenantId         String
+  featureKey       String
+  status           String    @default("ENABLED")
+  trialEndsAt      DateTime?
+  updatedByUserId  String?
+  notes            String?
+  reason           String?
+  internalNote     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, featureKey])
+  @@index([tenantId])
 }
 
 // ─── Catalog ───────────────────────────────
