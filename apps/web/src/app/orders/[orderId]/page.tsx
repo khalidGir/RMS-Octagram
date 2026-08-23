@@ -1,1 +1,1 @@
-import { OrderDetailWorkflow } from '@/components/role-workflows'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell initialRole="CASHIER"><OrderDetailWorkflow/></StaffShell>}
+import { OrderDetailWorkflow } from '@/components/role-workflows'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><OrderDetailWorkflow/></StaffShell>}

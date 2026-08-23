@@ -1,1 +1,1 @@
-import { KitchenWorkflow } from '@/components/advanced-operations'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell initialRole="KITCHEN_STAFF"><KitchenWorkflow/></StaffShell>}
+import { KitchenWorkflow } from '@/components/advanced-operations'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><KitchenWorkflow/></StaffShell>}

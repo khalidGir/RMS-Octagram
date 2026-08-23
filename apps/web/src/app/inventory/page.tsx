@@ -1,1 +1,1 @@
-import { InventoryWorkflow } from '@/components/advanced-operations'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell initialRole="MANAGER"><InventoryWorkflow/></StaffShell>}
+import { InventoryWorkflow } from '@/components/advanced-operations'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><InventoryWorkflow/></StaffShell>}

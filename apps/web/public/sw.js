@@ -1,5 +1,5 @@
-const CACHE_NAME = 'rms-shell-v1';
-const SHELL = ['/', '/login', '/manifest.webmanifest', '/icons/app-icon.svg'];
+const CACHE_NAME = 'rms-shell-v2';
+const SHELL = ['/', '/login', '/offline', '/manifest.webmanifest', '/icons/app-icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL)));
@@ -13,5 +13,9 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || new URL(event.request.url).pathname.startsWith('/api/')) return;
-  event.respondWith(fetch(event.request).catch(() => caches.match(event.request).then((cached) => cached || caches.match('/'))));
+  if (event.request.mode === 'navigate') {
+    event.respondWith(fetch(event.request).catch(() => caches.match(event.request).then((cached) => cached || caches.match('/offline'))));
+    return;
+  }
+  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
 });
