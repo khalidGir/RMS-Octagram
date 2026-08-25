@@ -223,7 +223,7 @@ export class AnalyticsService {
         COALESCE(SUM(p."amountMinor"), 0)::text AS revenue_minor,
         COUNT(DISTINCT o."id")::text AS order_count,
         CASE WHEN COUNT(DISTINCT o."id") > 0
-          THEN (SUM(p."amountMinor") / COUNT(DISTINCT o."id"))::text
+          THEN (SUM(p."amountMinor")::bigint / COUNT(DISTINCT o."id"))::text
           ELSE '0'
         END AS avg_order_minor
       FROM "Order" o
@@ -676,8 +676,8 @@ export class AnalyticsService {
         ii."id" AS inventory_item_id,
         ii."name" AS item_name,
         ii."baseUnit" AS base_unit,
-        COALESCE(SUM(ib."remainingQuantity"), 0)::text AS current_stock,
-        ii."lowStockThreshold"::text AS threshold,
+        COALESCE(SUM(ib."remainingQuantity"), 0)::bigint::text AS current_stock,
+        ii."lowStockThreshold"::bigint::text AS threshold,
         CASE WHEN ii."lowStockThreshold" > 0
              AND COALESCE(SUM(ib."remainingQuantity"), 0) <= ii."lowStockThreshold"
           THEN true ELSE false
