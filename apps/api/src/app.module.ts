@@ -19,6 +19,7 @@ import { KitchenModule } from './modules/kitchen/kitchen.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { OutboxModule } from './modules/outbox/outbox.module';
 import { FeaturesModule } from './modules/features/features.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { CorrelationMiddleware } from './modules/observability/correlation.middleware';
 import { HttpLoggerMiddleware } from './modules/observability/http-logger.middleware';
 import { TenantContextMiddleware } from './modules/auth/tenant-context.middleware';
@@ -44,6 +45,7 @@ import { JwtStrategy } from './modules/auth/jwt.strategy';
     InventoryModule,
     OutboxModule,
     FeaturesModule,
+    AnalyticsModule,
   ],
   providers: [JwtStrategy, TenantContextMiddleware],
 })
