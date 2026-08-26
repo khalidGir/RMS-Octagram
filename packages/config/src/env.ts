@@ -18,6 +18,18 @@ const envSchema = z.object({
   S3_ENDPOINT: z.string().optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  // Redis configuration for rate limiting and distributed state
+  REDIS_HOST: z.string().default('localhost'),
+  REDIS_PORT: z.coerce.number().default(6379),
+  REDIS_PASSWORD: z.string().optional(),
+  // Trust proxy hops (1 for ALB, 0 for direct)
+  TRUST_PROXY: z.coerce.number().default(1),
+  // Cookie SameSite policy: 'lax' | 'strict' | 'none'
+  COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+  // Cookie domain (optional, defaults to request domain)
+  COOKIE_DOMAIN: z.string().optional(),
+  // Log level
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });
 
 export type Env = z.infer<typeof envSchema>;

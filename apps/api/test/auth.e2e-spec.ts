@@ -196,7 +196,7 @@ describe('Auth & Tenancy Security (e2e)', () => {
 
     it('rejects missing refresh token', async () => {
       const res = await request(app.getHttpServer()).post('/api/v1/auth/refresh');
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(400);
     });
   });
 

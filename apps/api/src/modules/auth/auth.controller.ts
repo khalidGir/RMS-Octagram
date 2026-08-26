@@ -13,9 +13,10 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { CsrfMiddleware } from '../../common/middleware/csrf.middleware';
+import { Throttle } from '../rate-limit/throttle.decorator';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- LoginDto uses class-validator decorators
 import { LoginDto } from './dto';
 
@@ -24,8 +25,20 @@ import { LoginDto } from './dto';
 export class AuthController {
   constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
+  private getCookieOptions() {
+    return {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: (process.env.COOKIE_SAMESITE as 'lax' | 'strict' | 'none') || 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      domain: process.env.COOKIE_DOMAIN || undefined,
+    };
+  }
+
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ ttl: 60_000, limit: 10, name: 'login' })
   @ApiOperation({ summary: 'Staff login' })
   async login(
     @Body() body: LoginDto,
@@ -36,15 +49,13 @@ export class AuthController {
     }
     const tokens = await this.authService.login(body.email, body.password);
 
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    // Set refresh token cookie
+    res.cookie('refresh_token', tokens.refreshToken, this.getCookieOptions());
 
-    return { data: { accessToken: tokens.accessToken } };
+    // Set CSRF token for cookie-authenticated requests
+    const csrfToken = CsrfMiddleware.generateToken(res);
+
+    return { data: { accessToken: tokens.accessToken, csrfToken } };
   }
 
   @Post('refresh')
@@ -56,22 +67,18 @@ export class AuthController {
   ) {
     const refreshToken = req.cookies?.refresh_token as string;
     if (!refreshToken) {
-      return res
-        .status(401)
-        .json({ error: { code: 'MISSING_REFRESH_TOKEN', message: 'No refresh token' } });
+      throw new BadRequestException('No refresh token');
     }
 
     const tokens = await this.authService.refresh(refreshToken);
 
-    res.cookie('refresh_token', tokens.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    // Set new refresh token cookie
+    res.cookie('refresh_token', tokens.refreshToken, this.getCookieOptions());
 
-    return { data: { accessToken: tokens.accessToken } };
+    // Set new CSRF token
+    const csrfToken = CsrfMiddleware.generateToken(res);
+
+    return { data: { accessToken: tokens.accessToken, csrfToken } };
   }
 
   @Post('logout')
@@ -83,6 +90,7 @@ export class AuthController {
       await this.authService.logout(refreshToken);
     }
     res.clearCookie('refresh_token', { path: '/' });
+    res.clearCookie('_csrf', { path: '/' });
     return { data: { success: true } };
   }
 

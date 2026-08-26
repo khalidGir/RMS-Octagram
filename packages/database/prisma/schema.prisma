@@ -863,9 +863,14 @@ model OutboxEvent {
   publishedAt   DateTime?
   attemptCount  Int       @default(0)
   lastError     String?
+  status        String    @default("PENDING") // PENDING, PROCESSING, PUBLISHED, DEAD_LETTER, UNKNOWN_TYPE, RETRY
+  lockedBy      String?   // instance identifier for claim/lease
+  lockedAt      DateTime? // when the event was claimed
+  nextRetryAt   DateTime? // for exponential backoff scheduling
 
   @@index([publishedAt, occurredAt])
   @@index([tenantId, eventType])
+  @@index([status, nextRetryAt]) // for efficient scheduling of retryable events
 }
 
 model ProcessedEvent {

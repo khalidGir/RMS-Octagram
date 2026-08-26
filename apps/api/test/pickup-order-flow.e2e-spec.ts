@@ -484,7 +484,7 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       });
       expect(orderOutbox.length).toBeGreaterThanOrEqual(1);
 
-      await outboxProcessor.poll();
+      await outboxProcessor.poll(true);
 
       const publishedEvent = await prisma.outboxEvent.findFirst({
         where: { tenantId, aggregateId: cashOrderId, eventType: 'order.confirmed' },
@@ -508,7 +508,7 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       expect(tickets.length).toBe(1);
       expect(tickets[0].status).toBe('QUEUED');
 
-      await outboxProcessor.poll();
+      await outboxProcessor.poll(true);
 
       const ticketsAfterSecondPoll = await prisma.kitchenTicket.findMany({
         where: { tenantId, branchId, orderId: cashOrderId },
@@ -596,7 +596,7 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       });
       expect(orderOutbox.length).toBeGreaterThanOrEqual(1);
 
-      await outboxProcessor.poll();
+      await outboxProcessor.poll(true);
 
       const publishedEvent = await prisma.outboxEvent.findFirst({
         where: { tenantId, aggregateId: orderId, eventType: 'order.confirmed' },
@@ -637,7 +637,7 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
         .set('x-tenant-id', tenantId);
       expect(confirmRes.status).toBe(200);
 
-      await outboxProcessor.poll();
+      await outboxProcessor.poll(true);
 
       const publishedEvent = await prisma.outboxEvent.findFirst({
         where: { tenantId, aggregateId: kdsOrderId, eventType: 'order.confirmed' },
@@ -1016,7 +1016,7 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
           where: { publishedAt: null, attemptCount: { lt: 5 } },
         });
         if (pending === 0) break;
-        await outboxProcessor.poll();
+        await outboxProcessor.poll(true);
       }
 
       const tickets = await prisma.kitchenTicket.findMany({

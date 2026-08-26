@@ -20,10 +20,12 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { OutboxModule } from './modules/outbox/outbox.module';
 import { FeaturesModule } from './modules/features/features.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
 import { CorrelationMiddleware } from './modules/observability/correlation.middleware';
 import { HttpLoggerMiddleware } from './modules/observability/http-logger.middleware';
 import { TenantContextMiddleware } from './modules/auth/tenant-context.middleware';
 import { JwtStrategy } from './modules/auth/jwt.strategy';
+import { CsrfMiddleware } from './common/middleware/csrf.middleware';
 
 @Module({
   imports: [
@@ -46,6 +48,7 @@ import { JwtStrategy } from './modules/auth/jwt.strategy';
     OutboxModule,
     FeaturesModule,
     AnalyticsModule,
+    RateLimitModule,
   ],
   providers: [JwtStrategy, TenantContextMiddleware],
 })
@@ -54,5 +57,8 @@ export class AppModule implements NestModule {
     consumer.apply(cookieParser()).forRoutes('*');
     consumer.apply(CorrelationMiddleware, HttpLoggerMiddleware).forRoutes('*');
     consumer.apply(TenantContextMiddleware).forRoutes('*');
+
+    // CSRF protection for cookie-authenticated endpoints only
+    consumer.apply(CsrfMiddleware).forRoutes('auth/refresh', 'auth/logout');
   }
 }

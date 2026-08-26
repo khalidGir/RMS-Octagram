@@ -2,16 +2,13 @@ import {
   Injectable,
   Inject,
   type NestMiddleware,
-  Logger,
 } from '@nestjs/common';
 import type { Request, Response, NextFunction } from 'express';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- CorrelationService is used as constructor value for NestJS DI
 import { CorrelationService } from './correlation.service';
+import { ExecutionContext } from './execution-context';
 
 @Injectable()
 export class CorrelationMiddleware implements NestMiddleware {
-  private readonly logger = new Logger('HTTP');
-
   constructor(@Inject(CorrelationService) private readonly correlationService: CorrelationService) {}
 
   use(req: Request, res: Response, next: NextFunction) {
@@ -22,15 +19,15 @@ export class CorrelationMiddleware implements NestMiddleware {
     req.correlationId = correlationId;
     res.setHeader('x-correlation-id', correlationId);
 
-    const startTime = Date.now();
+    // Run the rest of the request within an AsyncLocalStorage context
+    const ctx = {
+      correlationId,
+      tenantId: undefined as string | undefined,
+      userId: undefined as string | undefined,
+    };
 
-    res.on('finish', () => {
-      const duration = Date.now() - startTime;
-      this.logger.log(
-        `${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms [${correlationId}]`,
-      );
+    ExecutionContext.run(ctx, () => {
+      next();
     });
-
-    next();
   }
 }

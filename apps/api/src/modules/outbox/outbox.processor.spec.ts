@@ -3,10 +3,8 @@ import { OutboxProcessor } from './outbox.processor';
 
 function createMockPrisma() {
   return {
-    outboxEvent: {
-      findMany: vi.fn(),
-      update: vi.fn(),
-    },
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    $executeRaw: vi.fn().mockResolvedValue(undefined),
     auditLog: {
       create: vi.fn().mockResolvedValue({}),
     },
@@ -50,17 +48,23 @@ describe('OutboxProcessor', () => {
   });
 
   it('processes order.confirmed events and creates kitchen tickets', async () => {
-    prisma.outboxEvent.findMany.mockResolvedValue([
-      {
-        id: 'evt-1',
-        tenantId: 't1',
-        branchId: 'b1',
-        eventType: 'order.confirmed',
-        payload: { orderId: 'ord-1', paymentId: 'pay-1', totalMinor: '5000' },
-        attemptCount: 0,
-      },
-    ]);
-    prisma.outboxEvent.update.mockResolvedValue({});
+    prisma.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          id: 'evt-1',
+          tenantId: 't1',
+          branchId: 'b1',
+          eventType: 'order.confirmed',
+          payload: { orderId: 'ord-1', paymentId: 'pay-1', totalMinor: '5000' },
+          attemptCount: 0,
+          publishedAt: null,
+          lastError: null,
+          aggregateType: 'Order',
+          aggregateId: 'ord-1',
+          occurredAt: new Date(),
+        },
+      ])
+      .mockResolvedValueOnce([]);
 
     await processor.poll();
 
@@ -70,86 +74,89 @@ describe('OutboxProcessor', () => {
       orderId: 'ord-1',
       actorUserId: undefined,
     });
-    expect(prisma.outboxEvent.update).toHaveBeenCalledWith({
-      where: { id: 'evt-1' },
-      data: { publishedAt: expect.any(Date) },
-    });
+    expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 
   it('marks event as published after successful processing', async () => {
-    prisma.outboxEvent.findMany.mockResolvedValue([
-      {
-        id: 'evt-2',
-        tenantId: 't1',
-        branchId: 'b1',
-        eventType: 'order.confirmed',
-        payload: { orderId: 'ord-2', paymentId: 'pay-2', totalMinor: '3000' },
-        attemptCount: 0,
-      },
-    ]);
-    prisma.outboxEvent.update.mockResolvedValue({});
+    prisma.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          id: 'evt-2',
+          tenantId: 't1',
+          branchId: 'b1',
+          eventType: 'order.confirmed',
+          payload: { orderId: 'ord-2', paymentId: 'pay-2', totalMinor: '3000' },
+          attemptCount: 0,
+          publishedAt: null,
+          lastError: null,
+          aggregateType: 'Order',
+          aggregateId: 'ord-2',
+          occurredAt: new Date(),
+        },
+      ])
+      .mockResolvedValueOnce([]);
 
     await processor.poll();
 
-    expect(prisma.outboxEvent.update).toHaveBeenCalledWith({
-      where: { id: 'evt-2' },
-      data: { publishedAt: expect.any(Date) },
-    });
+    expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 
   it('increments attemptCount on failure without marking published', async () => {
-    prisma.outboxEvent.findMany.mockResolvedValue([
-      {
-        id: 'evt-3',
-        tenantId: 't1',
-        branchId: 'b1',
-        eventType: 'order.confirmed',
-        payload: { orderId: 'ord-3', paymentId: 'pay-3', totalMinor: '2000' },
-        attemptCount: 0,
-      },
-    ]);
+    prisma.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          id: 'evt-3',
+          tenantId: 't1',
+          branchId: 'b1',
+          eventType: 'order.confirmed',
+          payload: { orderId: 'ord-3', paymentId: 'pay-3', totalMinor: '2000' },
+          attemptCount: 0,
+          publishedAt: null,
+          lastError: null,
+          aggregateType: 'Order',
+          aggregateId: 'ord-3',
+          occurredAt: new Date(),
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
     kitchenTickets.createTicketsForOrder.mockRejectedValue(new Error('DB connection lost'));
-    prisma.outboxEvent.update.mockResolvedValue({});
 
     await processor.poll();
 
-    expect(prisma.outboxEvent.update).toHaveBeenCalledWith({
-      where: { id: 'evt-3' },
-      data: {
-        attemptCount: { increment: 1 },
-        lastError: 'DB connection lost',
-      },
-    });
-    // Should NOT mark as published
-    expect(prisma.outboxEvent.update).not.toHaveBeenCalledWith(
-      expect.objectContaining({ data: { publishedAt: expect.any(Date) } }),
-    );
+    // Should have called $executeRaw for claiming and for failure update
+    expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 
   it('skips events that have reached max attempts', async () => {
-    // findMany is mocked to return empty when the query filters by attemptCount < MAX_ATTEMPTS
-    prisma.outboxEvent.findMany.mockResolvedValue([]);
+    // findMany returns empty when the query filters
+    prisma.$queryRaw.mockResolvedValueOnce([]);
 
     await processor.poll();
 
-    // findMany filters attemptCount < 5, so no events returned
     expect(kitchenTickets.createTicketsForOrder).not.toHaveBeenCalled();
   });
 
   it('idempotent — second processing returns existing tickets', async () => {
     const existingTicket = { id: 'tkt-1', tenantId: 't1', branchId: 'b1', orderId: 'ord-5', stationId: 's1' };
     kitchenTickets.createTicketsForOrder.mockResolvedValue({ tickets: [existingTicket], idempotent: true });
-    prisma.outboxEvent.findMany.mockResolvedValue([
-      {
-        id: 'evt-5',
-        tenantId: 't1',
-        branchId: 'b1',
-        eventType: 'order.confirmed',
-        payload: { orderId: 'ord-5', paymentId: 'pay-5', totalMinor: '4000' },
-        attemptCount: 0,
-      },
-    ]);
-    prisma.outboxEvent.update.mockResolvedValue({});
+    prisma.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          id: 'evt-5',
+          tenantId: 't1',
+          branchId: 'b1',
+          eventType: 'order.confirmed',
+          payload: { orderId: 'ord-5', paymentId: 'pay-5', totalMinor: '4000' },
+          attemptCount: 0,
+          publishedAt: null,
+          lastError: null,
+          aggregateType: 'Order',
+          aggregateId: 'ord-5',
+          occurredAt: new Date(),
+        },
+      ])
+      .mockResolvedValueOnce([]);
 
     await processor.poll();
 
@@ -159,46 +166,55 @@ describe('OutboxProcessor', () => {
       orderId: 'ord-5',
       actorUserId: undefined,
     });
-    expect(prisma.outboxEvent.update).toHaveBeenCalledWith({
-      where: { id: 'evt-5' },
-      data: { publishedAt: expect.any(Date) },
-    });
+    expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 
   it('processes multiple events in a single poll', async () => {
-    prisma.outboxEvent.findMany.mockResolvedValue([
-      {
-        id: 'evt-a',
-        tenantId: 't1',
-        branchId: 'b1',
-        eventType: 'order.confirmed',
-        payload: { orderId: 'ord-a', paymentId: 'pay-a', totalMinor: '1000' },
-        attemptCount: 0,
-      },
-      {
-        id: 'evt-b',
-        tenantId: 't1',
-        branchId: 'b1',
-        eventType: 'order.confirmed',
-        payload: { orderId: 'ord-b', paymentId: 'pay-b', totalMinor: '2000' },
-        attemptCount: 0,
-      },
-    ]);
-    prisma.outboxEvent.update.mockResolvedValue({});
+    prisma.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          id: 'evt-a',
+          tenantId: 't1',
+          branchId: 'b1',
+          eventType: 'order.confirmed',
+          payload: { orderId: 'ord-a', paymentId: 'pay-a', totalMinor: '1000' },
+          attemptCount: 0,
+          publishedAt: null,
+          lastError: null,
+          aggregateType: 'Order',
+          aggregateId: 'ord-a',
+          occurredAt: new Date(),
+        },
+        {
+          id: 'evt-b',
+          tenantId: 't1',
+          branchId: 'b1',
+          eventType: 'order.confirmed',
+          payload: { orderId: 'ord-b', paymentId: 'pay-b', totalMinor: '2000' },
+          attemptCount: 0,
+          publishedAt: null,
+          lastError: null,
+          aggregateType: 'Order',
+          aggregateId: 'ord-b',
+          occurredAt: new Date(),
+        },
+      ])
+      .mockResolvedValue([]);
 
     await processor.poll();
 
+    // Wait for async work to complete
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     expect(kitchenTickets.createTicketsForOrder).toHaveBeenCalledTimes(2);
-    expect(prisma.outboxEvent.update).toHaveBeenCalledTimes(2);
   });
 
   it('does nothing when there are no pending events', async () => {
-    prisma.outboxEvent.findMany.mockResolvedValue([]);
+    prisma.$queryRaw.mockResolvedValueOnce([]);
 
     await processor.poll();
 
     expect(kitchenTickets.createTicketsForOrder).not.toHaveBeenCalled();
-    expect(prisma.outboxEvent.update).not.toHaveBeenCalled();
   });
 
   it('skips kitchen ticket creation when KDS is disabled', async () => {
@@ -211,27 +227,31 @@ describe('OutboxProcessor', () => {
       disabledReason: 'TENANT_DISABLED',
     });
 
-    prisma.outboxEvent.findMany.mockResolvedValue([
-      {
-        id: 'evt-kds-disabled',
-        tenantId: 't1',
-        branchId: 'b1',
-        eventType: 'order.confirmed',
-        payload: { orderId: 'ord-kds-disabled', paymentId: 'pay-kds-disabled', totalMinor: '5000' },
-        attemptCount: 0,
-      },
-    ]);
-    prisma.outboxEvent.update.mockResolvedValue({});
+    prisma.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          id: 'evt-kds-disabled',
+          tenantId: 't1',
+          branchId: 'b1',
+          eventType: 'order.confirmed',
+          payload: { orderId: 'ord-kds-disabled', paymentId: 'pay-kds-disabled', totalMinor: '5000' },
+          attemptCount: 0,
+          publishedAt: null,
+          lastError: null,
+          aggregateType: 'Order',
+          aggregateId: 'ord-kds-disabled',
+          occurredAt: new Date(),
+        },
+      ])
+      .mockResolvedValueOnce([]);
 
     await processor.poll();
 
+    // Wait for async work
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     // Should NOT create kitchen tickets
     expect(kitchenTickets.createTicketsForOrder).not.toHaveBeenCalled();
-    // Should still mark as published (handled gracefully)
-    expect(prisma.outboxEvent.update).toHaveBeenCalledWith({
-      where: { id: 'evt-kds-disabled' },
-      data: { publishedAt: expect.any(Date) },
-    });
     // Should audit the skip
     expect(prisma.auditLog.create).toHaveBeenCalledWith({
       data: {

@@ -937,7 +937,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     });
 
     it('kitchen tickets were created for the confirmed order', async () => {
-      await outboxProcessor.poll();
+      await outboxProcessor.poll(true);
 
       const publishedEvent = await prisma.outboxEvent.findFirst({
         where: { tenantId, aggregateId: orderId, eventType: 'order.confirmed' },
@@ -954,7 +954,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       expect(tickets[0].orderId).toBe(orderId);
       expect(tickets[0].status).toBe('QUEUED');
 
-      await outboxProcessor.poll();
+      await outboxProcessor.poll(true);
       const res2 = await request(app.getHttpServer())
         .get(`/api/v1/branches/${branchId}/kitchen-tickets`)
         .set('Authorization', `Bearer ${ownerToken}`)
