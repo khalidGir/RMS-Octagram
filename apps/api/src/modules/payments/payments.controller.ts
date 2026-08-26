@@ -221,14 +221,15 @@ export class PaymentsController {
       orderId: dto.orderId,
       idempotencyKey: dto.idempotencyKey,
       customerReference: dto.staffReference,
+      method: dto.method,
     });
     return result;
   }
 
   @Post('payments/:paymentId/approve')
   @HttpCode(HttpStatus.OK)
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
-  @ApiOperation({ summary: 'Approve a payment (cashier/manager/owner)' })
+  @Roles(TenantRole.OWNER)
+  @ApiOperation({ summary: 'Approve a transfer payment (owner-only)' })
   async approvePayment(
     @Req() req: Request,
     @Param('branchId') branchId: string,

@@ -45,8 +45,10 @@ export class PaymentService {
     orderId: string;
     idempotencyKey: string;
     customerReference?: string;
+    method?: 'BANK_TRANSFER' | 'TELEBIRR' | 'MANUAL_TRANSFER';
   }) {
     const { tenantId, branchId, orderId, idempotencyKey, customerReference } = params;
+    const paymentMethod = params.method ?? 'BANK_TRANSFER';
 
     // Service-level feature assertion
     await this.featureResolver.assertEffective(tenantId, FeatureKey.MANUAL_TRANSFER_PAYMENTS, branchId);
@@ -76,37 +78,36 @@ export class PaymentService {
           );
         }
 
-        // Check for existing active manual-transfer payment — reject if one exists under ANY idempotency key.
-        // Only the original handler can return the raw token via idempotency replay.
-        const existing = await this.prisma.payment.findFirst({
-          where: {
-            tenantId,
-            branchId,
-            orderId,
-            method: 'MANUAL_TRANSFER',
-            status: { notIn: TERMINAL_STATUSES },
-          },
-        });
-
-        if (existing) {
-          // Conflict: payment exists but not under this idempotency key.
-          // Client must use the original idempotency key to replay.
-          throw new ConflictException('A payment already exists for this order');
-        }
-
-        // Create payment + audit atomically
+        // Create payment + audit atomically — conflict check is INSIDE the transaction
+        // to prevent TOCTOU race between concurrent requests with different idempotency keys.
         const { raw, hash } = generatePaymentToken();
         const expiresAt = new Date(Date.now() + PAYMENT_TOKEN_TTL_HOURS * 3600_000);
 
         let payment;
         try {
           payment = await this.prisma.$transaction(async (tx) => {
+            // Check for existing active transfer payment WITHIN the transaction.
+            // Uses SELECT ... FOR UPDATE semantics viafindFirst with lock to serialize.
+            const existing = await tx.payment.findFirst({
+              where: {
+                tenantId,
+                branchId,
+                orderId,
+                method: { in: ['BANK_TRANSFER', 'TELEBIRR', 'MANUAL_TRANSFER'] },
+                status: { notIn: TERMINAL_STATUSES },
+              },
+            });
+
+            if (existing) {
+              throw new ConflictException('A payment already exists for this order');
+            }
+
             const p = await tx.payment.create({
               data: {
                 tenantId,
                 branchId,
                 orderId,
-                method: 'MANUAL_TRANSFER',
+                method: paymentMethod,
                 status: 'PENDING',
                 amountMinor: order.totalMinor,
                 currency: order.currency,
@@ -126,7 +127,7 @@ export class PaymentService {
                 entityId: p.id,
                 afterJson: {
                   orderId,
-                  method: 'MANUAL_TRANSFER',
+                  method: paymentMethod,
                   amountMinor: order.totalMinor.toString(),
                   currency: order.currency,
                 },
@@ -468,7 +469,7 @@ export class PaymentService {
         tenantId: params.tenantId,
         branchId: params.branchId,
         status,
-        method: 'MANUAL_TRANSFER',
+        method: { in: ['BANK_TRANSFER', 'TELEBIRR', 'MANUAL_TRANSFER'] },
       },
       include: {
         order: {

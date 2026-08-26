@@ -81,6 +81,13 @@ describe('OrdersService', () => {
           modifiers: [],
         }],
         subtotalMinor: 5000n,
+        vatApplicable: false,
+        vatRateBps: 0,
+        vatMinor: 0n,
+        serviceChargeMinor: 0n,
+        totalMinor: 5000n,
+        taxConfigVersionId: null,
+        roundingMode: null,
       }),
     } as unknown as PriceCalculatorService;
 

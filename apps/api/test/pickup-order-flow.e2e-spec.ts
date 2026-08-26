@@ -74,6 +74,10 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
     await app.init();
     outboxProcessor = app.get(OutboxProcessor);
     outboxProcessor.stop();
+    // Purge stale unpublished outbox events from prior test runs.
+    // Without this, FOR UPDATE SKIP LOCKED picks up stale events first
+    // (they have earlier occurredAt), filling the batch and blocking ours.
+    await prisma.outboxEvent.deleteMany({ where: { publishedAt: null } });
     proofStorage = app.get(ProofStorage) as unknown as InMemoryProofStorage;
 
     const passwordHash = await argon2.hash('Test1234!', { type: argon2.argon2id });
@@ -578,7 +582,7 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
     it('10c. approval transitions order to CONFIRMED with outbox', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/branches/${branchId}/payments/${mtPaymentId}/approve`)
-        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
         .set('x-tenant-id', tenantId);
       expect(res.status).toBe(200);
       expect(res.body.data.status).toBe('APPROVED');

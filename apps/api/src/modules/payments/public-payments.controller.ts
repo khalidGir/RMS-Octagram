@@ -104,6 +104,7 @@ export class PublicPaymentsController {
       orderId: order.id,
       idempotencyKey: body.idempotencyKey,
       customerReference: body.customerReference,
+      method: body.method,
     });
 
     return result;

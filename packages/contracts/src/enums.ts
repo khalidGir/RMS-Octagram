@@ -7,6 +7,7 @@ export enum TenantRole {
   MANAGER = 'MANAGER',
   CASHIER = 'CASHIER',
   KITCHEN_STAFF = 'KITCHEN_STAFF',
+  WAITER = 'WAITER',
 }
 
 export enum MembershipStatus {
@@ -36,6 +37,8 @@ export enum OrderStatus {
 
 export enum PaymentMethod {
   CASH = 'CASH',
+  BANK_TRANSFER = 'BANK_TRANSFER',
+  TELEBIRR = 'TELEBIRR',
   MANUAL_TRANSFER = 'MANUAL_TRANSFER',
   GATEWAY = 'GATEWAY',
 }
@@ -99,5 +102,15 @@ export enum PaymentPolicy {
   STAFF_CONFIRMATION_REQUIRED = 'STAFF_CONFIRMATION_REQUIRED',
 }
 
+export enum RoundingMode {
+  HALF_UP = 'HALF_UP',
+  DOWN = 'DOWN',
+}
+
 export const CURRENCY = 'ETB' as const;
 export const DEFAULT_TIMEZONE = 'Africa/Addis_Ababa' as const;
+
+export type LocaleCode = 'en' | 'am' | 'ar';
+export const LOCALE_CODES: LocaleCode[] = ['en', 'am', 'ar'];
+export const DEFAULT_LOCALE: LocaleCode = 'en';
+export const RTL_LOCALES: LocaleCode[] = ['ar'];

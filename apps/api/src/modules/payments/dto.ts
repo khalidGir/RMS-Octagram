@@ -28,6 +28,11 @@ export class CreateManualTransferDto {
   @IsNotEmpty()
   idempotencyKey!: string;
 
+  @ApiPropertyOptional({ enum: ['BANK_TRANSFER', 'TELEBIRR'], description: 'Payment method (default: BANK_TRANSFER)' })
+  @IsOptional()
+  @IsIn(['BANK_TRANSFER', 'TELEBIRR'])
+  method?: 'BANK_TRANSFER' | 'TELEBIRR';
+
   @ApiPropertyOptional({ description: 'Customer payment reference (e.g., transaction ID)' })
   @IsOptional()
   @IsString()
@@ -104,6 +109,11 @@ export class StaffManualTransferDto {
   @IsString()
   @IsNotEmpty()
   idempotencyKey!: string;
+
+  @ApiPropertyOptional({ enum: ['BANK_TRANSFER', 'TELEBIRR', 'MANUAL_TRANSFER'], description: 'Payment method (default: BANK_TRANSFER)' })
+  @IsOptional()
+  @IsIn(['BANK_TRANSFER', 'TELEBIRR', 'MANUAL_TRANSFER'])
+  method?: 'BANK_TRANSFER' | 'TELEBIRR' | 'MANUAL_TRANSFER';
 
   @ApiPropertyOptional({ description: 'Staff reference note' })
   @IsOptional()

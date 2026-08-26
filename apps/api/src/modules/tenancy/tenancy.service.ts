@@ -27,10 +27,12 @@ const GRANTABLE_BY_ROLE: Record<string, TenantRole[]> = {
     TenantRole.MANAGER,
     TenantRole.CASHIER,
     TenantRole.KITCHEN_STAFF,
+    TenantRole.WAITER,
   ],
   [TenantRole.MANAGER]: [
     TenantRole.CASHIER,
     TenantRole.KITCHEN_STAFF,
+    TenantRole.WAITER,
   ],
 };
 
@@ -38,6 +40,7 @@ const GRANTABLE_BY_ROLE: Record<string, TenantRole[]> = {
 const MANAGEABLE_BY_MANAGER: TenantRole[] = [
   TenantRole.CASHIER,
   TenantRole.KITCHEN_STAFF,
+  TenantRole.WAITER,
 ];
 
 @Injectable()

@@ -57,6 +57,7 @@ model Tenant {
   status          String         @default("TRIAL")
   defaultCurrency String         @default("ETB") @db.VarChar(3)
   defaultTimezone  String        @default("Africa/Addis_Ababa")
+  defaultLocale   String         @default("en") // en, am, ar
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
@@ -67,6 +68,8 @@ model Tenant {
   menuCategories  MenuCategory[]
   menuItems       MenuItem[]
   modifierGroups  ModifierGroup[]
+  taxConfigurations TenantTaxConfiguration[]
+  menuTranslations MenuItemTranslation[]
 }
 
 model TenantMembership {
@@ -79,6 +82,7 @@ model TenantMembership {
   invitationTokenHash   String?
   invitationExpiresAt   DateTime?
   acceptedAt            DateTime?
+  preferredLocale       String?   // en, am, ar — staff preference
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -119,6 +123,7 @@ model Branch {
   branchMenuItems BranchMenuItem[]
   orderCounter     BranchOrderCounter?
   stationCounters  StationTicketCounter[]
+  taxConfigurations TenantTaxConfiguration[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
@@ -230,6 +235,7 @@ model MenuItem {
   branchAvailability BranchMenuItem[]
   stations        MenuItemStation[]
   orderLines      OrderLine[]
+  translations    MenuItemTranslation[]
 
   @@index([tenantId])
   @@index([tenantId, categoryId])
@@ -423,8 +429,11 @@ model Order {
   subtotalMinor       BigInt    @default(0)
   discountMinor       BigInt    @default(0)
   taxMinor            BigInt    @default(0)
-  serviceChargeMinor  BigInt    @default(0)
+  serviceChargeMinor  BigInt    @default(0) // always zero — not configurable
   totalMinor          BigInt    @default(0)
+  taxConfigVersionId  String?   // immutable snapshot reference
+  vatRateSnapshot     Decimal?  @db.Decimal(9,6) // VAT rate at order time
+  roundingModeSnapshot String?  // immutable snapshot of rounding mode used for VAT
   notes               String?
   source              String    @default("CUSTOMER_WEB")
   createdByUserId     String?
@@ -879,4 +888,45 @@ model ProcessedEvent {
   processedAt  DateTime @default(now())
 
   @@id([consumerName, eventId])
+}
+
+// ─── Phase 6A: VAT Configuration ─────────────
+
+model TenantTaxConfiguration {
+  id              String    @id @default(uuid())
+  tenantId        String
+  branchId        String?   // null = tenant default; non-null = branch override
+  vatApplicable   Boolean   @default(false)
+  vatRate         Decimal   @db.Decimal(9,6) // e.g. 0.150000 for 15%
+  roundingMode    String    @default("DOWN") // HALF_UP | DOWN — provisional default matches prior behavior
+  effectiveFrom   DateTime  @default(now())
+  effectiveUntil  DateTime? // null = currently effective
+  confirmedBy     String?   // accountant/advisor name
+  confirmationNote String?
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  branch          Branch?   @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId, branchId, effectiveFrom])
+}
+
+// ─── Phase 6A: Localized Catalog Content ─────
+
+model MenuItemTranslation {
+  id              String    @id @default(uuid())
+  tenantId        String
+  menuItemId      String
+  locale          String    // en, am, ar
+  name            String
+  description     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  menuItem        MenuItem  @relation(fields: [menuItemId], references: [id])
+
+  @@unique([tenantId, menuItemId, locale])
+  @@index([tenantId, menuItemId])
 }

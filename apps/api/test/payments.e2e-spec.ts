@@ -61,6 +61,8 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     // Stop the outbox processor timer immediately; tests poll manually
     outboxProcessor = app.get(OutboxProcessor);
     outboxProcessor.stop();
+    // Purge stale unpublished outbox events from prior test runs
+    await prisma.outboxEvent.deleteMany({ where: { publishedAt: null } });
 
     const passwordHash = await argon2.hash('Test1234!', { type: argon2.argon2id });
 
@@ -917,10 +919,10 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       expect(finalizeRes.status).toBe(200);
     });
 
-    it('cashier can approve a PENDING_VERIFICATION payment', async () => {
+    it('owner can approve a PENDING_VERIFICATION payment', async () => {
       const res = await request(app.getHttpServer())
         .post(`/api/v1/branches/${branchId}/payments/${paymentId2}/approve`)
-        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
         .set('x-tenant-id', tenantId)
         .send({ reviewNote: 'Looks good' });
       expect(res.status).toBe(200);

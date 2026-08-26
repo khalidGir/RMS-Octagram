@@ -21,6 +21,8 @@ import { OutboxModule } from './modules/outbox/outbox.module';
 import { FeaturesModule } from './modules/features/features.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { RateLimitModule } from './modules/rate-limit/rate-limit.module';
+import { LocaleModule } from './modules/locale/locale.module';
+import { TaxModule } from './modules/tax/tax.module';
 import { CorrelationMiddleware } from './modules/observability/correlation.middleware';
 import { HttpLoggerMiddleware } from './modules/observability/http-logger.middleware';
 import { TenantContextMiddleware } from './modules/auth/tenant-context.middleware';
@@ -49,6 +51,8 @@ import { CsrfMiddleware } from './common/middleware/csrf.middleware';
     FeaturesModule,
     AnalyticsModule,
     RateLimitModule,
+    LocaleModule,
+    TaxModule,
   ],
   providers: [JwtStrategy, TenantContextMiddleware],
 })
