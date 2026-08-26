@@ -34,6 +34,7 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
   let app: any;
   let ownerToken: string;
   let waiterToken: string;
+  let managerToken: string;
   let tenantId: string;
   let branchId: string;
   let tableId: string;
@@ -42,6 +43,7 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
 
   const ownerEmail = `phase6b-owner-${ts}@test.com`;
   const waiterEmail = `phase6b-waiter-${ts}@test.com`;
+  const managerEmail = `phase6b-manager-${ts}@test.com`;
   let passwordHash: string;
 
   beforeAll(async () => {
@@ -108,6 +110,16 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
     await prisma.branchAssignment.create({ data: { tenantId, branchId, membershipId: wm.id } });
     waiterToken = await login(app, waiterEmail);
 
+    // Create manager
+    const manager = await prisma.user.create({
+      data: { email: managerEmail, passwordHash, displayName: 'Manager', status: 'ACTIVE' },
+    });
+    const mm = await prisma.tenantMembership.create({
+      data: { tenantId, userId: manager.id, role: 'MANAGER', status: 'ACTIVE' },
+    });
+    await prisma.branchAssignment.create({ data: { tenantId, branchId, membershipId: mm.id } });
+    managerToken = await login(app, managerEmail);
+
     // Create table and QR token
     const table = await prisma.restaurantTable.create({
       data: { tenantId, branchId, label: 'T1', capacity: 4, isActive: true },
@@ -169,7 +181,7 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
     await prisma.auditLog.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.outboxEvent.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.branch.delete({ where: { id: branchId } }).catch(() => {});
-    await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, waiterEmail] } } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, waiterEmail, managerEmail] } } }).catch(() => {});
     await prisma.tenant.delete({ where: { id: tenantId } }).catch(() => {});
     await prisma.$disconnect();
   });
@@ -417,14 +429,14 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
 
   // ─── Successful Clear ──────────────────────────
 
-  it('13. completes orders then clears session', async () => {
+  it('14. owner can clear session after all orders terminal', async () => {
     // Complete both orders (change status to COMPLETED)
     await prisma.order.updateMany({
       where: { diningSessionId: sessionId },
       data: { status: 'COMPLETED' },
     });
 
-    // Now clear should succeed
+    // Owner clear should succeed
     const res = await request(app.getHttpServer())
       .post(`/api/v1/branches/${branchId}/sessions/${sessionId}/clear`)
       .set('Authorization', `Bearer ${ownerToken}`)
@@ -438,7 +450,7 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
     expect(res.body.data.closedAt).not.toBeNull();
   });
 
-  it('14. table-operations shows table free after clear', async () => {
+  it('15. table-operations shows table free after clear', async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/branches/${branchId}/table-operations`)
       .set('Authorization', `Bearer ${ownerToken}`)
@@ -450,7 +462,7 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
     expect(t1.openOrderCount).toBe(0);
   });
 
-  it('15. clear is idempotent (already cleared)', async () => {
+  it('16. clear is idempotent (already cleared)', async () => {
     const res = await request(app.getHttpServer())
       .post(`/api/v1/branches/${branchId}/sessions/${sessionId}/clear`)
       .set('Authorization', `Bearer ${ownerToken}`)
@@ -459,5 +471,111 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
 
     // Should succeed (idempotent) — already cleared sessions return 201
     expect(res.status).toBe(201);
+  });
+
+  it('17. waiter can clear session after all orders terminal', async () => {
+    const variant = await prisma.menuItemVariant.findFirst({
+      where: { tenantId, sku: 'BURG-6B' },
+    });
+    const orderRes = await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/orders`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-tenant-id', tenantId)
+      .send({
+        orderType: 'DINE_IN',
+        tableId,
+        lines: [{ variantId: variant!.id, quantity: 1 }],
+      });
+    expect(orderRes.status).toBe(201);
+    const newOrderId = orderRes.body.data.order.id;
+
+    const payment = await prisma.payment.create({
+      data: {
+        tenantId,
+        branchId,
+        orderId: newOrderId,
+        method: 'CASH',
+        amountMinor: orderRes.body.data.order.totalMinor,
+        currency: 'ETB',
+        status: 'PENDING',
+      },
+    });
+    const confirmRes = await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/payments/${payment.id}/confirm-cash`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-tenant-id', tenantId);
+    expect(confirmRes.status).toBe(200);
+
+    const session = await prisma.diningSession.findFirst({
+      where: { tenantId, branchId, tableId, status: 'OPEN' },
+    });
+    expect(session).not.toBeNull();
+
+    await prisma.order.update({
+      where: { id: newOrderId },
+      data: { status: 'COMPLETED' },
+    });
+
+    const clearRes = await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/sessions/${session!.id}/clear`)
+      .set('Authorization', `Bearer ${waiterToken}`)
+      .set('x-tenant-id', tenantId)
+      .send({ expectedVersion: 1, clearReason: 'Table cleared by waiter' });
+
+    expect(clearRes.status).toBe(201);
+    expect(clearRes.body.data.status).toBe('CLEARED');
+    expect(clearRes.body.data.clearedByUserId).toBeDefined();
+  });
+
+  it('18. manager is denied from clearing session', async () => {
+    const variant = await prisma.menuItemVariant.findFirst({
+      where: { tenantId, sku: 'BURG-6B' },
+    });
+    const orderRes = await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/orders`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-tenant-id', tenantId)
+      .send({
+        orderType: 'DINE_IN',
+        tableId,
+        lines: [{ variantId: variant!.id, quantity: 1 }],
+      });
+    expect(orderRes.status).toBe(201);
+    const newOrderId = orderRes.body.data.order.id;
+
+    const payment = await prisma.payment.create({
+      data: {
+        tenantId,
+        branchId,
+        orderId: newOrderId,
+        method: 'CASH',
+        amountMinor: orderRes.body.data.order.totalMinor,
+        currency: 'ETB',
+        status: 'PENDING',
+      },
+    });
+    const confirmRes = await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/payments/${payment.id}/confirm-cash`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-tenant-id', tenantId);
+    expect(confirmRes.status).toBe(200);
+
+    await prisma.order.update({
+      where: { id: newOrderId },
+      data: { status: 'COMPLETED' },
+    });
+
+    const session = await prisma.diningSession.findFirst({
+      where: { tenantId, branchId, tableId, status: 'OPEN' },
+    });
+    expect(session).not.toBeNull();
+
+    const clearRes = await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/sessions/${session!.id}/clear`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('x-tenant-id', tenantId)
+      .send({ expectedVersion: 1, clearReason: 'Manager attempt' });
+
+    expect(clearRes.status).toBe(403);
   });
 });
