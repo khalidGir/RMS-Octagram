@@ -15,6 +15,8 @@ import { IdempotencyService } from '../orders/idempotency.service';
 import { FeatureResolver } from '../features/feature-resolver.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { InventoryDeductionService } from '../inventory/inventory-deduction.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { DiningSessionService } from '../tables/dining-session.service';
 import { generatePaymentToken, hashPaymentToken } from './payment-token.util';
 import { FeatureKey } from '@rms/contracts';
 
@@ -32,6 +34,7 @@ export class PaymentService {
     @Inject(IdempotencyService) private readonly idempotency: IdempotencyService,
     @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
     @Inject(InventoryDeductionService) private readonly deductionService: InventoryDeductionService,
+    @Inject(DiningSessionService) private readonly sessionService: DiningSessionService,
   ) {}
 
   /**
@@ -759,6 +762,7 @@ export class PaymentService {
         order: {
           select: {
             id: true, status: true, version: true, totalMinor: true, currency: true,
+            orderType: true, tableId: true,
             lines: { select: { id: true, variantId: true, quantity: true } },
           },
         },
@@ -840,6 +844,18 @@ export class PaymentService {
         });
       }
 
+      // Open or join dining session for DINE_IN orders (atomic with confirmation)
+      if (payment.order.orderType === 'DINE_IN' && payment.order.tableId) {
+        await this.sessionService.openOrJoinSession({
+          tenantId,
+          branchId,
+          tableId: payment.order.tableId,
+          orderId: payment.order.id,
+          actorUserId,
+          tx,
+        });
+      }
+
       await tx.auditLog.create({
         data: {
           actorUserId,
@@ -909,6 +925,7 @@ export class PaymentService {
         order: {
           select: {
             id: true, status: true, version: true, totalMinor: true, currency: true,
+            orderType: true, tableId: true,
             lines: { select: { id: true, variantId: true, quantity: true } },
           },
         },
@@ -993,6 +1010,18 @@ export class PaymentService {
             .filter((l) => l.variantId)
             .map((l) => ({ variantId: l.variantId!, quantity: l.quantity })),
           actorUserId,
+        });
+      }
+
+      // Open or join dining session for DINE_IN orders (atomic with confirmation)
+      if (payment.order.orderType === 'DINE_IN' && payment.order.tableId) {
+        await this.sessionService.openOrJoinSession({
+          tenantId,
+          branchId,
+          tableId: payment.order.tableId,
+          orderId: payment.order.id,
+          actorUserId,
+          tx,
         });
       }
 

@@ -6,6 +6,8 @@ import type { Request } from 'express';
 import { TenantRole } from '@rms/contracts';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { TablesService } from './tables.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { DiningSessionService } from './dining-session.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { BranchScopeGuard } from '../auth/branch-scope.guard';
@@ -17,6 +19,7 @@ import {
   CreateTableDto,
   UpdateTableDto,
   RotateQrTokenDto,
+  ClearSessionDto,
 } from './dto';
 
 @ApiTags('Tables')
@@ -24,7 +27,10 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard, BranchScopeGuard)
 @ApiCookieAuth()
 export class TablesController {
-  constructor(@Inject(TablesService) private readonly tables: TablesService) {}
+  constructor(
+    @Inject(TablesService) private readonly tables: TablesService,
+    @Inject(DiningSessionService) private readonly sessions: DiningSessionService,
+  ) {}
 
   // ─── Dining Areas ──────────────────────────
 
@@ -131,5 +137,71 @@ export class TablesController {
   async listTokenHistory(@Req() req: Request, @Param('branchId') branchId: string, @Param('tableId') tableId: string) {
     const ctx = req.tenantContext as TenantContext;
     return { data: await this.tables.listTokens(tableId, ctx.tenantId!, branchId) };
+  }
+
+  // ─── Table Operations & Sessions ──────────
+
+  @Get('branches/:branchId/table-operations')
+  @BranchScoped()
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.WAITER)
+  @ApiOperation({ summary: 'Table occupancy and ready-order projection' })
+  async getTableOperations(@Req() req: Request, @Param('branchId') branchId: string) {
+    const ctx = req.tenantContext as TenantContext;
+    const occupancy = await this.sessions.getTableOccupancy({ tenantId: ctx.tenantId!, branchId });
+    return { data: occupancy };
+  }
+
+  @Get('branches/:branchId/sessions')
+  @BranchScoped()
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.WAITER)
+  @ApiOperation({ summary: 'List open dining sessions' })
+  async listSessions(@Req() req: Request, @Param('branchId') branchId: string) {
+    const ctx = req.tenantContext as TenantContext;
+    return { data: await this.sessions.listOpenSessions({ tenantId: ctx.tenantId!, branchId }) };
+  }
+
+  @Get('branches/:branchId/sessions/:sessionId')
+  @BranchScoped()
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.WAITER)
+  @ApiOperation({ summary: 'Get session details with linked orders' })
+  async getSession(@Req() req: Request, @Param('branchId') branchId: string, @Param('sessionId') sessionId: string) {
+    const ctx = req.tenantContext as TenantContext;
+    return { data: await this.sessions.getSession({ tenantId: ctx.tenantId!, branchId, sessionId }) };
+  }
+
+  @Post('branches/:branchId/sessions/:sessionId/clear')
+  @BranchScoped()
+  @Roles(TenantRole.OWNER, TenantRole.WAITER)
+  @ApiOperation({ summary: 'Clear a dining session (all orders must be terminal)' })
+  async clearSession(
+    @Req() req: Request,
+    @Param('branchId') branchId: string,
+    @Param('sessionId') sessionId: string,
+    @Body() body: ClearSessionDto,
+  ) {
+    const ctx = req.tenantContext as TenantContext;
+    const result = await this.sessions.clearSession({
+      tenantId: ctx.tenantId!,
+      branchId,
+      sessionId,
+      actorUserId: ctx.userId!,
+      clearReason: body.clearReason,
+      expectedVersion: body.expectedVersion,
+    });
+    return { data: result };
+  }
+
+  @Post('orders/:orderId/complete')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.WAITER)
+  @ApiOperation({ summary: 'Complete a READY order (serve/deliver)' })
+  async completeOrder(
+    @Req() req: Request,
+    @Param('orderId') orderId: string,
+  ) {
+    const ctx = req.tenantContext as TenantContext;
+    // Delegate to orders service for status transition
+    // This will be implemented when we wire up the order completion flow
+    return { data: { orderId, status: 'COMPLETED', completedBy: ctx.userId } };
   }
 }

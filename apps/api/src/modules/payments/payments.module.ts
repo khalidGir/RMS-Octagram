@@ -7,11 +7,12 @@ import { PublicPaymentsController } from './public-payments.controller';
 import { PaymentsController } from './payments.controller';
 import { OrdersModule } from '../orders/orders.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { TablesModule } from '../tables/tables.module';
 import { ProofStorage } from './proof-storage.interface';
 import { FeaturesModule } from '../features/features.module';
 
 @Module({
-  imports: [OrdersModule, FeaturesModule, InventoryModule],
+  imports: [OrdersModule, FeaturesModule, InventoryModule, TablesModule],
   providers: [
     S3UploadService,
     { provide: ProofStorage, useClass: AwsProofStorage },

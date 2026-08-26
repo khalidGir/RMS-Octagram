@@ -101,6 +101,7 @@ model Branch {
   tenantId        String
   name            String         @db.VarChar(200)
   slug            String
+  publicSlug      String?        // globally unique, customer-facing URL slug
   phone           String?
   addressJson     Json?
   timezone        String         @default("Africa/Addis_Ababa")
@@ -127,6 +128,7 @@ model Branch {
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
+  @@unique([publicSlug])
   @@index([tenantId])
 }
 
@@ -398,10 +400,13 @@ model DiningSession {
   branchId        String
   tableId         String
   status          String    @default("OPEN")
+  version         Int       @default(1)
   guestCount      Int?
   openedAt        DateTime  @default(now())
   closedAt        DateTime?
   openedByUserId  String?
+  clearedByUserId String?
+  clearReason     String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -409,6 +414,7 @@ model DiningSession {
   orders          Order[]
 
   @@index([tenantId, branchId])
+  @@index([tableId, status])
 }
 
 // ─── Orders ────────────────────────────────

@@ -75,3 +75,22 @@ export class RotateQrTokenDto {
   @IsOptional()
   reason?: string;
 }
+
+export class ClearSessionDto {
+  @ApiProperty({ description: 'Expected version for optimistic locking' })
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @ApiPropertyOptional({ example: 'Guests have left' })
+  @IsString()
+  @IsOptional()
+  clearReason?: string;
+}
+
+export class CompleteOrderDto {
+  @ApiPropertyOptional({ example: 'Served to table' })
+  @IsString()
+  @IsOptional()
+  notes?: string;
+}

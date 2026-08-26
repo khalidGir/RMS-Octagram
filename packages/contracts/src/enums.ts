@@ -107,6 +107,17 @@ export enum RoundingMode {
   DOWN = 'DOWN',
 }
 
+export enum DiningSessionStatus {
+  OPEN = 'OPEN',
+  CLEARED = 'CLEARED',
+}
+
+export const PUBLIC_CONTEXT_ERRORS = {
+  PUBLIC_CONTEXT_ORDER_TYPE_DENIED: 'PUBLIC_CONTEXT_ORDER_TYPE_DENIED',
+  PUBLIC_CONTEXT_PAYMENT_METHOD_DENIED: 'PUBLIC_CONTEXT_PAYMENT_METHOD_DENIED',
+  TABLE_SESSION_NOT_CLEARABLE: 'TABLE_SESSION_NOT_CLEARABLE',
+} as const;
+
 export const CURRENCY = 'ETB' as const;
 export const DEFAULT_TIMEZONE = 'Africa/Addis_Ababa' as const;
 
