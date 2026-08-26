@@ -255,3 +255,111 @@ Common report parameters: `branchId`, `fromLocalDate`, `toLocalDate`, `timezone`
 - OpenAPI examples use ETB integer amounts.
 - API integration tests cover happy path, invalid transition, stale version, duplicate idempotency key, cross-branch access, and cross-tenant access.
 
+## 15. Product v0.2 Contract Amendments
+
+The following routes and rules supersede conflicting role or public-context examples above. Final names are reflected in generated OpenAPI before frontend integration.
+
+### Localization and public entry
+
+| Method | Path | Context | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/public/restaurants/:publicSlug` | Public | Safe active restaurant/branch identity, locale availability and pickup policy. |
+| `GET` | `/public/restaurants/:publicSlug/menu` | Public | Pickup-only localized menu and bank/Telebirr methods. |
+| `POST` | `/public/table-context/resolve` | QR token body | Safe table identity, localized menu context and configured dine-in/takeaway methods. |
+| `PUT` | `/me/preferences/locale` | Staff | Persist `en`, `am`, or `ar`. |
+
+Public responses accept `Accept-Language` or explicit validated locale and return `contentLocale` plus fallback metadata where translated restaurant content is incomplete.
+
+### Route-bound order creation
+
+Separate commands prevent a client from manufacturing entry context:
+
+| Method | Path | Allowed choices |
+| :--- | :--- | :--- |
+| `POST` | `/public/table-orders` | Verified QR token; DINE_IN or TAKEAWAY; configured cash/bank/Telebirr. |
+| `POST` | `/public/pickup-orders` | Verified public slug/branch resolver; PICKUP; bank/Telebirr only. |
+
+Both require `Idempotency-Key` and return immutable subtotal, VAT rate/amount, total, instruction snapshot identifier and tracking token exactly once. Public pickup rejects cash even when a crafted request includes it.
+
+### VAT configuration
+
+| Method | Path | Role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/tenants/current/tax-configurations` | Owner | Current/history VAT configuration. |
+| `POST` | `/tenants/current/tax-configurations` | Owner | Add future/current version with confirmation metadata. |
+| `GET` | `/branches/:branchId/checkout-policy` | Scoped staff | Effective tax/payment/day-boundary policy. |
+
+Money fields are decimal strings for transport where BigInt applies. Rate fields use decimal strings, never binary floats. Service charge is absent from public configuration and always zero in legacy stored fields.
+
+### Owner-only transfer review
+
+`GET /branches/:branchId/payments`, proof access, approve and reject operations for `BANK_TRANSFER` or `TELEBIRR` require Owner. Manager/Cashier/Super Admin receive scope-safe denial. Rejection requires a reason; public tracking receives localized safe status rather than the internal note.
+
+### Cashier shifts
+
+| Method | Path | Role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/branches/:branchId/shifts/current` | Cashier/Owner | Current actor shift. |
+| `POST` | `/branches/:branchId/shifts` | Cashier/Owner | Open one shift; idempotent. |
+| `GET` | `/branches/:branchId/shifts` | Owner/Manager read policy | Paginated scoped history. |
+| `GET` | `/shifts/:shiftId` | Owner/own Cashier | Shift details/current calculated summary. |
+| `POST` | `/shifts/:shiftId/close` | Owner/own Cashier | Close with counted cash and variance reason; idempotent/versioned. |
+| `GET` | `/shifts/:shiftId/report` | Owner/own Cashier | Immutable printable report data. |
+
+Cash confirmation endpoints derive the active shift from server membership/branch context and reject `SHIFT_REQUIRED` when absent. Clients cannot submit arbitrary shift IDs to reattribute payment.
+
+### Table sessions and waiter operations
+
+| Method | Path | Role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/branches/:branchId/table-operations` | Owner/Manager/Cashier/Waiter policy | Safe occupancy and Ready-order projection. |
+| `GET` | `/sessions/:sessionId` | Scoped staff | Session and terminal eligibility. |
+| `POST` | `/sessions/:sessionId/clear` | Owner/Waiter | Clear after all linked orders terminal; versioned/idempotent. |
+| `POST` | `/orders/:orderId/complete` | Owner/Manager/Cashier/Waiter | Complete Ready order under role policy. |
+
+Scanning a QR or creating a draft never opens a session. Session assignment occurs transactionally when the first dine-in order is confirmed.
+
+### Business-day close
+
+| Method | Path | Role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/branches/:branchId/business-days/:localDate/preview` | Owner | Exact current totals, blockers and exception items. |
+| `POST` | `/branches/:branchId/business-days/:localDate/close` | Owner | Normal or exception close with expected version/reason. |
+| `GET` | `/branches/:branchId/business-days/:localDate` | Owner | Immutable close snapshot/history. |
+| `POST` | `/business-days/:closeId/reopen` | Owner | Reopen with mandatory reason; audited/versioned. |
+| `GET` | `/business-days/:closeId/report` | Owner | Printable/downloadable snapshot data. |
+
+Normal close returns a stable business error listing blocker counts/links when shifts or pending payments remain. Pending totals are excluded from recognized income.
+
+### Super-admin menu support context
+
+| Method | Path | Role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/platform/support-contexts` | Super Admin | Enter selected tenant menu-support mode with reason and short expiry. |
+| `GET` | `/platform/support-contexts/current` | Super Admin | Current target and expiry. |
+| `DELETE` | `/platform/support-contexts/:contextId` | Super Admin | Explicitly leave/revoke context. |
+| catalog routes | Existing catalog mutations | Super Admin with active context | Menu-only operations against selected tenant. |
+
+Support context is carried in a secure server-validated session/header binding and cannot authorize other tenant modules. Operational routes reject it even when a valid tenant ID is known.
+
+### Customer tracking and real-time
+
+- Tracking remains available through opaque token reads.
+- If token-scoped WebSocket/SSE is implemented, authentication uses the tracking token only for that order and emits invalidation/status data without proof or private customer fields.
+- Polling fallback is 20-30 seconds with backoff/jitter and authoritative refetch after reconnect.
+- Staff mutation endpoints return no optimistic success when server acknowledgement is unavailable.
+
+### New stable errors
+
+- `PUBLIC_CONTEXT_ORDER_TYPE_DENIED`
+- `PUBLIC_CONTEXT_PAYMENT_METHOD_DENIED`
+- `SHIFT_REQUIRED`
+- `SHIFT_ALREADY_OPEN`
+- `SHIFT_VARIANCE_REASON_REQUIRED`
+- `TABLE_SESSION_NOT_CLEARABLE`
+- `BUSINESS_DAY_BLOCKED`
+- `BUSINESS_DAY_ALREADY_CLOSED`
+- `SUPPORT_CONTEXT_REQUIRED`
+- `SUPPORT_OPERATION_DENIED`
+- `TRANSLATION_FALLBACK_USED` is metadata, not an error.
+

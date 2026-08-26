@@ -1,72 +1,174 @@
-# Product Requirements Document (PRD)
+# Product Requirements Document: Octagram OS Restaurant Pilot
 
-**Project Name:** All-in-One Restaurant Management & POS System  
-**Document Version:** 1.0  
-**Target Delivery Window:** MVP (4-6 Weeks)
+**Version:** 2.0 reconciliation baseline
 
----
+**Status:** Approved for implementation; external tax/privacy/translation approvals remain launch gates
 
-## 1. Executive Summary & Vision
+**Market:** Addis Ababa, Ethiopia
+**Platforms:** Customer web; installable staff/owner PWA; desktop-capable platform administration
 
-The objective of this platform is to provide a flexible, multi-tenant SaaS solution for restaurant management and point-of-sale (POS) operations. Designed to accommodate various service models (dine-in, takeout, and pickup), the platform features customizable module toggles that allow restaurant owners to tailor functionality to their operational needs.
+## 1. Product objective
 
----
+Provide one auditable operational flow from customer order through payment confirmation, kitchen preparation, serving, inventory posting, shift reconciliation and business-day close. The pilot must work without payment gateways, OCR, delivery, reservations, fiscal hardware or offline financial mutations.
 
-## 2. User Roles & Access Control
+## 2. Users
 
-| Role | Access & Key Responsibilities |
-| :--- | :--- |
-| **Super Admin** | Platform-level management; multi-tenant provisioning; toggling tenant modules on or off. |
-| **Owner / Manager** | Restaurant-level oversight; menu management; inventory and batch configuration; analytics dashboard. |
-| **Cashier** | POS interface; order intake; payment processing (cash, manual transfer, and card); order status routing. |
-| **Kitchen Staff** | Kitchen Display System (KDS); order queue handling; status updates (In Progress, Ready, and Completed). |
-| **Customer** | Table QR or remote digital ordering interface; order tracking; optional payment gateway checkout. |
+- **Customer:** Accountless table-QR or public pickup ordering and secret-token tracking.
+- **Owner:** Restaurant configuration, transfer verification, staff, inventory, all branches, shifts, day close and reports.
+- **Manager:** Assigned-branch catalog, operations, inventory, staff scope and reports; no transfer verification or day-close authority.
+- **Cashier:** POS, own active shift, cash confirmation and Ready-order completion.
+- **Kitchen Staff:** Confirmed-ticket queue and Preparing/Ready transitions.
+- **Waiter:** Ready-order completion and eligible physical-table clearance.
+- **Super Admin:** Tenant provisioning, entitlements and explicit audited menu-only support mode.
 
----
+Exact capabilities are normative in `RBAC.md`.
 
-## 3. Key Feature Modules & Requirements
+## 3. Customer entry and ordering
 
-### 3.1 Session & Ordering Management
+### Table QR
 
-- **Dine-In Session Tracking:**
-  - Table-specific QR codes act as unique session IDs.
-  - Allows table-linked ordering and bill splitting or merging.
-  - The session persists until the order is settled and closed.
-- **Remote / Pickup Orders:**
-  - A dedicated ordering flow requires customer contact details and a selected pickup time slot.
-- **Cashier POS Interface:**
-  - Supports direct order creation, order editing, and manual payment verification for cash and wire transfers.
+- `/o/{token}` resolves active tenant, branch and physical table server-side.
+- Shows restaurant and `Table {label}` context.
+- Offers configured dine-in or takeaway.
+- Offers configured cash, bank transfer or Telebirr.
+- Scanning or creating a draft never marks a table occupied.
 
-### 3.2 Kitchen Display System (KDS) & Workflow
+### Public restaurant link
 
-- **Order Routing:** Routes confirmed orders to the kitchen display in real time.
-- **Status Pipeline:** `Confirmed` -> `In Progress` -> `Ready` -> `Completed`.
-- **Queue Optimization:** Displays the estimated preparation time for each order, with bump and recall capabilities for order management.
-- **Status Updates:** Provides real-time feedback to customer and POS interfaces when an order's status changes.
+- `/r/{publicSlug}` resolves an active restaurant/branch without exposing internal IDs.
+- Offers pickup pre-order only.
+- Never offers table selection, dine-in, cash, delivery or reservation.
+- Requires bank transfer or Telebirr proof before Owner verification and kitchen release.
 
-### 3.3 Inventory & Batch Management
+### Cart and checkout
 
-- **Batch Portioning Model:**
-  - Bulk inventory (for example, 20 kg of meat) is registered as pre-portioned units (for example, 70 burger portions).
-- **Automated Deduction:**
-  - Successful order confirmations automatically deduct mapped batch portions from inventory.
-- **Threshold Alerts:**
-  - Managers can configure low-stock alert thresholds.
+- Active branch menu, variants and modifiers are server authoritative.
+- Customer may add bounded fulfillment notes.
+- Server returns net/pre-VAT subtotal, configured VAT and Total payable in ETB.
+- Service charge is zero and not shown.
+- Client creates/reuses one idempotency key across retries.
+- Customer accounts and loyalty-phone collection are absent from the pilot.
 
-### 3.4 Analytics & Reporting (MVP Scope)
+## 4. Payments
 
-- Daily and date-range total revenue tracking.
-- Best-selling menu item and sales-volume analysis.
-- Peak operational hours tracking.
-- Inventory depletion and consumption logs.
+- Methods are Cash, Bank Transfer and Telebirr for the pilot.
+- Transfer instructions are restaurant configured and snapshotted with order total/VAT.
+- Proof accepts private JPEG/PNG/WebP up to 5 MB with checksum, content validation and scanning.
+- Proof never confirms payment automatically.
+- Only Owner verifies/rejects bank/Telebirr proof against the external account.
+- Cashier or Owner confirms cash only inside their active shift.
+- Successful confirmation atomically records payment/order state, inventory deduction, table session when applicable, audit and outbox events.
+- Rejection never creates kitchen tickets or inventory deductions.
 
----
+## 5. Kitchen, waiter and table sessions
 
-## 4. Multi-Tenant Modularity Framework
+- Only Confirmed orders reach KDS.
+- Kitchen moves Confirmed/Queued -> Preparing -> Ready.
+- Waiter, Cashier, Manager policy or Owner may complete a Ready order according to RBAC.
+- First confirmed dine-in order opens or joins one active session for its table.
+- A table remains Occupied after food completion.
+- Waiter or Owner selects `Clear table` only after all linked orders are terminal and guests have left.
+- Session open/join/clear is concurrency safe and auditable.
 
-To support different restaurant operating models, the Super Admin can toggle individual system modules for each tenant:
+## 6. Cashier shifts
 
-- Payment Gateway Integration (ON / OFF)
-- Self-Service Table QR Ordering (ON / OFF)
-- Kitchen Display System (ON / OFF)
-- Batch Inventory Tracking (ON / OFF)
+- One active shift per cashier/branch.
+- Optional opening cash.
+- Cash confirmation is attributed immutably to the current shift.
+- Close calculates approved cash, expected drawer, counted cash and variance.
+- Non-zero variance requires a reason.
+- Closing produces an immutable printable/downloadable shift report.
+- Later cash confirmations require a new shift.
+
+## 7. Owner business-day close
+
+- Branch uses configured timezone and local business-day cutoff.
+- Preview includes open/closed shifts; expected/counted cash and variance; approved bank/Telebirr; recognized sales; rejected/cancelled/pending orders; inventory exceptions.
+- Normal close is blocked by open shifts or pending payment/cash orders.
+- Owner may close with documented exception; excluded items/totals remain visible.
+- Close stores an immutable snapshot.
+- Reopen requires Owner reason and audit history; it does not erase prior snapshot.
+
+## 8. Catalog, VAT and inventory
+
+- Owner/Manager manages categories, items, variants, modifiers, branch availability and recipes.
+- Menu content supports English, Amharic and Arabic values with deterministic fallback.
+- Tenant/branch VAT applicability/rate is versioned and confirmed during onboarding; no rate is hard-coded.
+- Historical orders retain names, prices, tax and instruction snapshots.
+- Recipe inventory deducts synchronously at confirmation and restores exact original batches on approved void.
+- Strict non-negative stock is the pilot policy.
+- Low-stock alerts trigger at or below configured threshold.
+
+## 9. Platform entitlements and support
+
+- Super Admin controls tenant feature entitlements; Owner controls permitted tenant/branch configuration.
+- Disabling a feature blocks operations without deleting historical data.
+- Super-admin menu assistance requires short-lived support mode with selected tenant and reason.
+- Support mode permits menu/category/variant/modifier operations only.
+- It cannot access payments, proofs, customers, orders, inventory, reports or staff.
+- Every support mutation records actor, tenant, context reason and before/after values.
+
+## 10. Localization and accessibility
+
+- Required locales: English (`en`), Amharic (`am`) and Arabic (`ar`).
+- English is fallback; Arabic uses RTL; English/Amharic use LTR.
+- Domain/error codes remain stable and locale independent.
+- Critical copy, validation, accessibility labels and printable reports are localized.
+- Touch targets are at least 44 by 44 CSS pixels; keyboard/focus and non-color state cues are required.
+- Native-speaker approval is required before production.
+
+## 11. Connectivity and tracking
+
+- Customer tracks through an opaque order token.
+- Staff real-time connections are authenticated and tenant/branch/role scoped.
+- Customer updates are order-token scoped or use 20-30 second polling fallback.
+- Clients display persistent reconnecting/stale state and refetch authoritative state.
+- Staff financial/order/inventory mutations are never silently queued offline.
+- Under normal pilot connectivity, at least 95% of relevant state events should appear within three seconds.
+
+## 12. Privacy and security
+
+- Every tenant/branch read and write is server scoped; user-supplied tenant identity is never trusted.
+- Proof is private, access-audited and served through short-lived authorization.
+- Tokens, proofs, account values and phone numbers never enter logs/analytics.
+- Proof retention/deletion and hosting obligations require approved policy before production data.
+- Loyalty phone storage remains disabled until separately approved.
+- Payment, inventory, shift and day-close mutations are versioned/idempotent where applicable and transactionally consistent.
+
+## 13. Reporting
+
+- Revenue from approved payments only, by date/branch/method.
+- Order count, average value, cancellations and voids.
+- Best sellers, peak local hours and inventory consumption.
+- Shift and business-day snapshots remain operational records distinct from live analytics.
+- Money serializes exactly; branch-local boundaries convert explicitly to UTC.
+
+## 14. Explicit exclusions
+
+- Payment gateway/provider API, OCR and automatic verification.
+- Delivery, reservations, promotions/coupons and loyalty rewards.
+- Fiscal printing, accounting integration, procurement and cross-branch stock transfer.
+- Native mobile apps and offline financial/order mutation sync.
+- Negative-stock override during the pilot.
+
+## 15. Success and release gates
+
+- At least 95% of confirmed orders appear to authorized kitchen views within three seconds under normal pilot connectivity.
+- Duplicate confirmed orders/payments/inventory postings from retry: zero.
+- Cross-tenant data incidents: zero.
+- Every operated cash shift closes with an immutable report.
+- Day-close totals reconcile to controlled fixtures and pilot ground truth.
+- Backup/restore, clean migrations, security hardening, OpenAPI freeze and critical Playwright journeys pass.
+- `UX_ACCEPTANCE_CHECKLIST.md` and `REQUIREMENTS_TRACEABILITY.md` have no unresolved launch-blocking item.
+
+## 16. Supporting normative documents
+
+- `PRODUCT_V0_2_DECISIONS.md`
+- `PRODUCT_V0_2_RECONCILIATION.md`
+- `RBAC.md`
+- `WORKFLOWS.md`
+- `DATABASE_SCHEMA.md`
+- `API_SPEC.md`
+- `IMPLEMENTATION_PLAN.md`
+- `UX_ACCEPTANCE_CHECKLIST.md`
+- `REQUIREMENTS_TRACEABILITY.md`
