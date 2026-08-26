@@ -38,6 +38,7 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
   let tenantId: string;
   let branchId: string;
   let tableId: string;
+  let shiftId: string;
   let qrTokenRaw: string;
   let publicSlug: string;
 
@@ -99,6 +100,15 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
     });
     await prisma.branchAssignment.create({ data: { tenantId, branchId, membershipId: om.id } });
     ownerToken = await login(app, ownerEmail);
+
+    // Open a cash shift for the owner (required by confirmCashPayment)
+    const shiftRes = await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/shifts/open`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-tenant-id', tenantId)
+      .send({ openingCashMinor: 10000 });
+    expect(shiftRes.status).toBe(201);
+    shiftId = shiftRes.body.data.id;
 
     // Create waiter
     const waiter = await prisma.user.create({

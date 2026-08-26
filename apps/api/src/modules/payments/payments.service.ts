@@ -17,6 +17,8 @@ import { FeatureResolver } from '../features/feature-resolver.service';
 import { InventoryDeductionService } from '../inventory/inventory-deduction.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { DiningSessionService } from '../tables/dining-session.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { CashShiftService } from '../shifts/cash-shift.service';
 import { generatePaymentToken, hashPaymentToken } from './payment-token.util';
 import { FeatureKey } from '@rms/contracts';
 
@@ -35,6 +37,7 @@ export class PaymentService {
     @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
     @Inject(InventoryDeductionService) private readonly deductionService: InventoryDeductionService,
     @Inject(DiningSessionService) private readonly sessionService: DiningSessionService,
+    @Inject(CashShiftService) private readonly shiftService: CashShiftService,
   ) {}
 
   /**
@@ -786,7 +789,17 @@ export class PaymentService {
     const now = new Date();
     const orderLines = payment.order.lines;
 
+    // Validate active shift exists for cash confirmation
+    const { shiftId } = await this.shiftService.requireActiveShift({
+      tenantId,
+      branchId,
+      cashierUserId: actorUserId,
+    });
+
     const result = await this.prisma.$transaction(async (tx) => {
+      // Attribute payment to shift (immutable once set)
+      await this.shiftService.attributePayment({ tx, paymentId, shiftId });
+
       const updatedPayment = await tx.payment.updateMany({
         where: {
           id: paymentId,

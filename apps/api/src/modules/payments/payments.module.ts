@@ -8,11 +8,12 @@ import { PaymentsController } from './payments.controller';
 import { OrdersModule } from '../orders/orders.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { TablesModule } from '../tables/tables.module';
+import { ShiftsModule } from '../shifts/shifts.module';
 import { ProofStorage } from './proof-storage.interface';
 import { FeaturesModule } from '../features/features.module';
 
 @Module({
-  imports: [OrdersModule, FeaturesModule, InventoryModule, TablesModule],
+  imports: [OrdersModule, FeaturesModule, InventoryModule, TablesModule, ShiftsModule],
   providers: [
     S3UploadService,
     { provide: ProofStorage, useClass: AwsProofStorage },

@@ -208,6 +208,12 @@ describe('Inventory Critical Acceptance Scenarios (e2e)', () => {
 
     ownerToken = await login(ownerEmail);
 
+    await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/shifts/open`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-tenant-id', tenantId)
+      .send({ openingCashMinor: 10000 });
+
     category = await prisma.menuCategory.create({
       data: { tenantId, name: 'Food', sortOrder: 0, isActive: true },
     });

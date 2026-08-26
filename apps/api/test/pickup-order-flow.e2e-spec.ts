@@ -130,6 +130,12 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
     cashierToken = await login(app, cashierEmail);
     kitchenToken = await login(app, kitchenEmail);
 
+    await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/shifts/open`)
+      .set('Authorization', `Bearer ${cashierToken}`)
+      .set('x-tenant-id', tenantId)
+      .send({ openingCashMinor: 10000 });
+
     const category = await prisma.menuCategory.create({
       data: { tenantId, name: 'Food', sortOrder: 0, isActive: true },
     });

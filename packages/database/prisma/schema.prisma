@@ -125,6 +125,8 @@ model Branch {
   orderCounter     BranchOrderCounter?
   stationCounters  StationTicketCounter[]
   taxConfigurations TenantTaxConfiguration[]
+  cashShifts        CashShift[]
+  shiftReports      ShiftReportSnapshot[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
@@ -582,11 +584,13 @@ model Payment {
   version             Int       @default(1)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
+  cashierShiftId      String?
 
   branch              Branch    @relation(fields: [branchId], references: [id])
   order               Order     @relation(fields: [orderId], references: [id])
   proofs              PaymentProof[]
   mediaObjects        MediaObject[]
+  cashierShift        CashShift? @relation(fields: [cashierShiftId], references: [id])
 
   @@index([tenantId, branchId, status, submittedAt])
   @@index([tenantId, branchId, orderId])
@@ -935,4 +939,57 @@ model MenuItemTranslation {
 
   @@unique([tenantId, menuItemId, locale])
   @@index([tenantId, menuItemId])
+}
+
+model CashShift {
+  id                String    @id @default(uuid())
+  tenantId          String
+  branchId          String
+  cashierUserId     String
+  status            String    @default("OPEN")
+  openingCashMinor  BigInt    @default(0)
+  expectedCashMinor BigInt?
+  countedCashMinor  BigInt?
+  varianceMinor     BigInt?
+  varianceReason    String?   @db.VarChar(255)
+  openedAt          DateTime  @default(now())
+  closedAt          DateTime?
+  closedByUserId    String?
+  version           Int       @default(1)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  branch            Branch    @relation(fields: [branchId], references: [id])
+  payments          Payment[]
+
+  @@index([tenantId, branchId])
+  @@index([tenantId, branchId, cashierUserId])
+}
+
+model ShiftReportSnapshot {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  branchId             String
+  cashShiftId          String   @unique
+  openingCashMinor     BigInt
+  approvedCashMinor    BigInt   @default(0)
+  expectedCashMinor    BigInt
+  countedCashMinor     BigInt
+  varianceMinor        BigInt
+  varianceReason       String?  @db.VarChar(255)
+  orderCount           Int      @default(0)
+  paymentCount         Int      @default(0)
+  cancellationCount    Int      @default(0)
+  voidCount            Int      @default(0)
+  localOpenedAt        DateTime
+  localClosedAt        DateTime
+  localBusinessDate    DateTime @db.Date
+  openedByUserId       String
+  closedByUserId       String
+  createdAt            DateTime @default(now())
+
+  branch               Branch   @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId, branchId])
+  @@index([tenantId, branchId, localBusinessDate])
 }
