@@ -174,3 +174,90 @@ For the earliest MVP increment, restrict split/merge to unpaid, unconfirmed orde
 - On `409 Conflict`, refetch the authoritative resource and explain that another staff member changed it.
 - On expired customer tracking access, do not reveal whether another order exists.
 - Provide retry actions for safe failures and avoid duplicate financial actions through idempotency.
+
+## 12. Product v0.2 Ordering Contexts
+
+### 12.1 Table QR
+
+1. Customer opens `/o/{token}`; server resolves active tenant, branch and table.
+2. UI identifies `Table {label}` and offers configured DINE_IN or TAKEAWAY.
+3. Customer may choose cash, bank transfer or Telebirr according to effective feature/payment configuration.
+4. Scanning and draft creation do not change table occupancy.
+5. Cash submission waits for cashier confirmation during an active shift; transfer waits for Owner verification.
+6. First successful dine-in confirmation atomically opens or joins the one active table session.
+7. Kitchen receives the confirmed order; completion does not clear the session.
+8. Waiter/Owner clears after guests leave and all session orders are terminal.
+
+### 12.2 Public pickup
+
+1. Customer opens `/r/{publicSlug}`; server resolves an active restaurant/branch.
+2. UI identifies `Pickup pre-order`; no table, dine-in, delivery or reservation action exists.
+3. Customer selects a pickup slot and pays by bank transfer or Telebirr with proof.
+4. Cash is rejected at UI and API boundaries.
+5. Owner verifies against the external account; only then does the order reach kitchen.
+6. Tracking shows pending review, confirmed, preparing, ready and completed states.
+
+## 13. Product v0.2 Transfer Review
+
+1. Customer selects explicit bank transfer or Telebirr instructions and receives exact subtotal/VAT/total.
+2. Order/payment snapshots retain the instruction version and tax calculation.
+3. Customer uploads a private scanned image.
+4. Owner-only queue shows method, order, total, age, instruction snapshot and expiring proof access.
+5. Owner checks the real external account; screenshot alone is never represented as proof of settlement.
+6. Verify atomically approves payment, confirms order, posts inventory once, opens/joins a dine-in session when applicable, audits and writes outbox events.
+7. Reject requires an internal reason and produces safe localized tracking copy.
+8. Manager, Cashier, Waiter, Kitchen and Super Admin direct calls are denied.
+
+## 14. Cashier Shift
+
+1. Cashier selects assigned branch and opens a shift with optional opening cash.
+2. Database enforces one active shift for that cashier/branch.
+3. Cash confirmation derives and snapshots the active shift; the client cannot choose another shift.
+4. Shift view calculates approved cash orders, expected drawer, cancellations/void metadata and elapsed time.
+5. Cashier enters counted cash at close.
+6. Non-zero variance requires a reason; close is versioned/idempotent.
+7. Close persists an immutable report and prevents later cash attribution.
+8. Further cash confirmation requires a new shift.
+
+Failure behavior:
+
+- No active shift: cash confirmation remains unchanged and returns `SHIFT_REQUIRED`.
+- Concurrent close/payment: transaction/locking produces one authoritative result without losing payment attribution.
+- Stale close: return conflict and refreshed summary.
+
+## 15. Business-Day Close
+
+1. Owner opens the branch-local business date preview using configured timezone/cutoff.
+2. Preview shows open/closed shifts, cash expected/counted/variance, approved bank/Telebirr, recognized sales, rejected/cancelled/pending and inventory exceptions.
+3. Normal close is blocked by open shifts or pending payment/cash orders and links to them.
+4. Owner resolves blockers or selects close-with-exception.
+5. Exception close lists excluded records/totals and requires a reason.
+6. Close stores an immutable snapshot with effective UTC/local boundaries.
+7. Reopen requires Owner reason and appends audit/history; prior snapshot is preserved.
+
+## 16. Waiter and Table Clearance
+
+1. Waiter opens assigned-branch Ready/table projection.
+2. Waiter completes/serves a Ready order.
+3. Table remains Occupied while its session is open.
+4. `Clear table` appears only when every linked order is completed/cancelled.
+5. Confirmation reminds staff to act only after guests physically leave.
+6. Clear closes the session, records actor/time and emits a scoped invalidation.
+
+## 17. Super-Admin Menu Support
+
+1. Super Admin selects an active tenant, provides reason and enters short-lived support context.
+2. UI displays persistent `Editing menu for {Restaurant}` banner.
+3. Only catalog/category/variant/modifier reads and mutations are exposed.
+4. Server binds every mutation to the selected tenant/context and records before/after audit.
+5. Payments, proof, customers, orders, inventory, reports and staff routes deny the support context.
+6. Exit/revocation/expiry clears the target and requires re-entry for further edits.
+
+## 18. Localization Workflow
+
+1. Public user selects English, Amharic or Arabic; preference persists locally.
+2. Staff preference persists on their account.
+3. Content resolves requested locale, then tenant default, English and base value.
+4. Arabic switches document direction to RTL while numeric/account/token fragments remain readable.
+5. Server domain values remain locale independent; API returns stable codes and the frontend localizes them.
+6. Printable shift/day reports use requested locale but preserve exact ETB values and timestamps.

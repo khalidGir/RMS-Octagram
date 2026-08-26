@@ -98,39 +98,19 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 
 ### Phase 4A - Manual Transfer Payment Flow (Days 19-24)
 
-#### Deliverables
-
-- Branch payment instruction CRUD (staff management and public read).
-- Presigned private S3 upload with upload-intent lifecycle (PENDING_UPLOAD → PENDING_SCAN → CLEAN).
-- Customer payment submission with server-derived context from opaque tokens.
-- Payment token with 24-hour expiry, terminal-state invalidation, and one-active-per-order constraint.
-- Cashier review queue with protected proof access (CLEAN-only read URLs).
-- Payment finalize atomically: claim upload intent, create proof, retire previous, transition status, audit, outbox.
-
-#### Exit criteria
-
-- Customer creates order, retrieves payment instructions, uploads proof, and sees PENDING_VERIFICATION.
-- Cashier sees pending review queue with order summary.
-- Unauthorized users cannot view proof images.
-- Expired payment tokens and upload intents are rejected.
-- Concurrent proof finalization produces exactly one current proof.
-- Cross-tenant and cross-branch access is denied.
-- Unit and E2E tests cover all 12 security/consistency scenarios.
-
-### Phase 4B - Payment Approval and KDS (Days 25-28)
-
-#### Deliverables
-
-- Cashier/Manager payment approval and rejection with idempotency.
-- Transactional order confirmation on payment approval.
+- Branch payment instructions.
+- Presigned private S3 upload/finalization.
+- Owner review queue with proof viewer, approval, and rejection.
+- Transactional payment approval and order confirmation.
 - Kitchen stations, tickets, queue, bump/ready/complete/recall.
 - WebSocket branch/station rooms and polling fallback.
 - Transactional outbox publisher for order.confirmed and ticket events.
 
 #### Exit criteria
 
-- Cashier approval confirms exactly once and creates KDS ticket(s).
-- Rejection notifies customer and allows resubmission.
+- Customer uploads proof and sees pending review.
+- Owner transfer approval confirms exactly once and creates KDS ticket(s).
+- Unauthorized users cannot view proof.
 - KDS reconnects and reconciles without losing or duplicating tickets.
 
 ## 8. Phase 5 - Inventory and Reporting (Days 25-29)
@@ -149,7 +129,63 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 - Duplicate confirmation does not duplicate deductions.
 - Reports reconcile to approved payments/orders for fixture datasets.
 
-## 9. Phase 6 - PWA, Hardening, and Launch (Days 30-35)
+## 9. Product v0.2 Reconciliation Gate
+
+The original Phase 0-5 backend baseline is implemented and verified at checkpoint `9b721e8` with 503 tests. The pilot-owner/cofounder v0.2 requirements add operational scope that must be completed before final frontend integration and launch hardening. Follow `PRODUCT_V0_2_RECONCILIATION.md` and `REQUIREMENTS_TRACEABILITY.md`; do not rebuild completed modules.
+
+### Phase 6A - Contracts, VAT, localization, and permissions
+
+- Add Waiter role and owner-only transfer-review policy.
+- Add explicit bank transfer/Telebirr methods with backward-compatible migration.
+- Add versioned tenant VAT configuration and immutable checkout/order snapshots.
+- Fix service charge at zero and remove it from configuration/UI contracts.
+- Add `en`, `am`, `ar` locale contracts and localized catalog fallback.
+
+Exit: exact VAT fixtures, historical snapshot, role migration, RTL/locale contract and clean migration tests pass.
+
+### Phase 6B - Public context and table sessions
+
+- Add public restaurant slug resolver and pickup-only route rules.
+- Enforce bank/Telebirr-only public pickup and configured table-QR choices.
+- Open/join one active session on confirmed dine-in order.
+- Add occupied projection and Waiter/Owner clear workflow.
+
+Exit: crafted requests cannot bypass context; concurrency produces one session; premature/cross-scope clear is denied.
+
+### Phase 6C - Cashier shifts
+
+- Open/current/close shift endpoints and immutable report.
+- Active shift required for cash confirmation.
+- Exact expected/counted/variance calculation with reason policy.
+- Cash payments snapshot shift attribution.
+
+Exit: exact multi-shift fixture, no-shift denial, concurrency and immutable-report tests pass.
+
+### Phase 6D - Business-day close
+
+- Local business-day cutoff and preview.
+- Blockers, close-with-exception, immutable snapshot and audited reopen.
+- Printable/downloadable report contract.
+
+Exit: multi-shift/method reconciliation, timezone boundary, concurrent close and historical immutability tests pass.
+
+### Phase 6E - Super-admin menu support and tracking
+
+- Explicit short-lived menu-only support context and persistent frontend banner contract.
+- Owner-only transfer-proof visibility remains enforced.
+- Token-scoped customer tracking invalidation/polling and reconnect metrics.
+
+Exit: support escape matrix and customer/staff reconnect tests pass.
+
+### Phase 6F - Product v0.2 frontend surfaces
+
+- Customer, Cashier, Kitchen, Waiter, Owner and Super-admin route groups.
+- English, Amharic and Arabic with RTL and native-copy approval gates.
+- Implement `UX_ACCEPTANCE_CHECKLIST.md` states and Playwright journeys J-01 through J-10.
+
+Exit: accessibility, role, responsive, localization and pilot task tests pass.
+
+## 10. Phase 7 - PWA, Hardening, and Launch
 
 ### Deliverables
 
@@ -168,7 +204,7 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 - Production rollback, backup, and incident contacts are documented.
 - Owner can configure a new branch through the supported workflow.
 
-## 10. Priority Backlog
+## 11. Priority Backlog
 
 ### P0 - Launch blocking
 
@@ -180,14 +216,15 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 - Core inventory deduction.
 - Basic reports and audit logs.
 - PWA tablet usability and production operations.
+- VAT/order snapshots, Waiter/table sessions, Cashier shifts, business-day close and menu-support mode.
+- English, Amharic and Arabic critical-path UX.
 
 ### P1 - Include if capacity permits
 
 - Unpaid/unconfirmed order split and merge.
 - Catalog images.
-- More detailed shift-level cashier reports.
 - Customer status notifications beyond the tracking page.
-- Amharic UI after approved translations.
+- Optional catalog images and non-critical report refinements.
 
 ### P2 - Post-MVP
 
@@ -197,7 +234,7 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 - Refund automation and accounting integration.
 - Loyalty, reservations, delivery, procurement, and stock transfers.
 
-## 11. Testing Plan
+## 12. Testing Plan
 
 ### Unit tests
 
@@ -219,15 +256,20 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 ### End-to-end tests
 
 1. Owner creates branch/menu/table and invites staff.
-2. Customer scans QR, orders, uploads proof, cashier approves, kitchen completes.
+2. Customer scans QR, orders, uploads proof, Owner approves, kitchen completes.
 3. Cashier creates cash POS order and kitchen completes.
 4. Payment rejection and customer resubmission.
 5. Network interruption and KDS recovery.
 6. Cross-tenant/cross-branch access attempts.
 7. Confirmed order void and inventory compensation.
 8. Branch-local report reconciliation.
+9. Table cash order through active shift, KDS, served and explicit table clear.
+10. Public-slug bank/Telebirr pickup with owner-only verification.
+11. Multi-shift close and owner business-day close/exception/reopen.
+12. Super-admin menu support allowlist and escape attempts.
+13. English, Amharic and Arabic critical paths including RTL and reconnecting state.
 
-## 12. Data and Security Review Gates
+## 13. Data and Security Review Gates
 
 Before Phase 3 merge:
 
@@ -250,8 +292,11 @@ Before production:
 - Review AWS IAM for least privilege.
 - Verify staging and production separation.
 - Perform a restore test from RDS backup.
+- Obtain accountant confirmation for VAT applicability/rate/receipt wording.
+- Approve proof retention/deletion and hosting/privacy operations.
+- Obtain native-speaker approval for English, Amharic and Arabic production copy.
 
-## 13. Implementation Order Rules
+## 14. Implementation Order Rules
 
 - Do not begin payment UI before order/payment state contracts exist.
 - Do not build KDS solely around WebSocket messages; implement authoritative queue reads first.
@@ -259,4 +304,7 @@ Before production:
 - Do not introduce microservices or GraphQL during the MVP without an accepted ADR.
 - Do not integrate a payment provider until manual transfer is stable and provider requirements are confirmed.
 - Do not implement offline financial mutations as an incidental service-worker feature.
+- Do not resume final frontend/API integration until Product v0.2 contracts are frozen in OpenAPI.
+- Do not activate loyalty-phone collection without a later accepted privacy decision.
+- Do not allow Manager/Cashier/Super Admin transfer verification in the pilot.
 
