@@ -1,6 +1,7 @@
-import { Controller, Get, Post, Body, Param, Req, HttpCode, HttpStatus, Inject, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Req, HttpCode, HttpStatus, Inject, UseGuards, BadRequestException } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { IsString, IsInt, Min, MaxLength, IsOptional, MinLength } from 'class-validator';
+import { IsString, IsInt, Min, MaxLength, IsOptional, MinLength, registerDecorator } from 'class-validator';
+import type { ValidationOptions } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Roles } from '../auth/types';
 import type { TenantContext } from '../auth/types';
@@ -14,17 +15,47 @@ import { RolesGuard } from '../auth/roles.guard';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { CashShiftService } from './cash-shift.service';
 
+/**
+ * Custom validator: string must be a non-negative decimal integer string.
+ * Allows "0", "12345", but rejects "-1", "1.5", "1e3", "", " 123 ".
+ * Max length 15 digits (max safe minor units for ~9 quadrillion).
+ */
+function IsMinorUnitString(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isMinorUnitString',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: any) {
+          if (typeof value !== 'string') return false;
+          // Must be non-empty, digits only, no leading/trailing spaces
+          if (!/^\d{1,16}$/.test(value)) return false;
+          // Reject leading zeros (except "0" itself)
+          if (value.length > 1 && value.startsWith('0')) return false;
+          return true;
+        },
+        defaultMessage() {
+          return `${propertyName} must be a non-negative integer string (max 15 digits, no decimals, exponents, signs, or leading zeros)`;
+        },
+      },
+    });
+  };
+}
+
 class OpenShiftDto {
-  @ApiProperty({ description: 'Opening cash amount in minor units (cents)' })
-  @IsInt()
-  @Min(0)
-  openingCashMinor!: number;
+  @ApiProperty({ description: 'Opening cash amount in minor units as a decimal string (e.g. "10000")' })
+  @IsString()
+  @IsMinorUnitString()
+  openingCashMinor!: string;
 }
 
 class CloseShiftDto {
-  @ApiProperty({ description: 'Counted cash amount in minor units (cents)' })
-  @IsInt()
-  countedCashMinor!: number;
+  @ApiProperty({ description: 'Counted cash amount in minor units as a decimal string (e.g. "15000")' })
+  @IsString()
+  @IsMinorUnitString()
+  countedCashMinor!: string;
 
   @ApiPropertyOptional({ description: 'Reason for non-zero variance (required if variance != 0)' })
   @IsOptional()
@@ -55,12 +86,17 @@ export class CashShiftController {
     @Body() dto: OpenShiftDto,
   ) {
     const ctx = req.tenantContext as TenantContext;
+    let openingCashMinor: bigint;
+    if (typeof dto.openingCashMinor !== 'string' || !/^\d{1,16}$/.test(dto.openingCashMinor) || (dto.openingCashMinor.length > 1 && dto.openingCashMinor.startsWith('0'))) {
+      throw new BadRequestException('openingCashMinor must be a non-negative integer string (max 16 digits)');
+    }
+    openingCashMinor = BigInt(dto.openingCashMinor);
     return {
       data: await this.shiftService.openShift({
         tenantId: ctx.tenantId!,
         branchId,
         cashierUserId: ctx.userId,
-        openingCashMinor: dto.openingCashMinor,
+        openingCashMinor,
         actorUserId: ctx.userId,
       }),
     };
@@ -93,11 +129,16 @@ export class CashShiftController {
     @Body() dto: CloseShiftDto,
   ) {
     const ctx = req.tenantContext as TenantContext;
+    let countedCashMinor: bigint;
+    if (typeof dto.countedCashMinor !== 'string' || !/^\d{1,16}$/.test(dto.countedCashMinor) || (dto.countedCashMinor.length > 1 && dto.countedCashMinor.startsWith('0'))) {
+      throw new BadRequestException('countedCashMinor must be a non-negative integer string (max 16 digits)');
+    }
+    countedCashMinor = BigInt(dto.countedCashMinor);
     const result = await this.shiftService.closeShift({
       tenantId: ctx.tenantId!,
       branchId,
       shiftId,
-      countedCashMinor: dto.countedCashMinor,
+      countedCashMinor,
       varianceReason: dto.varianceReason,
       expectedVersion: dto.expectedVersion,
       actorUserId: ctx.userId,

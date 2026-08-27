@@ -135,7 +135,7 @@ describe('Public Tracking Response — End-to-End (e2e)', () => {
       .post(`/api/v1/branches/${branchId}/shifts/open`)
       .set('Authorization', `Bearer ${cashierToken}`)
       .set('x-tenant-id', tenantId)
-      .send({ openingCashMinor: 50000 });
+      .send({ openingCashMinor: '50000' });
   });
 
   afterAll(async () => {

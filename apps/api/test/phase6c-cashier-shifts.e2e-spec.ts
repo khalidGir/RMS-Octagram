@@ -30,7 +30,7 @@ async function login(app: any, email: string): Promise<string> {
   return res.body.data.accessToken;
 }
 
-async function openShift(app: any, token: string, tenantId: string, branchId: string, openingCashMinor: number) {
+async function openShift(app: any, token: string, tenantId: string, branchId: string, openingCashMinor: string) {
   return request(app.getHttpServer())
     .post(`/api/v1/branches/${branchId}/shifts/open`)
     .set('Authorization', `Bearer ${token}`)
@@ -38,7 +38,7 @@ async function openShift(app: any, token: string, tenantId: string, branchId: st
     .send({ openingCashMinor });
 }
 
-async function closeShift(app: any, token: string, tenantId: string, branchId: string, shiftId: string, countedCashMinor: number, expectedVersion: number, varianceReason?: string) {
+async function closeShift(app: any, token: string, tenantId: string, branchId: string, shiftId: string, countedCashMinor: string, expectedVersion: number, varianceReason?: string) {
   return request(app.getHttpServer())
     .post(`/api/v1/branches/${branchId}/shifts/${shiftId}/close`)
     .set('Authorization', `Bearer ${token}`)
@@ -63,7 +63,7 @@ async function createCashPayment(app: any, token: string, tenantId: string, bran
   const orderId = orderRes.body.data.order.id;
   const totalMinor = orderRes.body.data.order.totalMinor;
   const payment = await prisma.payment.create({
-    data: { tenantId, branchId, orderId, method: 'CASH', amountMinor: totalMinor, currency: 'ETB', status: 'PENDING' },
+    data: { tenantId, branchId, orderId, method: 'CASH', amountMinor: BigInt(totalMinor), currency: 'ETB', status: 'PENDING' },
   });
   return { orderId, paymentId: payment.id, totalMinor };
 }
@@ -133,6 +133,11 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
     const variant = await prisma.menuItemVariant.create({ data: { tenantId, name: 'Regular', sku: 'BURG-6C', basePriceMinor: 5000n, isActive: true, isDefault: true, menuItem: { connect: { id: item.id } } } });
     variantId = variant.id;
 
+    await prisma.branchMenuItem.create({ data: { tenantId, branchId, menuItemId: item.id, isAvailable: true } });
+
+    const station = await prisma.kitchenStation.create({ data: { tenantId, branchId, name: 'Grill', displayOrder: 0 } });
+    await prisma.menuItemStation.create({ data: { tenantId, branchId, menuItemId: item.id, stationId: station.id } });
+
     await prisma.$executeRaw`INSERT INTO "BranchOrderCounter" ("branchId", "lastNumber", "createdAt", "updatedAt") VALUES (${branchId}, 0, NOW(), NOW()) ON CONFLICT ("branchId") DO NOTHING`;
   });
 
@@ -158,6 +163,8 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
     await prisma.branchAssignment.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.tenantMembership.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.branchMenuItem.deleteMany({ where: { tenantId } }).catch(() => {});
+    await prisma.menuItemStation.deleteMany({ where: { tenantId } }).catch(() => {});
+    await prisma.kitchenStation.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.menuItemVariant.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.menuItem.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.menuCategory.deleteMany({ where: { tenantId } }).catch(() => {});
@@ -169,15 +176,16 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
     await prisma.$disconnect();
   });
 
-  it('1. cashier opens a shift with opening cash', async () => {
-    const res = await openShift(app, cashierToken, tenantId, branchId, 10000);
+  it('1. cashier opens a shift with opening cash (string)', async () => {
+    const res = await openShift(app, cashierToken, tenantId, branchId, '10000');
     expect(res.status).toBe(201);
     expect(res.body.data.status).toBe('OPEN');
-    expect(res.body.data.openingCashMinor).toBe(10000);
+    expect(res.body.data.openingCashMinor).toBe('10000');
+    expect(typeof res.body.data.openingCashMinor).toBe('string');
   });
 
   it('2. cashier cannot open a second shift (conflict)', async () => {
-    const res = await openShift(app, cashierToken, tenantId, branchId, 5000);
+    const res = await openShift(app, cashierToken, tenantId, branchId, '5000');
     expect(res.status).toBe(409);
   });
 
@@ -189,19 +197,19 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
   });
 
   it('4. owner can open and close a shift', async () => {
-    const open = await openShift(app, ownerToken, tenantId, branchId, 20000);
+    const open = await openShift(app, ownerToken, tenantId, branchId, '20000');
     expect(open.status).toBe(201);
-    const close = await closeShift(app, ownerToken, tenantId, branchId, open.body.data.id, 20000, 1);
+    const close = await closeShift(app, ownerToken, tenantId, branchId, open.body.data.id, '20000', 1);
     expect(close.status).toBe(200);
     expect(close.body.shift.status).toBe('CLOSED');
-    expect(close.body.shift.varianceMinor).toBe(0);
+    expect(close.body.shift.varianceMinor).toBe('0');
     expect(close.body.report).toBeDefined();
   });
 
   it('5. manager can open and close a shift', async () => {
-    const open = await openShift(app, managerToken, tenantId, branchId, 15000);
+    const open = await openShift(app, managerToken, tenantId, branchId, '15000');
     expect(open.status).toBe(201);
-    const close = await closeShift(app, managerToken, tenantId, branchId, open.body.data.id, 15000, 1);
+    const close = await closeShift(app, managerToken, tenantId, branchId, open.body.data.id, '15000', 1);
     expect(close.status).toBe(200);
     expect(close.body.shift.status).toBe('CLOSED');
   });
@@ -223,16 +231,22 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
   it('8. cashier closes shift with zero variance (opening 10000 + 5000 payment = 15000 expected)', async () => {
     const current = await getCurrentShift(app, cashierToken, tenantId, branchId);
     expect(current.body.data).not.toBeNull();
-    const close = await closeShift(app, cashierToken, tenantId, branchId, current.body.data.id, 15000, 1);
+    const close = await closeShift(app, cashierToken, tenantId, branchId, current.body.data.id, '15000', 1);
     expect(close.status).toBe(200);
     expect(close.body.shift.status).toBe('CLOSED');
-    expect(close.body.shift.expectedCashMinor).toBe(15000);
-    expect(close.body.shift.countedCashMinor).toBe(15000);
-    expect(close.body.shift.varianceMinor).toBe(0);
+    expect(close.body.shift.expectedCashMinor).toBe('15000');
+    expect(close.body.shift.countedCashMinor).toBe('15000');
+    expect(close.body.shift.varianceMinor).toBe('0');
+    expect(typeof close.body.shift.expectedCashMinor).toBe('string');
+    expect(typeof close.body.shift.countedCashMinor).toBe('string');
+    expect(typeof close.body.shift.varianceMinor).toBe('string');
     expect(close.body.report).toBeDefined();
-    expect(close.body.report.openingCashMinor).toBe(10000);
-    expect(close.body.report.approvedCashMinor).toBe(5000);
-    expect(close.body.report.expectedCashMinor).toBe(15000);
+    expect(close.body.report.openingCashMinor).toBe('10000');
+    expect(close.body.report.approvedCashMinor).toBe('5000');
+    expect(close.body.report.expectedCashMinor).toBe('15000');
+    expect(typeof close.body.report.openingCashMinor).toBe('string');
+    expect(typeof close.body.report.approvedCashMinor).toBe('string');
+    expect(typeof close.body.report.expectedCashMinor).toBe('string');
   });
 
   it('9. current shift is null after close', async () => {
@@ -250,21 +264,21 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
   });
 
   it('11. non-zero variance requires reason', async () => {
-    const open = await openShift(app, cashierToken, tenantId, branchId, 5000);
+    const open = await openShift(app, cashierToken, tenantId, branchId, '5000');
     expect(open.status).toBe(201);
     const shiftId = open.body.data.id;
-    const close = await closeShift(app, cashierToken, tenantId, branchId, shiftId, 6000, 1);
+    const close = await closeShift(app, cashierToken, tenantId, branchId, shiftId, '6000', 1);
     expect(close.status).toBe(400);
-    const close2 = await closeShift(app, cashierToken, tenantId, branchId, shiftId, 5000, 1);
+    const close2 = await closeShift(app, cashierToken, tenantId, branchId, shiftId, '5000', 1);
     expect(close2.status).toBe(200);
   });
 
   it('12. non-zero variance with reason succeeds', async () => {
-    const open = await openShift(app, cashierToken, tenantId, branchId, 5000);
+    const open = await openShift(app, cashierToken, tenantId, branchId, '5000');
     expect(open.status).toBe(201);
-    const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, 6000, 1, 'Cash register overage');
+    const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '6000', 1, 'Cash register overage');
     expect(close.status).toBe(200);
-    expect(close.body.shift.varianceMinor).toBe(1000);
+    expect(close.body.shift.varianceMinor).toBe('1000');
     expect(close.body.shift.varianceReason).toBe('Cash register overage');
   });
 
@@ -274,26 +288,25 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-tenant-id', tenantId);
     const shiftId = reports.body.data[0].cashShiftId;
-    const close = await closeShift(app, cashierToken, tenantId, branchId, shiftId, 6000, 99);
+    const close = await closeShift(app, cashierToken, tenantId, branchId, shiftId, '6000', 99);
     expect(close.status).toBe(409);
   });
 
   it('14. version conflict returns 409', async () => {
-    const open = await openShift(app, cashierToken, tenantId, branchId, 3000);
+    const open = await openShift(app, cashierToken, tenantId, branchId, '3000');
     expect(open.status).toBe(201);
-    const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, 3000, 99);
+    const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '3000', 99);
     expect(close.status).toBe(409);
-    // Clean up
-    await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, 3000, 1);
+    await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '3000', 1);
   });
 
   it('15. cross-branch shift not visible', async () => {
     const branch2 = await prisma.branch.create({ data: { tenantId, name: 'Branch 2', slug: `phase6c-b2-${ts}`, isActive: true } });
-    const open = await openShift(app, cashierToken, tenantId, branch2.id, 0);
+    const open = await openShift(app, cashierToken, tenantId, branch2.id, '0');
     expect(open.status).toBe(201);
     const current1 = await getCurrentShift(app, cashierToken, tenantId, branchId);
     expect(current1.body.data).toBeNull();
-    await closeShift(app, cashierToken, tenantId, branch2.id, open.body.data.id, 0, 1);
+    await closeShift(app, cashierToken, tenantId, branch2.id, open.body.data.id, '0', 1);
   });
 
   it('16. cross-tenant shift not accessible', async () => {
@@ -309,16 +322,121 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
   });
 
   it('17. two different cashiers can each have one open shift', async () => {
-    const open1 = await openShift(app, cashierToken, tenantId, branchId, 1000);
-    const open2 = await openShift(app, cashier2Token, tenantId, branchId, 2000);
+    const open1 = await openShift(app, cashierToken, tenantId, branchId, '1000');
+    const open2 = await openShift(app, cashier2Token, tenantId, branchId, '2000');
     expect(open1.status).toBe(201);
     expect(open2.status).toBe(201);
-    await closeShift(app, cashierToken, tenantId, branchId, open1.body.data.id, 1000, 1);
-    await closeShift(app, cashier2Token, tenantId, branchId, open2.body.data.id, 2000, 1);
+    await closeShift(app, cashierToken, tenantId, branchId, open1.body.data.id, '1000', 1);
+    await closeShift(app, cashier2Token, tenantId, branchId, open2.body.data.id, '2000', 1);
   });
 
   it('18. negative opening cash is rejected', async () => {
-    const res = await openShift(app, cashierToken, tenantId, branchId, -1000);
+    const res = await openShift(app, cashierToken, tenantId, branchId, '-1000');
     expect(res.status).toBe(400);
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // P0 FINANCIAL CONTRACT TESTS
+  // ═══════════════════════════════════════════════════════════════
+
+  describe('P0 Financial Contract — Money as strings', () => {
+    it('19. rejects decimal input for openingCashMinor', async () => {
+      const res = await openShift(app, cashierToken, tenantId, branchId, '100.50');
+      expect(res.status).toBe(400);
+    });
+
+    it('20. rejects exponent notation for openingCashMinor', async () => {
+      const res = await openShift(app, cashierToken, tenantId, branchId, '1e3');
+      expect(res.status).toBe(400);
+    });
+
+    it('21. rejects signed input for openingCashMinor', async () => {
+      const res = await openShift(app, cashierToken, tenantId, branchId, '+1000');
+      expect(res.status).toBe(400);
+    });
+
+    it('22. rejects leading zeros for openingCashMinor', async () => {
+      const res = await openShift(app, cashierToken, tenantId, branchId, '007');
+      expect(res.status).toBe(400);
+    });
+
+    it('23. rejects empty string for openingCashMinor', async () => {
+      const res = await openShift(app, cashierToken, tenantId, branchId, '');
+      expect(res.status).toBe(400);
+    });
+
+    it('24. rejects non-numeric string for openingCashMinor', async () => {
+      const res = await openShift(app, cashierToken, tenantId, branchId, 'abc');
+      expect(res.status).toBe(400);
+    });
+
+    it('25. rejects number type for openingCashMinor (must be string)', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/branches/${branchId}/shifts/open`)
+        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('x-tenant-id', tenantId)
+        .send({ openingCashMinor: 10000 });
+      expect(res.status).toBe(400);
+    });
+
+    it('26. rejects decimal input for countedCashMinor on close', async () => {
+      const open = await openShift(app, cashierToken, tenantId, branchId, '5000');
+      expect(open.status).toBe(201);
+      const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '5000.5', 1);
+      expect(close.status).toBe(400);
+      await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '5000', 1);
+    });
+
+    it('27. exact positive variance as strings', async () => {
+      const open = await openShift(app, cashierToken, tenantId, branchId, '10000');
+      expect(open.status).toBe(201);
+      const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '12500', 1, 'Cash register overage');
+      expect(close.status).toBe(200);
+      expect(close.body.shift.varianceMinor).toBe('2500');
+      expect(close.body.report.varianceMinor).toBe('2500');
+    });
+
+    it('28. exact negative variance as strings', async () => {
+      const open = await openShift(app, cashierToken, tenantId, branchId, '10000');
+      expect(open.status).toBe(201);
+      const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '7500', 1, 'Cash register shortage');
+      expect(close.status).toBe(200);
+      expect(close.body.shift.varianceMinor).toBe('-2500');
+      expect(close.body.report.varianceMinor).toBe('-2500');
+    });
+
+    it('29. zero variance returns "0" string', async () => {
+      const open = await openShift(app, cashierToken, tenantId, branchId, '10000');
+      expect(open.status).toBe(201);
+      const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '10000', 1);
+      expect(close.status).toBe(200);
+      expect(close.body.shift.varianceMinor).toBe('0');
+      expect(typeof close.body.shift.varianceMinor).toBe('string');
+    });
+
+    it('30. large money value (above MAX_SAFE_INTEGER) as string', async () => {
+      const largeValue = '9007199254740993'; // MAX_SAFE_INTEGER + 2
+      const open = await openShift(app, cashierToken, tenantId, branchId, largeValue);
+      expect(open.status).toBe(201);
+      expect(open.body.data.openingCashMinor).toBe(largeValue);
+      const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, largeValue, 1);
+      expect(close.status).toBe(200);
+      expect(close.body.shift.expectedCashMinor).toBe(largeValue);
+      expect(close.body.shift.countedCashMinor).toBe(largeValue);
+      expect(close.body.shift.varianceMinor).toBe('0');
+    });
+
+    it('31. report snapshot serializes money as strings for immutable report', async () => {
+      const open = await openShift(app, cashierToken, tenantId, branchId, '8000');
+      expect(open.status).toBe(201);
+      const close = await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '8000', 1);
+      expect(close.status).toBe(200);
+      const report = close.body.report;
+      expect(typeof report.openingCashMinor).toBe('string');
+      expect(typeof report.approvedCashMinor).toBe('string');
+      expect(typeof report.expectedCashMinor).toBe('string');
+      expect(typeof report.countedCashMinor).toBe('string');
+      expect(typeof report.varianceMinor).toBe('string');
+    });
   });
 });

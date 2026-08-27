@@ -134,7 +134,7 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       .post(`/api/v1/branches/${branchId}/shifts/open`)
       .set('Authorization', `Bearer ${cashierToken}`)
       .set('x-tenant-id', tenantId)
-      .send({ openingCashMinor: 10000 });
+      .send({ openingCashMinor: '10000' });
 
     const category = await prisma.menuCategory.create({
       data: { tenantId, name: 'Food', sortOrder: 0, isActive: true },
