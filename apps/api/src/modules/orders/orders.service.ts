@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  BadRequestException,
   NotFoundException,
   ConflictException,
   NotImplementedException,
@@ -14,7 +15,7 @@ import { IdempotencyService } from './idempotency.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PriceCalculatorService } from './price-calculator.service';
 import type { LineInput } from './price-calculator.service';
-import { canTransition3A, getInitialStatus } from './state-machine';
+import { canTransition3A, canTransitionFull, getInitialStatus } from './state-machine';
 import * as crypto from 'crypto';
 import { FeatureKey } from '@rms/contracts';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -244,8 +245,9 @@ export class OrdersService {
   async createTableOrder(params: {
     tenantId: string;
     branchId: string;
-    tableId: string;
+    tableId?: string;
     diningSessionId?: string;
+    orderType?: string;
     lines: LineInput[];
     notes?: string;
     customerName?: string;
@@ -253,7 +255,15 @@ export class OrdersService {
     idempotencyKey?: string;
     quotedTotal?: string;
   }): Promise<{ order: Record<string, unknown>; trackingTokenRaw: string }> {
-    const { tenantId, branchId, tableId, idempotencyKey } = params;
+    const { tenantId, branchId, idempotencyKey } = params;
+
+    // Determine order type — default DINE_IN for QR context
+    const orderType = params.orderType === 'TAKEAWAY' ? 'TAKEAWAY' : 'DINE_IN';
+    const isDineIn = orderType === 'DINE_IN';
+
+    // DINE_IN requires a table
+    const tableId = isDineIn ? (params.tableId ?? '') : null;
+    const diningSessionId = isDineIn ? (params.diningSessionId ?? undefined) : undefined;
 
     // Verify branch is active
     await this.assertBranchActive(tenantId, branchId);
@@ -290,9 +300,6 @@ export class OrdersService {
     // Generate tracking token
     const { raw: trackingTokenRaw, hash: trackingTokenHash } = this.generateTrackingToken();
 
-    // Resolve or create dining session
-    const diningSessionId = params.diningSessionId ?? undefined;
-
     const execute = async () => {
       const order = await this.prisma.$transaction(async (tx) => {
         // Generate order number
@@ -304,10 +311,10 @@ export class OrdersService {
             tenantId,
             branchId,
             orderNumber,
-            orderType: 'DINE_IN',
+            orderType,
             status: initialStatus,
             diningSessionId: diningSessionId ?? null,
-            tableId,
+            tableId: tableId ?? null,
             customerName: params.customerName ?? null,
             customerPhone: params.customerPhone ?? null,
             currency: 'ETB',
@@ -467,8 +474,14 @@ export class OrdersService {
 
     await this.assertBranchActive(tenantId, branchId);
 
-    // Reject tableId for POS and PICKUP order types
-    if ((params.orderType === 'POS' || params.orderType === 'PICKUP') && params.tableId) {
+    // Validate orderType
+    const validOrderTypes = ['POS', 'DINE_IN', 'PICKUP', 'TAKEAWAY'];
+    if (!validOrderTypes.includes(params.orderType)) {
+      throw new BadRequestException(`Invalid orderType: ${params.orderType}. Must be one of: ${validOrderTypes.join(', ')}`);
+    }
+
+    // Reject tableId for POS, PICKUP, and TAKEAWAY order types
+    if ((params.orderType === 'POS' || params.orderType === 'PICKUP' || params.orderType === 'TAKEAWAY') && params.tableId) {
       throw new ConflictException(`tableId is not allowed for ${params.orderType} orders`);
     }
 
@@ -903,6 +916,87 @@ export class OrdersService {
           entityId: orderId,
           beforeJson: { status: existing.status },
           afterJson: { status: 'CANCELLED', reason },
+        },
+      });
+
+      return updated;
+    });
+
+    return { order: this.serializeOrder(order) };
+  }
+
+  // ─── COMPLETE ORDER (READY → COMPLETED) ──────
+
+  async completeOrder(params: {
+    orderId: string;
+    tenantId: string;
+    branchId: string;
+    actorUserId: string;
+    expectedVersion: number;
+  }): Promise<{ order: Record<string, unknown> }> {
+    const { orderId, tenantId, branchId, actorUserId, expectedVersion } = params;
+
+    const existing = await this.prisma.order.findFirst({
+      where: { id: orderId, tenantId, branchId },
+    });
+    if (!existing) throw new NotFoundException('Order not found');
+
+    if (!canTransitionFull(existing.status, 'COMPLETED')) {
+      throw new ConflictException(
+        `Cannot complete order in status ${existing.status}. Order must be in READY status.`,
+      );
+    }
+
+    if (existing.version !== expectedVersion) {
+      throw new ConflictException({
+        code: 'VERSION_CONFLICT',
+        message: 'The order has been modified by another request. Please refresh.',
+        currentVersion: existing.version,
+      });
+    }
+
+    const order = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.order.update({
+        where: { id: orderId, version: existing.version },
+        data: {
+          status: 'COMPLETED',
+          completedAt: new Date(),
+          version: { increment: 1 },
+        },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          tenantId,
+          branchId,
+          orderId,
+          fromStatus: existing.status,
+          toStatus: 'COMPLETED',
+          actorUserId,
+        },
+      });
+
+      await tx.outboxEvent.create({
+        data: {
+          tenantId,
+          branchId,
+          aggregateType: 'Order',
+          aggregateId: orderId,
+          eventType: 'order.completed',
+          payload: { orderId },
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId,
+          branchId,
+          action: 'ORDER_COMPLETE',
+          entityType: 'Order',
+          entityId: orderId,
+          beforeJson: { status: existing.status },
+          afterJson: { status: 'COMPLETED' },
         },
       });
 

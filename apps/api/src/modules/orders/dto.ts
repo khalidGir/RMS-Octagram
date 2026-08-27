@@ -59,6 +59,17 @@ export class CreateTableOrderDto {
   @Type(() => OrderLineDto)
   lines!: OrderLineDto[];
 
+  @ApiProperty({
+    enum: ['DINE_IN', 'TAKEAWAY'],
+    description: 'Order type: DINE_IN occupies the table, TAKEAWAY does not',
+    example: 'DINE_IN',
+    default: 'DINE_IN',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['DINE_IN', 'TAKEAWAY'])
+  orderType?: string;
+
   @ApiPropertyOptional({ description: 'Customer name', example: 'Abebe' })
   @IsOptional()
   @IsString()
@@ -111,12 +122,12 @@ export class CreatePosOrderDto {
   notes?: string;
 
   @ApiProperty({
-    enum: ['POS', 'DINE_IN', 'PICKUP'],
+    enum: ['POS', 'DINE_IN', 'PICKUP', 'TAKEAWAY'],
     description: 'Order type',
     example: 'POS',
   })
   @IsString()
-  @IsIn(['POS', 'DINE_IN', 'PICKUP'])
+  @IsIn(['POS', 'DINE_IN', 'PICKUP', 'TAKEAWAY'])
   orderType!: string;
 
   @ApiPropertyOptional({ description: 'Table ID for dine-in orders (required when orderType is DINE_IN)' })
@@ -233,6 +244,16 @@ export class ConfirmOrderDto {
   @IsString()
   @MaxLength(500)
   note?: string;
+}
+
+// ─── Complete Order ──────────────────────────
+
+export class CompleteOrderDto {
+  @ApiProperty({ description: 'Expected order version for optimistic locking', example: 3 })
+  @IsDefined()
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
 }
 
 // ─── Create Public Pickup Order ─────────────

@@ -28,6 +28,7 @@ import {
   EditOrderDto,
   CancelOrderDto,
   ConfirmOrderDto,
+  CompleteOrderDto,
   ListOrdersDto,
 } from './dto';
 
@@ -155,6 +156,36 @@ export class OrdersController {
     throw new NotImplementedException(
       'Order confirmation workflow is not yet available. Orders will be confirmed automatically when payment is processed.',
     );
+  }
+
+  // ─── COMPLETE ORDER (READY → COMPLETED) ─────
+
+  @Post('orders/:orderId/complete')
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.WAITER)
+  @ApiOperation({ summary: 'Complete a READY order' })
+  async completeOrder(
+    @Req() req: Request,
+    @Param('orderId') orderId: string,
+    @Body() dto: CompleteOrderDto,
+  ) {
+    const ctx = req.tenantContext as TenantContext;
+
+    // Load order to determine branch for service-level auth
+    const order = await this.orders.getOrder({
+      orderId,
+      tenantId: ctx.tenantId!,
+      callerBranchIds: ctx.branchIds ?? [],
+      callerIsOwner: ctx.tenantRole === TenantRole.OWNER,
+    });
+
+    const result = await this.orders.completeOrder({
+      orderId,
+      tenantId: ctx.tenantId!,
+      branchId: (order as any).branchId,
+      actorUserId: ctx.userId,
+      expectedVersion: dto.expectedVersion,
+    });
+    return { data: result };
   }
 
   // ─── CANCEL ORDER ───────────────────────────

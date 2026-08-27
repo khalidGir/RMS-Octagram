@@ -19,6 +19,7 @@ export enum MembershipStatus {
 
 export enum OrderType {
   DINE_IN = 'DINE_IN',
+  TAKEAWAY = 'TAKEAWAY',
   PICKUP = 'PICKUP',
   POS = 'POS',
 }
