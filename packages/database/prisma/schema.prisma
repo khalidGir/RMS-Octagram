@@ -106,6 +106,7 @@ model Branch {
   addressJson     Json?
   timezone        String         @default("Africa/Addis_Ababa")
   currency        String         @default("ETB") @db.VarChar(3)
+  businessDayCutoffLocal String  @default("06:00") @db.VarChar(5)
   isActive        Boolean        @default(true)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -127,6 +128,7 @@ model Branch {
   taxConfigurations TenantTaxConfiguration[]
   cashShifts        CashShift[]
   shiftReports      ShiftReportSnapshot[]
+  businessDayCloses BusinessDayClose[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
@@ -992,4 +994,28 @@ model ShiftReportSnapshot {
 
   @@index([tenantId, branchId])
   @@index([tenantId, branchId, localBusinessDate])
+}
+
+model BusinessDayClose {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  branchId             String
+  localBusinessDate    DateTime @db.Date
+  status               String   @default("CLOSED")
+  snapshotJson         Json
+  closedWithException  Boolean  @default(false)
+  reason               String?  @db.VarChar(500)
+  closedByUserId       String
+  closedAt             DateTime @default(now())
+  reopenedByUserId     String?
+  reopenedAt           DateTime?
+  reopenReason         String?  @db.VarChar(500)
+  version              Int      @default(1)
+  createdAt            DateTime @default(now())
+
+  branch               Branch   @relation(fields: [branchId], references: [id])
+
+  @@unique([tenantId, branchId, localBusinessDate])
+  @@index([tenantId, branchId])
+  @@index([tenantId, branchId, status])
 }
