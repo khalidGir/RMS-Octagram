@@ -1199,17 +1199,36 @@ export class OrdersService {
       include: {
         lines: { include: { modifiers: true } },
         statusHistory: { orderBy: { createdAt: 'asc' }, take: 5 },
+        branch: { select: { name: true } },
+        table: { select: { label: true } },
+        payments: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            method: true,
+            status: true,
+            reviewNote: true,
+          },
+        },
       },
     });
     if (!order) throw new NotFoundException('Order not found');
+
+    const latestPayment = order.payments[0];
 
     // Return safe subset (no sensitive data)
     return {
       id: order.id,
       orderNumber: order.orderNumber.toString(),
+      orderType: order.orderType,
       status: order.status,
+      subtotalMinor: order.subtotalMinor.toString(),
+      discountMinor: order.discountMinor.toString(),
+      taxMinor: order.taxMinor.toString(),
       totalMinor: order.totalMinor.toString(),
       currency: order.currency,
+      branchName: order.branch.name,
+      tableLabel: order.orderType === 'DINE_IN' && order.table ? order.table.label : null,
       createdAt: order.createdAt.toISOString(),
       lines: order.lines.map((l) => ({
         itemName: l.itemNameSnapshot,
@@ -1221,6 +1240,15 @@ export class OrdersService {
         status: h.toStatus,
         createdAt: h.createdAt.toISOString(),
       })),
+      payment: latestPayment
+        ? {
+            method: latestPayment.method,
+            status: latestPayment.status,
+            ...(latestPayment.status === 'REJECTED'
+              ? { rejectionReason: latestPayment.reviewNote ?? null }
+              : {}),
+          }
+        : null,
     };
   }
 
