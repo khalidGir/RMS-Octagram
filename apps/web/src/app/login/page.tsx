@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { BrandMark } from '@/components/brand-mark';
+import { LoginForm } from '@/components/login-form';
 
 export const metadata = { title: 'Staff sign in' };
 
@@ -17,12 +17,7 @@ export default function LoginPage() {
         <div className="w-full max-w-[440px]">
           <div className="mb-10 flex items-center text-[#121816] lg:hidden"><BrandMark onDark={false} /></div>
           <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">Staff access</p><h2 className="mt-3 text-3xl font-black tracking-[-0.04em]">Welcome back.</h2><p className="mt-2 text-sm leading-6 text-ink-muted">Sign in to continue to your restaurant workspace.</p>
-          <form className="mt-8 space-y-5">
-            <label className="block"><span className="mb-2 block text-sm font-extrabold">Email address</span><input type="email" autoComplete="email" placeholder="you@restaurant.com" className="min-h-12 w-full rounded-control border border-line bg-white px-4 text-sm outline-none transition focus:border-brand" /></label>
-            <label className="block"><span className="mb-2 flex justify-between text-sm font-extrabold"><span>Password</span><a href="#" className="text-xs text-brand">Forgot password?</a></span><input type="password" autoComplete="current-password" placeholder="Enter your password" className="min-h-12 w-full rounded-control border border-line bg-white px-4 text-sm outline-none transition focus:border-brand" /></label>
-            <label className="flex items-center gap-3 text-sm font-semibold text-ink-muted"><input type="checkbox" className="size-4 accent-[#b4532a]" />Keep me signed in on this device</label>
-            <Link href="/" className="flex min-h-12 w-full items-center justify-center rounded-control bg-brand px-5 text-sm font-black text-white shadow-lg shadow-brand/20 transition hover:bg-brand/90">Sign in to RMS</Link>
-          </form>
+          <LoginForm />
           <div className="mt-8 flex items-center gap-3 text-xs text-ink-muted"><span className="h-px flex-1 bg-line" /><span>Secure staff access</span><span className="h-px flex-1 bg-line" /></div><p className="mt-6 text-center text-xs leading-5 text-ink-muted">Need access? Ask your restaurant owner or manager to invite you.</p>
         </div>
       </section>
