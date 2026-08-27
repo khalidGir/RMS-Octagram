@@ -25,6 +25,7 @@ import { LocaleModule } from './modules/locale/locale.module';
 import { TaxModule } from './modules/tax/tax.module';
 import { ShiftsModule } from './modules/shifts/shifts.module';
 import { BusinessDayModule } from './modules/business-day/business-day.module';
+import { SupportContextModule } from './modules/support-context/support-context.module';
 import { CorrelationMiddleware } from './modules/observability/correlation.middleware';
 import { HttpLoggerMiddleware } from './modules/observability/http-logger.middleware';
 import { TenantContextMiddleware } from './modules/auth/tenant-context.middleware';
@@ -57,6 +58,7 @@ import { CsrfMiddleware } from './common/middleware/csrf.middleware';
     TaxModule,
     ShiftsModule,
     BusinessDayModule,
+    SupportContextModule,
   ],
   providers: [JwtStrategy, TenantContextMiddleware],
 })

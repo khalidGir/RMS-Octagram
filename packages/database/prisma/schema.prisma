@@ -1019,3 +1019,19 @@ model BusinessDayClose {
   @@index([tenantId, branchId])
   @@index([tenantId, branchId, status])
 }
+
+model SupportSession {
+  id                String   @id @default(uuid())
+  adminUserId       String
+  tenantId          String
+  reason            String   @db.VarChar(500)
+  startedAt         DateTime @default(now())
+  expiresAt         DateTime
+  endedAt           DateTime?
+  status            String   @default("ACTIVE")
+  createdAt         DateTime @default(now())
+
+  @@index([adminUserId])
+  @@index([tenantId])
+  @@index([status])
+}
