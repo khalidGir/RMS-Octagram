@@ -10,7 +10,12 @@ import { SupportContextService } from './support-context.service';
  * When a Super Admin is in support mode for a tenant, only catalog/menu
  * endpoints are allowed. All other endpoints return 403.
  *
- * This guard should be applied globally or to non-catalog controllers.
+ * This guard is applied globally. It only activates when:
+ * 1. The user is a Super Admin
+ * 2. The request has a tenant context (x-tenant-id header)
+ * 3. The tenant context was established via a support session (isSupportSession=true)
+ *
+ * Normal membership-based access for Super Admins is unaffected.
  */
 @Injectable()
 export class SupportModeGuard implements CanActivate {
@@ -20,38 +25,28 @@ export class SupportModeGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
-    const ctx = req.tenantContext as TenantContext;
+    const ctx = req.tenantContext as TenantContext | undefined;
 
-    // Only applies to Super Admin users
-    if (ctx?.platformRole !== 'SUPER_ADMIN') {
-      return true;
-    }
-
-    // If no tenant context, this is a platform-level endpoint — allow
+    // No tenant context — platform-level endpoint, allow
     if (!ctx?.tenantId) {
       return true;
     }
 
-    // Check if there's an active support session
-    const session = await this.supportContextService.getActiveSession({
-      adminUserId: ctx.userId,
-      tenantId: ctx.tenantId,
-    });
-
-    // If no active session, this Super Admin doesn't have support access to this tenant
-    if (!session) {
-      throw new ForbiddenException(
-        'Super Admin requires an active support session to access tenant data. ' +
-        'Enter support mode via POST /platform/support/enter.',
-      );
+    // Not a Super Admin — normal RBAC handles this
+    if (ctx.platformRole !== 'SUPER_ADMIN') {
+      return true;
     }
 
-    // Check if the request path is allowed (menu/catalog endpoints only)
+    // Not a support session — this Super Admin has normal membership access
+    if (!ctx.isSupportSession) {
+      return true;
+    }
+
+    // Support session active — only catalog/menu paths are allowed
     const path = req.path;
     if (!this.supportContextService.isPathAllowed(path)) {
       throw new ForbiddenException(
-        `Support mode only allows menu/catalog operations. Path "${path}" is not permitted. ` +
-        `Allowed prefixes: ${'/api/v1/categories, /api/v1/items, /api/v1/variants, /api/v1/modifier-groups, /api/v1/modifiers, /api/v1/branch-menu'}`,
+        `Support mode only allows menu/catalog operations. Path "${path}" is not permitted.`,
       );
     }
 

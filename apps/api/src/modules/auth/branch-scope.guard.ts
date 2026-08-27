@@ -31,6 +31,11 @@ export class BranchScopeGuard implements CanActivate {
       return true;
     }
 
+    // Support sessions bypass branch assignment checks
+    if (ctx.isSupportSession) {
+      return true;
+    }
+
     const branchId = (request.params as Record<string, string>).branchId;
     if (!branchId) {
       throw new ForbiddenException('Branch ID required');

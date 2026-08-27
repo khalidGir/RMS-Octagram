@@ -55,6 +55,12 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Not a member of this tenant');
     }
 
+    // Support sessions bypass tenant role checks — the SupportModeGuard
+    // already enforces menu-only path restrictions.
+    if (ctx.isSupportSession) {
+      return true;
+    }
+
     if (!tenantRolesRequired.includes(ctx.tenantRole as TenantRole)) {
       throw new ForbiddenException(
         `Required role: ${tenantRolesRequired.join(' or ')}. Your role: ${ctx.tenantRole}`,

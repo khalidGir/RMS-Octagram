@@ -70,6 +70,28 @@ export class TenantContextMiddleware implements NestMiddleware {
         });
 
         if (!membership) {
+          // Super Admins may access tenants via support sessions (no membership required)
+          if (payload.platformRole === 'SUPER_ADMIN') {
+            const supportSession = await this.prisma.supportSession.findFirst({
+              where: {
+                adminUserId: payload.sub,
+                tenantId,
+                status: 'ACTIVE',
+                expiresAt: { gt: new Date() },
+              },
+              orderBy: { createdAt: 'desc' },
+            });
+
+            if (supportSession) {
+              ctx.tenantId = tenantId;
+              ctx.tenantRole = 'SUPPORT' as TenantContext['tenantRole'];
+              ctx.branchIds = [];
+              ctx.isSupportSession = true;
+              req.tenantContext = ctx;
+              return next();
+            }
+          }
+
           throw new ForbiddenException('Not a member of this tenant');
         }
 

@@ -68,16 +68,16 @@ export class SupportContextController {
   }
 
   @Get('active')
-  @ApiOperation({ summary: 'Check if current admin has an active support session for a tenant' })
+  @ApiOperation({ summary: 'Check if current admin has an active support session for a tenant (banner data)' })
   async getActiveSession(
     @Req() req: Request,
     @Query('tenantId') tenantId: string,
   ) {
     const ctx = req.tenantContext as TenantContext;
-    const session = await this.supportContextService.getActiveSession({
+    const bannerData = await this.supportContextService.getBannerData({
       adminUserId: ctx.userId,
       tenantId,
     });
-    return { data: session };
+    return { data: bannerData };
   }
 }

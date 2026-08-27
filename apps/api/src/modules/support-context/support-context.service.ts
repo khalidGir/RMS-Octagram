@@ -1,4 +1,5 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export const SUPPORT_SESSION_DURATION_MS = 30 * 60 * 1000; // 30 minutes
@@ -9,6 +10,10 @@ export const SUPPORT_ALLOWED_PATH_PREFIXES = [
   '/api/v1/modifier-groups',
   '/api/v1/modifiers',
   '/api/v1/branch-menu',
+];
+
+export const SUPPORT_ALLOWED_PATH_REGEXES = [
+  /^\/api\/v1\/branches\/[^/]+\/menu$/,  // /branches/:branchId/menu
 ];
 
 export interface SupportSessionData {
@@ -65,41 +70,57 @@ export class SupportContextService {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SUPPORT_SESSION_DURATION_MS);
 
-    const session = await this.prisma.$transaction(async (tx) => {
-      // End any remaining ACTIVE session for this admin+tenant
-      await tx.supportSession.updateMany({
-        where: { adminUserId, tenantId, status: 'ACTIVE' },
-        data: { status: 'ENDED', endedAt: now },
-      });
+    let session;
+    try {
+      session = await this.prisma.$transaction(async (tx) => {
+        // End any remaining ACTIVE session for this admin+tenant
+        await tx.supportSession.updateMany({
+          where: { adminUserId, tenantId, status: 'ACTIVE' },
+          data: { status: 'ENDED', endedAt: now },
+        });
 
-      const created = await tx.supportSession.create({
-        data: {
-          adminUserId,
-          tenantId,
-          reason: reason.trim(),
-          startedAt: now,
-          expiresAt,
-          status: 'ACTIVE',
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          actorUserId: adminUserId,
-          tenantId,
-          action: 'SUPPORT_SESSION_ENTER',
-          entityType: 'SupportSession',
-          entityId: created.id,
-          afterJson: {
+        const created = await tx.supportSession.create({
+          data: {
+            adminUserId,
+            tenantId,
             reason: reason.trim(),
-            expiresAt: expiresAt.toISOString(),
-            duration: SUPPORT_SESSION_DURATION_MS,
+            startedAt: now,
+            expiresAt,
+            status: 'ACTIVE',
           },
-        },
-      });
+        });
 
-      return created;
-    });
+        await tx.auditLog.create({
+          data: {
+            actorUserId: adminUserId,
+            tenantId,
+            action: 'SUPPORT_SESSION_ENTER',
+            entityType: 'SupportSession',
+            entityId: created.id,
+            afterJson: {
+              reason: reason.trim(),
+              expiresAt: expiresAt.toISOString(),
+              duration: SUPPORT_SESSION_DURATION_MS,
+            },
+          },
+        });
+
+        return created;
+      });
+    } catch (error) {
+      // Handle concurrent enter: unique constraint race condition
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const existing = await this.prisma.supportSession.findFirst({
+          where: { adminUserId, tenantId, status: 'ACTIVE' },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (existing && existing.expiresAt > new Date()) {
+          return this.serializeSession(existing);
+        }
+        throw error;
+      }
+      throw error;
+    }
 
     return this.serializeSession(session);
   }
@@ -168,7 +189,34 @@ export class SupportContextService {
   }
 
   isPathAllowed(path: string): boolean {
-    return SUPPORT_ALLOWED_PATH_PREFIXES.some(prefix => path.startsWith(prefix));
+    if (SUPPORT_ALLOWED_PATH_PREFIXES.some(prefix => path.startsWith(prefix))) {
+      return true;
+    }
+    if (SUPPORT_ALLOWED_PATH_REGEXES.some(regex => regex.test(path))) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Get banner data for the active support session, including the restaurant display name.
+   */
+  async getBannerData(params: {
+    adminUserId: string;
+    tenantId: string;
+  }): Promise<(SupportSessionData & { tenantName: string | null }) | null> {
+    const session = await this.getActiveSession(params);
+    if (!session) return null;
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: params.tenantId },
+      select: { name: true },
+    });
+
+    return {
+      ...session,
+      tenantName: tenant?.name ?? null,
+    };
   }
 
   async expireStaleSessions(): Promise<number> {
