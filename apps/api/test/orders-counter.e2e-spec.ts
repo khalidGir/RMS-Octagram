@@ -388,6 +388,7 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
     const qrTokenRaw = `qr-track-${ts}`;
     let firstTrackingToken: string;
     let firstOrderId: string;
+    let firstOrderNumber: string;
     let replayVariantId: string;
 
     it('creates order and returns tracking token', async () => {
@@ -439,6 +440,7 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
       expect(res.status).toBe(201);
       firstTrackingToken = res.body.data.trackingToken;
       firstOrderId = res.body.data.order.id;
+      firstOrderNumber = res.body.data.order.orderNumber;
       replayVariantId = variant.id;
       expect(firstTrackingToken).toBeDefined();
       expect(firstOrderId).toBeDefined();
@@ -467,7 +469,8 @@ describe('Orders Phase 3A — Database-Backed Verification (e2e)', () => {
         .get(`/api/v1/public/orders/${firstTrackingToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.id).toBe(firstOrderId);
+      expect(res.body.data.id).toBeUndefined();
+      expect(res.body.data.orderNumber).toBe(firstOrderNumber);
       expect(res.body.data.status).toBeDefined();
     });
   });

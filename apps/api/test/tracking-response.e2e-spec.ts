@@ -369,7 +369,7 @@ describe('Public Tracking Response — End-to-End (e2e)', () => {
 
   // ─── 7. REJECTED PAYMENT ───────────────────────────
 
-  describe('Rejected payment shows rejectionReason', () => {
+  describe('Rejected payment shows method and status, no reviewNote', () => {
     let rawToken: string;
 
     beforeAll(async () => {
@@ -386,13 +386,14 @@ describe('Public Tracking Response — End-to-End (e2e)', () => {
       rawToken = 'rej-tok';
     });
 
-    it('returns payment.status=REJECTED and rejectionReason', async () => {
+    it('returns payment.status=REJECTED but no rejectionReason', async () => {
       const res = await request(app.getHttpServer())
         .get(`/api/v1/public/orders/${rawToken}`);
       expect(res.status).toBe(200);
       expect(res.body.data.payment).toBeDefined();
+      expect(res.body.data.payment.method).toBe('CBE');
       expect(res.body.data.payment.status).toBe('REJECTED');
-      expect(res.body.data.payment.rejectionReason).toBe('Suspicious transfer reference');
+      expect(res.body.data.payment.rejectionReason).toBeUndefined();
     });
   });
 
@@ -474,9 +475,9 @@ describe('Public Tracking Response — End-to-End (e2e)', () => {
     });
   });
 
-  // ─── 11. REJECTED PAYMENT HAS NO REJECTION REASON FOR NON-REJECTED ─
+  // ─── 11. PAYMENT OBJECT CONTAINS ONLY METHOD AND STATUS ─
 
-  describe('Approved payment has no rejectionReason', () => {
+  describe('Payment object contains only method and status', () => {
     let rawToken: string;
 
     beforeAll(async () => {
@@ -493,12 +494,96 @@ describe('Public Tracking Response — End-to-End (e2e)', () => {
       rawToken = 'app-tok';
     });
 
-    it('does not include rejectionReason for non-REJECTED payment', async () => {
+    it('payment has only method and status, no extra keys', async () => {
       const res = await request(app.getHttpServer())
         .get(`/api/v1/public/orders/${rawToken}`);
       expect(res.status).toBe(200);
-      expect(res.body.data.payment.status).toBe('APPROVED');
+      const p = res.body.data.payment;
+      expect(p.status).toBe('APPROVED');
+      expect(p.method).toBe('CASH');
+      expect(Object.keys(p)).toEqual(expect.arrayContaining(['method', 'status']));
+      expect(Object.keys(p).length).toBe(2);
+    });
+  });
+
+  // ─── 12. PRIVACY: INTERNAL DATA ABSENT ─────────────
+
+  describe('Privacy — internal data never exposed', () => {
+    let rawToken: string;
+
+    beforeAll(async () => {
+      const hash = (await import('crypto')).createHash('sha256').update('priv-tok').digest('hex');
+      const o = await prisma.order.create({
+        data: {
+          tenantId, branchId, orderNumber: BigInt(Date.now() + 10),
+          orderType: 'POS', status: 'PENDING_PAYMENT',
+          currency: 'ETB', subtotalMinor: 10000n, totalMinor: 10000n,
+          source: 'CUSTOMER_WEB', trackingTokenHash: hash, version: 1,
+        },
+      });
+      await createPayment('CBE', o.id, 'REJECTED', 'Private internal staff note');
+      rawToken = 'priv-tok';
+    });
+
+    it('does not expose internal order id', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/public/orders/${rawToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toBeUndefined();
+    });
+
+    it('does not expose reviewNote as rejectionReason or any field', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/public/orders/${rawToken}`);
+      expect(res.status).toBe(200);
       expect(res.body.data.payment.rejectionReason).toBeUndefined();
+      expect(JSON.stringify(res.body.data)).not.toContain('Suspicious transfer reference');
+    });
+
+    it('does not expose customerPhone', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/public/orders/${rawToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.customerPhone).toBeUndefined();
+    });
+
+    it('does not expose tenantId, branchId, tableId, or diningSessionId', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/public/orders/${rawToken}`);
+      expect(res.status).toBe(200);
+      const d = res.body.data;
+      expect(d.tenantId).toBeUndefined();
+      expect(d.branchId).toBeUndefined();
+      expect(d.tableId).toBeUndefined();
+      expect(d.diningSessionId).toBeUndefined();
+    });
+
+    it('does not expose createdByUserId, reviewedByUserId, or staff identities', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/public/orders/${rawToken}`);
+      expect(res.status).toBe(200);
+      const s = JSON.stringify(res.body.data);
+      expect(s).not.toContain('createdByUserId');
+      expect(s).not.toContain('reviewedByUserId');
+      expect(s).not.toContain('userId');
+    });
+
+    it('does not expose payment proof metadata, providerReference, or accountIdentifier', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/public/orders/${rawToken}`);
+      expect(res.status).toBe(200);
+      const s = JSON.stringify(res.body.data);
+      expect(s).not.toContain('providerReference');
+      expect(s).not.toContain('paymentTokenHash');
+      expect(s).not.toContain('accountIdentifier');
+      expect(s).not.toContain('mediaObjectId');
+    });
+
+    it('does not expose trackingTokenHash', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/public/orders/${rawToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body.data.trackingTokenHash).toBeUndefined();
     });
   });
 });
