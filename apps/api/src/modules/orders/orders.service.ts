@@ -1207,7 +1207,6 @@ export class OrdersService {
           select: {
             method: true,
             status: true,
-            reviewNote: true,
           },
         },
       },
@@ -1218,7 +1217,6 @@ export class OrdersService {
 
     // Return safe subset (no sensitive data)
     return {
-      id: order.id,
       orderNumber: order.orderNumber.toString(),
       orderType: order.orderType,
       status: order.status,
@@ -1241,13 +1239,7 @@ export class OrdersService {
         createdAt: h.createdAt.toISOString(),
       })),
       payment: latestPayment
-        ? {
-            method: latestPayment.method,
-            status: latestPayment.status,
-            ...(latestPayment.status === 'REJECTED'
-              ? { rejectionReason: latestPayment.reviewNote ?? null }
-              : {}),
-          }
+        ? { method: latestPayment.method, status: latestPayment.status }
         : null,
     };
   }
