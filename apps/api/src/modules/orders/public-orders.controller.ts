@@ -102,6 +102,7 @@ export class PublicOrdersController {
       tenantId: qrRecord.table.tenantId,
       branchId: qrRecord.table.branchId,
       tableId: qrRecord.tableId,
+      orderType: dto.orderType ?? 'DINE_IN',
       lines: dto.lines,
       notes: dto.notes,
       customerName: dto.customerName,

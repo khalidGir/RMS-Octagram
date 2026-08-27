@@ -191,17 +191,5 @@ export class TablesController {
     return { data: result };
   }
 
-  @Post('orders/:orderId/complete')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.WAITER)
-  @ApiOperation({ summary: 'Complete a READY order (serve/deliver)' })
-  async completeOrder(
-    @Req() req: Request,
-    @Param('orderId') orderId: string,
-  ) {
-    const ctx = req.tenantContext as TenantContext;
-    // Delegate to orders service for status transition
-    // This will be implemented when we wire up the order completion flow
-    return { data: { orderId, status: 'COMPLETED', completedBy: ctx.userId } };
-  }
+
 }
