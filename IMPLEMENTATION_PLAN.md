@@ -85,18 +85,18 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 - Draft/unconfirmed edit rules.
 - Customer tracking token and status page.
 - Idempotency records and optimistic concurrency.
-- Cash payment confirmation.
+- Orders await payment (PENDING_PAYMENT) or staff confirmation (PENDING_CONFIRMATION).
 
 ### Exit criteria
 
 - Customer and cashier can create valid orders without duplicate submissions.
 - Server rejects stale prices and invalid modifiers safely.
-- Cash-confirmed order is ready for kitchen routing.
+- Orders reach PENDING_PAYMENT or PENDING_CONFIRMATION according to payment policy.
 - Money invariants and order state transitions have integration tests.
 
-## 7. Phase 4 - Manual Payment and KDS (Days 19-24)
+## 7. Phase 4 - Manual Payment and KDS (Days 19-28)
 
-### Deliverables
+### Phase 4A - Manual Transfer Payment Flow (Days 19-24)
 
 - Branch payment instructions.
 - Presigned private S3 upload/finalization.
@@ -104,9 +104,9 @@ The 4-6 week target assumes a focused small team, rapid product feedback, and no
 - Transactional payment approval and order confirmation.
 - Kitchen stations, tickets, queue, bump/ready/complete/recall.
 - WebSocket branch/station rooms and polling fallback.
-- Transactional outbox publisher.
+- Transactional outbox publisher for order.confirmed and ticket events.
 
-### Exit criteria
+#### Exit criteria
 
 - Customer uploads proof and sees pending review.
 - Owner transfer approval confirms exactly once and creates KDS ticket(s).
@@ -246,10 +246,12 @@ Exit: accessibility, role, responsive, localization and pilot task tests pass.
 ### Integration tests
 
 - PostgreSQL repositories with RLS enabled.
-- Transactional payment approval to order/KDS/inventory/outbox.
-- Idempotency replay and conflicting payload.
-- Optimistic concurrency conflicts.
-- S3 upload authorization metadata using a local/fake adapter.
+- Transactional payment approval to order/KDS/inventory/outbox (Phase 4B).
+- Idempotency replay and conflicting payload (Phase 4A: manual-transfer creation and proof finalize).
+- Optimistic concurrency conflicts (Phase 4A: concurrent finalization produces one current proof).
+- S3 upload authorization metadata using a local/fake adapter (Phase 4A: presigned POST policies).
+- Upload intent lifecycle: PENDING_UPLOAD → PENDING_SCAN → CLEAN (Phase 4A).
+- Payment token expiry and terminal-state invalidation (Phase 4A).
 
 ### End-to-end tests
 
@@ -277,8 +279,12 @@ Before Phase 3 merge:
 
 Before Phase 4 merge:
 
-- Confirm exact payment instructions and supported proof/reference fields.
-- Confirm proof-image retention duration and authorized viewers.
+- Payment instructions use structured fields (label, method, accountHolder, accountIdentifier, instructions).
+- Proof images are not automatically deleted during MVP; retention is configurable.
+- Payment tokens expire after 24 hours and are invalidated on terminal payment state.
+- One current proof per payment enforced by partial unique index.
+- Upload intent lifecycle prevents unsafe proof viewing (CLEAN-only read URLs).
+- Presigned POST with exact key binding, 5 MB limit, accepted MIME types, and checksum.
 
 Before production:
 

@@ -1,12 +1,22 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type { PrismaService } from '../prisma/prisma.service';
-import { PlatformRole } from '@rms/contracts';
+import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { FeatureResolver } from '../features/feature-resolver.service';
+import { PlatformRole, EntitlementStatus } from '@rms/contracts';
+import type { FeatureKey } from '@rms/contracts';
+import { getAllFeatureKeys } from '../features/feature-catalog';
+
+function getValidStatuses(): string[] {
+  return Object.values(EntitlementStatus);
+}
 
 @Injectable()
 export class PlatformAdminService {
   private readonly logger = new Logger(PlatformAdminService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
+  ) {}
 
   async listTenants(filters?: { status?: string }) {
     const where = filters?.status ? { status: filters.status } : {};
@@ -69,7 +79,6 @@ export class PlatformAdminService {
   }
 
   async setUserPlatformRole(userId: string, role: string) {
-    // Validate role is a valid platform role
     const validRoles = Object.values(PlatformRole);
     if (!validRoles.includes(role as PlatformRole)) {
       throw new Error(`Invalid platform role: ${role}. Valid roles: ${validRoles.join(', ')}`);
@@ -82,7 +91,6 @@ export class PlatformAdminService {
   }
 
   async deactivateUser(userId: string) {
-    // Revoke all sessions first, then deactivate
     await this.prisma.authSession.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
@@ -94,5 +102,118 @@ export class PlatformAdminService {
       where: { id: userId },
       data: { status: 'DELETED' },
     });
+  }
+
+  // ─── ENTITLEMENTS ──────────────────────────
+
+  async listEntitlements(tenantId: string) {
+    await this.assertTenantExists(tenantId);
+
+    const entitlements = await this.prisma.tenantEntitlement.findMany({
+      where: { tenantId },
+      orderBy: { featureKey: 'asc' },
+    });
+
+    // Merge with catalog to show all features
+    const entitlementMap = new Map(entitlements.map((e) => [e.featureKey, e]));
+    const allKeys = getAllFeatureKeys();
+
+    return allKeys.map((key) => {
+      const ent = entitlementMap.get(key);
+      return {
+        featureKey: key,
+        status: ent?.status ?? EntitlementStatus.DISABLED,
+        trialEndsAt: ent?.trialEndsAt ?? null,
+        reason: ent?.reason ?? null,
+        internalNote: ent?.internalNote ?? null,
+        updatedAt: ent?.updatedAt ?? null,
+      };
+    });
+  }
+
+  async setEntitlement(params: {
+    tenantId: string;
+    featureKey: FeatureKey;
+    status: EntitlementStatus;
+    trialEndsAt?: string;
+    reason?: string;
+    internalNote?: string;
+    actorUserId: string;
+  }) {
+    const { tenantId, featureKey, status, trialEndsAt, reason, internalNote, actorUserId } = params;
+
+    await this.assertTenantExists(tenantId);
+
+    if (!getValidStatuses().includes(status)) {
+      throw new BadRequestException(`Invalid status: ${status}. Must be one of: ${getValidStatuses().join(', ')}`);
+    }
+
+    // Validate trial expiry
+    if (status === EntitlementStatus.TRIAL) {
+      if (!trialEndsAt) {
+        throw new BadRequestException('trialEndsAt is required when status is TRIAL');
+      }
+      const expiryDate = new Date(trialEndsAt);
+      if (isNaN(expiryDate.getTime()) || expiryDate <= new Date()) {
+        throw new BadRequestException('trialEndsAt must be a valid future date');
+      }
+    }
+
+    // Get existing for audit
+    const existing = await this.prisma.tenantEntitlement.findUnique({
+      where: { tenantId_featureKey: { tenantId, featureKey } },
+    });
+
+    // Upsert with transaction + audit
+    const result = await this.prisma.$transaction(async (tx) => {
+      const upserted = await tx.tenantEntitlement.upsert({
+        where: { tenantId_featureKey: { tenantId, featureKey } },
+        create: {
+          tenantId,
+          featureKey,
+          status,
+          trialEndsAt: status === EntitlementStatus.TRIAL ? new Date(trialEndsAt!) : null,
+          updatedByUserId: actorUserId,
+          reason: reason ?? null,
+          internalNote: internalNote ?? null,
+        },
+        update: {
+          status,
+          trialEndsAt: status === EntitlementStatus.TRIAL ? new Date(trialEndsAt!) : null,
+          updatedByUserId: actorUserId,
+          reason: reason ?? null,
+          internalNote: internalNote ?? null,
+        },
+      });
+
+      // Audit
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId,
+          action: 'ENTITLEMENT_UPDATE',
+          entityType: 'TenantEntitlement',
+          entityId: upserted.id,
+          beforeJson: existing
+            ? { status: existing.status, trialEndsAt: existing.trialEndsAt } as any
+            : undefined,
+          afterJson: { status, trialEndsAt: status === EntitlementStatus.TRIAL ? trialEndsAt : null } as any,
+        },
+      });
+
+      return upserted;
+    });
+
+    return result;
+  }
+
+  async getEffectiveFeatures(tenantId: string, branchId?: string) {
+    await this.assertTenantExists(tenantId);
+    return this.featureResolver.resolveAll(tenantId, branchId);
+  }
+
+  private async assertTenantExists(tenantId: string): Promise<void> {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
   }
 }

@@ -6,6 +6,7 @@ import {
   Put,
   Body,
   Param,
+  Inject,
   UseGuards,
   Req,
   HttpCode,
@@ -14,7 +15,8 @@ import {
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantRole } from '@rms/contracts';
-import type { TenancyService } from './tenancy.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { TenancyService } from './tenancy.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles, type TenantContext } from '../auth/types';
@@ -31,7 +33,7 @@ import type {
 @ApiTags('Tenancy')
 @Controller()
 export class TenancyController {
-  constructor(private readonly tenancyService: TenancyService) {}
+  constructor(@Inject(TenancyService) private readonly tenancyService: TenancyService) {}
 
   @Get('tenants/current')
   @UseGuards(JwtAuthGuard)
@@ -181,6 +183,34 @@ export class TenancyController {
       membershipId, ctx.tenantId!, body.branchIds, ctx.userId, ctx.tenantRole, ctx.branchIds,
     );
     return { data: { success: true } };
+  }
+
+  @Get('tenants/features')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Get tenant-level feature configuration with entitlement status' })
+  async getTenantFeatures(@Req() req: Request) {
+    const ctx = req.tenantContext as TenantContext;
+    const features = await this.tenancyService.getTenantFeatures(ctx.tenantId!);
+    return { data: features };
+  }
+
+  @Put('tenants/features/:featureKey')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TenantRole.OWNER)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Set tenant-level feature (entitlement-gated)' })
+  async setTenantFeature(
+    @Req() req: Request,
+    @Param('featureKey') featureKey: string,
+    @Body() body: SetFeatureDto,
+  ) {
+    const ctx = req.tenantContext as TenantContext;
+    const feature = await this.tenancyService.setTenantFeature(
+      ctx.tenantId!, featureKey, body.enabled, ctx.userId,
+    );
+    return { data: feature };
   }
 
   @Get('branches/:branchId/features')

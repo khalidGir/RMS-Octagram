@@ -1,15 +1,19 @@
 import {
   Injectable,
+  Inject,
   UnauthorizedException,
   Logger,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import type { JwtService } from '@nestjs/jwt';
-import type { ConfigService } from '@nestjs/config';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { JwtService } from '@nestjs/jwt';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { randomBytes, createHash } from 'crypto';
-import type { PrismaService } from '../prisma/prisma.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface JwtPayload {
   sub: string;
@@ -32,9 +36,9 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
-    private readonly config: ConfigService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JwtService) private readonly jwtService: JwtService,
+    @Inject(ConfigService) private readonly config: ConfigService,
   ) {}
 
   async hashPassword(password: string): Promise<string> {

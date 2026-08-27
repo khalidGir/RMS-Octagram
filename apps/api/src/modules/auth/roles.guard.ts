@@ -1,12 +1,12 @@
-import type { CanActivate, ExecutionContext} from '@nestjs/common';
-import { Injectable, ForbiddenException } from '@nestjs/common';
-import type { Reflector } from '@nestjs/core';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { type CanActivate, type ExecutionContext, Injectable, ForbiddenException, Inject } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { ROLES_KEY, type TenantContext } from './types';
 import { TenantRole, PlatformRole } from '@rms/contracts';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(@Inject(Reflector) private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<(TenantRole | PlatformRole)[]>(ROLES_KEY, [
@@ -53,6 +53,12 @@ export class RolesGuard implements CanActivate {
     // Must have a tenant context with a valid tenant role
     if (!ctx.tenantId || !ctx.tenantRole) {
       throw new ForbiddenException('Not a member of this tenant');
+    }
+
+    // Support sessions bypass tenant role checks — the SupportModeGuard
+    // already enforces menu-only path restrictions.
+    if (ctx.isSupportSession) {
+      return true;
     }
 
     if (!tenantRolesRequired.includes(ctx.tenantRole as TenantRole)) {

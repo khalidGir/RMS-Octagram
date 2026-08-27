@@ -1,0 +1,17 @@
+.git
+node_modules
+.next
+dist
+coverage
+.env
+.env.*
+!.env.example
+*.log
+*.md
+.github
+.vscode
+.idea
+infrastructure
+packages/database/prisma/migrations
+docs
+test

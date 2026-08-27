@@ -7,6 +7,7 @@ export enum TenantRole {
   MANAGER = 'MANAGER',
   CASHIER = 'CASHIER',
   KITCHEN_STAFF = 'KITCHEN_STAFF',
+  WAITER = 'WAITER',
 }
 
 export enum MembershipStatus {
@@ -36,6 +37,8 @@ export enum OrderStatus {
 
 export enum PaymentMethod {
   CASH = 'CASH',
+  BANK_TRANSFER = 'BANK_TRANSFER',
+  TELEBIRR = 'TELEBIRR',
   MANUAL_TRANSFER = 'MANUAL_TRANSFER',
   GATEWAY = 'GATEWAY',
 }
@@ -69,11 +72,72 @@ export enum InventoryMovementType {
 }
 
 export enum FeatureKey {
-  PAYMENT_GATEWAY = 'PAYMENT_GATEWAY',
   TABLE_QR_ORDERING = 'TABLE_QR_ORDERING',
+  PICKUP_ORDERING = 'PICKUP_ORDERING',
+  MANUAL_TRANSFER_PAYMENTS = 'MANUAL_TRANSFER_PAYMENTS',
+  PAYMENT_GATEWAY = 'PAYMENT_GATEWAY',
   KDS = 'KDS',
+  INVENTORY = 'INVENTORY',
   BATCH_INVENTORY = 'BATCH_INVENTORY',
+  ANALYTICS = 'ANALYTICS',
+  MULTI_BRANCH = 'MULTI_BRANCH',
 }
+
+export enum EntitlementStatus {
+  ENABLED = 'ENABLED',
+  DISABLED = 'DISABLED',
+  TRIAL = 'TRIAL',
+  SUSPENDED = 'SUSPENDED',
+}
+
+export enum BranchFeatureOverride {
+  INHERIT = 'INHERIT',
+  ENABLED = 'ENABLED',
+  DISABLED = 'DISABLED',
+}
+
+export enum PaymentPolicy {
+  PREPAY_REQUIRED = 'PREPAY_REQUIRED',
+  PAY_LATER_ALLOWED = 'PAY_LATER_ALLOWED',
+  STAFF_CONFIRMATION_REQUIRED = 'STAFF_CONFIRMATION_REQUIRED',
+}
+
+export enum RoundingMode {
+  HALF_UP = 'HALF_UP',
+  DOWN = 'DOWN',
+}
+
+export enum DiningSessionStatus {
+  OPEN = 'OPEN',
+  CLEARED = 'CLEARED',
+}
+
+export enum CashShiftStatus {
+  OPEN = 'OPEN',
+  CLOSED = 'CLOSED',
+}
+
+export enum BusinessDayCloseStatus {
+  CLOSED = 'CLOSED',
+  REOPENED = 'REOPENED',
+}
+
+export enum SupportSessionStatus {
+  ACTIVE = 'ACTIVE',
+  ENDED = 'ENDED',
+  EXPIRED = 'EXPIRED',
+}
+
+export const PUBLIC_CONTEXT_ERRORS = {
+  PUBLIC_CONTEXT_ORDER_TYPE_DENIED: 'PUBLIC_CONTEXT_ORDER_TYPE_DENIED',
+  PUBLIC_CONTEXT_PAYMENT_METHOD_DENIED: 'PUBLIC_CONTEXT_PAYMENT_METHOD_DENIED',
+  TABLE_SESSION_NOT_CLEARABLE: 'TABLE_SESSION_NOT_CLEARABLE',
+} as const;
 
 export const CURRENCY = 'ETB' as const;
 export const DEFAULT_TIMEZONE = 'Africa/Addis_Ababa' as const;
+
+export type LocaleCode = 'en' | 'am' | 'ar';
+export const LOCALE_CODES: LocaleCode[] = ['en', 'am', 'ar'];
+export const DEFAULT_LOCALE: LocaleCode = 'en';
+export const RTL_LOCALES: LocaleCode[] = ['ar'];
