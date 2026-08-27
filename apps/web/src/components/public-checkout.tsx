@@ -72,6 +72,7 @@ export function PublicCheckout({ expectedEntry }: { expectedEntry: StoredCart['e
       }
       const payment = await apiRequest<{ data: { paymentToken: string } }>('/public/payments/manual-transfer', { method: 'POST', body: { trackingToken: tracking, idempotencyKey: paymentKey.current, method: paymentMethod } });
       window.sessionStorage.setItem('rms-payment-token', payment.data.paymentToken);
+      window.sessionStorage.setItem('rms-payment-method', paymentMethod);
       router.push(`/pay/${encodeURIComponent(tracking)}` as Route);
     } catch (reason) {
       if (reason instanceof ApiError && reason.status === 409) setError('The menu changed while you were ordering. Return to the menu and review the affected prices.');
