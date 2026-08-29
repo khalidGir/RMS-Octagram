@@ -1,1 +1,1 @@
-import { PaymentsWorkflow } from '@/components/role-workflows'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><PaymentsWorkflow/></StaffShell>}
+import { OwnerPaymentReview } from '@/components/owner-payment-review'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><OwnerPaymentReview/></StaffShell>}
