@@ -115,11 +115,11 @@ export class PaymentsController {
     return { data: { deleted: true } };
   }
 
-  // ─── Payment Review Queue ────────────────
+  // ─── Owner Transfer Review Queue ────────────────
 
   @Get('payments')
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
-  @ApiOperation({ summary: 'Cashier review queue' })
+  @Roles(TenantRole.OWNER)
+  @ApiOperation({ summary: 'Owner transfer review queue' })
   async getReviewQueue(
     @Req() req: Request,
     @Param('branchId') branchId: string,
@@ -137,8 +137,8 @@ export class PaymentsController {
   }
 
   @Get('payments/:paymentId')
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
-  @ApiOperation({ summary: 'Get payment details' })
+  @Roles(TenantRole.OWNER)
+  @ApiOperation({ summary: 'Get payment details (owner-only)' })
   async getPaymentDetails(
     @Req() req: Request,
     @Param('branchId') branchId: string,
@@ -150,8 +150,8 @@ export class PaymentsController {
   }
 
   @Get('payments/:paymentId/proof-url')
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
-  @ApiOperation({ summary: 'Get signed URL for payment proof (CLEAN only)' })
+  @Roles(TenantRole.OWNER)
+  @ApiOperation({ summary: 'Get signed URL for payment proof (owner-only, CLEAN only)' })
   async getProofUrl(
     @Req() req: Request,
     @Param('branchId') branchId: string,
@@ -248,8 +248,8 @@ export class PaymentsController {
   }
 
   @Post('payments/:paymentId/reject')
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
-  @ApiOperation({ summary: 'Reject a payment (cashier/manager/owner)' })
+  @Roles(TenantRole.OWNER)
+  @ApiOperation({ summary: 'Reject a payment (owner-only)' })
   async rejectPayment(
     @Req() req: Request,
     @Param('branchId') branchId: string,
