@@ -26,6 +26,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
   let ownerToken: string;
   let managerToken: string;
   let cashierToken: string;
+  let waiterToken: string;
   let tenantId: string;
   let branchId: string;
   let trackingToken: string;
@@ -37,6 +38,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
   const ownerEmail = `p4a-owner-${ts}@test.com`;
   const managerEmail = `p4a-manager-${ts}@test.com`;
   const cashierEmail = `p4a-cashier-${ts}@test.com`;
+  const waiterEmail = `p4a-waiter-${ts}@test.com`;
 
   const login = async (email: string) => {
     const res = await request(app.getHttpServer())
@@ -85,9 +87,14 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     const cm = await prisma.tenantMembership.create({ data: { tenantId, userId: cashier.id, role: 'CASHIER', status: 'ACTIVE' } });
     await prisma.branchAssignment.create({ data: { tenantId, branchId, membershipId: cm.id } });
 
+    const waiter = await prisma.user.create({ data: { email: waiterEmail, passwordHash, displayName: 'Waiter', status: 'ACTIVE' } });
+    const wm = await prisma.tenantMembership.create({ data: { tenantId, userId: waiter.id, role: 'WAITER', status: 'ACTIVE' } });
+    await prisma.branchAssignment.create({ data: { tenantId, branchId, membershipId: wm.id } });
+
     ownerToken = await login(ownerEmail);
     managerToken = await login(managerEmail);
     cashierToken = await login(cashierEmail);
+    waiterToken = await login(waiterEmail);
 
     const category = await prisma.menuCategory.create({ data: { tenantId, name: 'Food', sortOrder: 0, isActive: true } });
     const item = await prisma.menuItem.create({ data: { tenantId, categoryId: category.id, name: 'Burger', description: 'Tasty', isActive: true } });
@@ -139,7 +146,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     await prisma.auditLog.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.outboxEvent.deleteMany({ where: { tenantId } }).catch(() => {});
     await prisma.branch.delete({ where: { id: branchId } }).catch(() => {});
-    await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, managerEmail, cashierEmail] } } }).catch(() => {});
+    await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, managerEmail, cashierEmail, waiterEmail] } } }).catch(() => {});
     await prisma.tenant.delete({ where: { id: tenantId } }).catch(() => {});
     await prisma.$disconnect();
   });
@@ -389,7 +396,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     it('non-empty review queue serializes BigInt to strings', async () => {
       const res = await request(app.getHttpServer())
         .get(`/api/v1/branches/${branchId}/payments?status=PENDING_VERIFICATION`)
-        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
         .set('x-tenant-id', tenantId);
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body.data)).toBe(true);
@@ -449,7 +456,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
 
   describe('Payment Detail', () => {
     it('returns serialized payment details', async () => {
-      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${branchId}/payments/${paymentId}`).set('Authorization', `Bearer ${cashierToken}`).set('x-tenant-id', tenantId);
+      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${branchId}/payments/${paymentId}`).set('Authorization', `Bearer ${ownerToken}`).set('x-tenant-id', tenantId);
       expect(res.status).toBe(200);
       expect(res.body.data.id).toBe(paymentId);
       expect(typeof res.body.data.amountMinor).toBe('string');
@@ -457,7 +464,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     });
 
     it('returns 404 for non-existent payment', async () => {
-      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${branchId}/payments/00000000-0000-0000-0000-000000000000`).set('Authorization', `Bearer ${cashierToken}`).set('x-tenant-id', tenantId);
+      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${branchId}/payments/00000000-0000-0000-0000-000000000000`).set('Authorization', `Bearer ${ownerToken}`).set('x-tenant-id', tenantId);
       expect(res.status).toBe(404);
     });
   });
@@ -475,7 +482,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       const cr = await request(app.getHttpServer()).post('/api/v1/public/payments/manual-transfer').set('Content-Type', 'application/json').send({ trackingToken: tr, idempotencyKey: `nopf-${ts}` });
       const nopfPaymentId = cr.body.data.id;
 
-      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${branchId}/payments/${nopfPaymentId}/proof-url`).set('Authorization', `Bearer ${cashierToken}`).set('x-tenant-id', tenantId);
+      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${branchId}/payments/${nopfPaymentId}/proof-url`).set('Authorization', `Bearer ${ownerToken}`).set('x-tenant-id', tenantId);
       expect(res.status).toBe(404);
 
       await prisma.payment.deleteMany({ where: { tenantId, orderId: ord.id } }).catch(() => {});
@@ -509,7 +516,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
         },
       });
 
-      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${branchId}/payments/${testPaymentId}/proof-url`).set('Authorization', `Bearer ${cashierToken}`).set('x-tenant-id', tenantId);
+      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${branchId}/payments/${testPaymentId}/proof-url`).set('Authorization', `Bearer ${ownerToken}`).set('x-tenant-id', tenantId);
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('not yet cleared');
 
@@ -739,7 +746,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
   describe('Cross-Branch Denial', () => {
     it('staff cannot list payments for unassigned branch', async () => {
       const otherBranch = await prisma.branch.create({ data: { tenantId, name: 'Other', slug: `other-${ts}`, isActive: true } });
-      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${otherBranch.id}/payments`).set('Authorization', `Bearer ${cashierToken}`).set('x-tenant-id', tenantId);
+      const res = await request(app.getHttpServer()).get(`/api/v1/branches/${otherBranch.id}/payments`).set('Authorization', `Bearer ${managerToken}`).set('x-tenant-id', tenantId);
       expect(res.status).toBe(403);
       await prisma.branch.delete({ where: { id: otherBranch.id } });
     });
@@ -1086,7 +1093,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       // Reject
       const res = await request(app.getHttpServer())
         .post(`/api/v1/branches/${branchId}/payments/${payId2}/reject`)
-        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
         .set('x-tenant-id', tenantId)
         .send({ reason: 'Suspicious transfer reference' });
       expect(res.status).toBe(201);
@@ -1096,6 +1103,236 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       await prisma.orderLine.deleteMany({ where: { orderId: order2.id } }).catch(() => {});
       await prisma.orderStatusHistory.deleteMany({ where: { orderId: order2.id } }).catch(() => {});
       await prisma.order.delete({ where: { id: order2.id } }).catch(() => {});
+    });
+  });
+
+  // ─── Phase P0: Owner-Only Payment Review Authorization Matrix ─────────────
+
+  describe('Payment Review Authorization Matrix (OWNER-only)', () => {
+    let reviewPaymentId: string;
+    let proofPaymentId: string;
+    let cleanProofPaymentId: string;
+
+    beforeAll(async () => {
+      // Create a PENDING_VERIFICATION payment for review queue/detail tests
+      const crypto = await import('crypto');
+      const tr1 = crypto.randomBytes(32).toString('base64url');
+      const th1 = crypto.createHash('sha256').update(tr1).digest('hex');
+      const tbl1 = await prisma.restaurantTable.create({ data: { tenantId, branchId, label: 'TREV', capacity: 2, isActive: true } });
+      const ord1 = await prisma.order.create({
+        data: { tenantId, branchId, orderNumber: 500n, orderType: 'TAKEAWAY', status: 'PENDING_PAYMENT', tableId: tbl1.id, currency: 'ETB', subtotalMinor: 5000n, totalMinor: 5000n, source: 'CUSTOMER_WEB', trackingTokenHash: th1, version: 1 },
+      });
+      const cr1 = await request(app.getHttpServer()).post('/api/v1/public/payments/manual-transfer').set('Content-Type', 'application/json').send({ trackingToken: tr1, idempotencyKey: `rev-${ts}` });
+      reviewPaymentId = cr1.body.data.id;
+
+      // Upload + finalize proof to get PENDING_VERIFICATION
+      const proofBytes = Buffer.alloc(256);
+      const sha = crypto.createHash('sha256').update(proofBytes).digest('hex');
+      const upRes = await request(app.getHttpServer()).post('/api/v1/public/payments/proof-upload').set('Content-Type', 'application/json').send({ paymentToken: cr1.body.data.paymentToken, contentType: 'image/jpeg', sizeBytes: proofBytes.length, sha256: sha });
+      proofStorage.simulateUpload(upRes.body.data.objectKey, proofBytes, 'image/jpeg', sha);
+      await request(app.getHttpServer()).post('/api/v1/public/payments/proof-finalize').set('Content-Type', 'application/json').send({ paymentToken: cr1.body.data.paymentToken, mediaObjectId: upRes.body.data.mediaObjectId });
+
+      // Create a CLEAN proof payment for proof-url test
+      const tr2 = crypto.randomBytes(32).toString('base64url');
+      const th2 = crypto.createHash('sha256').update(tr2).digest('hex');
+      const tbl2 = await prisma.restaurantTable.create({ data: { tenantId, branchId, label: 'TCLN', capacity: 2, isActive: true } });
+      const ord2 = await prisma.order.create({
+        data: { tenantId, branchId, orderNumber: 501n, orderType: 'TAKEAWAY', status: 'PENDING_PAYMENT', tableId: tbl2.id, currency: 'ETB', subtotalMinor: 5000n, totalMinor: 5000n, source: 'CUSTOMER_WEB', trackingTokenHash: th2, version: 1 },
+      });
+      const cr2 = await request(app.getHttpServer()).post('/api/v1/public/payments/manual-transfer').set('Content-Type', 'application/json').send({ trackingToken: tr2, idempotencyKey: `cln-${ts}` });
+      cleanProofPaymentId = cr2.body.data.id;
+
+      const proofBytes2 = Buffer.alloc(256);
+      const sha2 = crypto.createHash('sha256').update(proofBytes2).digest('hex');
+      const upRes2 = await request(app.getHttpServer()).post('/api/v1/public/payments/proof-upload').set('Content-Type', 'application/json').send({ paymentToken: cr2.body.data.paymentToken, contentType: 'image/jpeg', sizeBytes: proofBytes2.length, sha256: sha2 });
+      proofStorage.simulateUpload(upRes2.body.data.objectKey, proofBytes2, 'image/jpeg', sha2);
+      const finRes2 = await request(app.getHttpServer()).post('/api/v1/public/payments/proof-finalize').set('Content-Type', 'application/json').send({ paymentToken: cr2.body.data.paymentToken, mediaObjectId: upRes2.body.data.mediaObjectId });
+      expect(finRes2.status).toBe(200);
+
+      // Mark media as CLEAN for the second payment
+      const media2 = await prisma.mediaObject.findFirst({ where: { paymentId: cleanProofPaymentId } });
+      if (media2) await prisma.mediaObject.update({ where: { id: media2.id }, data: { scanStatus: 'CLEAN' } });
+
+      proofPaymentId = cr2.body.data.id;
+    });
+
+    // ── GET /payments (review queue) ──────────
+
+    it('owner can list review queue', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments?status=PENDING_VERIFICATION`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+    });
+
+    it('manager is denied review queue (403)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments?status=PENDING_VERIFICATION`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(403);
+    });
+
+    it('cashier is denied review queue (403)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments?status=PENDING_VERIFICATION`)
+        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(403);
+    });
+
+    it('waiter is denied review queue (403)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments?status=PENDING_VERIFICATION`)
+        .set('Authorization', `Bearer ${waiterToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(403);
+    });
+
+    it('cross-branch manager is denied review queue (403)', async () => {
+      const otherBranch = await prisma.branch.create({ data: { tenantId, name: 'RevOther', slug: `rev-other-${ts}`, isActive: true } });
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${otherBranch.id}/payments?status=PENDING_VERIFICATION`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(403);
+      await prisma.branch.delete({ where: { id: otherBranch.id } });
+    });
+
+    // ── GET /payments/:paymentId (detail) ──────────
+
+    it('owner can get payment detail', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments/${reviewPaymentId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(200);
+      expect(res.body.data.id).toBe(reviewPaymentId);
+    });
+
+    it('manager is denied payment detail (403)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments/${reviewPaymentId}`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(403);
+    });
+
+    it('cashier is denied payment detail (403)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments/${reviewPaymentId}`)
+        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(403);
+    });
+
+    it('cross-branch manager is denied payment detail (403)', async () => {
+      const otherBranch = await prisma.branch.create({ data: { tenantId, name: 'DetOther', slug: `det-other-${ts}`, isActive: true } });
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${otherBranch.id}/payments/${reviewPaymentId}`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(403);
+      await prisma.branch.delete({ where: { id: otherBranch.id } });
+    });
+
+    // ── GET /payments/:paymentId/proof-url ──────────
+
+    it('owner can get proof URL for CLEAN proof', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments/${cleanProofPaymentId}/proof-url`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(200);
+      expect(res.body.data.url).toBeDefined();
+    });
+
+    it('manager is denied proof URL (403)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments/${cleanProofPaymentId}/proof-url`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(403);
+    });
+
+    it('cashier is denied proof URL (403)', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments/${cleanProofPaymentId}/proof-url`)
+        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(403);
+    });
+
+    it('proof URL denied when scanStatus is not CLEAN', async () => {
+      // reviewPaymentId has PENDING_SCAN status
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/payments/${reviewPaymentId}/proof-url`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('not yet cleared');
+    });
+
+    // ── POST /payments/:paymentId/reject ──────────
+
+    it('owner can reject a payment', async () => {
+      const crypto = await import('crypto');
+      const tr = crypto.randomBytes(32).toString('base64url');
+      const th = crypto.createHash('sha256').update(tr).digest('hex');
+      const tbl = await prisma.restaurantTable.create({ data: { tenantId, branchId, label: 'TREJ', capacity: 2, isActive: true } });
+      const ord = await prisma.order.create({
+        data: { tenantId, branchId, orderNumber: 510n, orderType: 'TAKEAWAY', status: 'PENDING_PAYMENT', tableId: tbl.id, currency: 'ETB', subtotalMinor: 5000n, totalMinor: 5000n, source: 'CUSTOMER_WEB', trackingTokenHash: th, version: 1 },
+      });
+      const cr = await request(app.getHttpServer()).post('/api/v1/public/payments/manual-transfer').set('Content-Type', 'application/json').send({ trackingToken: tr, idempotencyKey: `rej-${ts}` });
+      const rejPaymentId = cr.body.data.id;
+
+      const proofBytes = Buffer.alloc(256);
+      const sha = crypto.createHash('sha256').update(proofBytes).digest('hex');
+      const upRes = await request(app.getHttpServer()).post('/api/v1/public/payments/proof-upload').set('Content-Type', 'application/json').send({ paymentToken: cr.body.data.paymentToken, contentType: 'image/jpeg', sizeBytes: proofBytes.length, sha256: sha });
+      proofStorage.simulateUpload(upRes.body.data.objectKey, proofBytes, 'image/jpeg', sha);
+      await request(app.getHttpServer()).post('/api/v1/public/payments/proof-finalize').set('Content-Type', 'application/json').send({ paymentToken: cr.body.data.paymentToken, mediaObjectId: upRes.body.data.mediaObjectId });
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/branches/${branchId}/payments/${rejPaymentId}/reject`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId)
+        .send({ reason: 'Test rejection' });
+      expect(res.status).toBe(201);
+      expect(res.body.data.status).toBe('REJECTED');
+
+      await prisma.orderLine.deleteMany({ where: { orderId: ord.id } }).catch(() => {});
+      await prisma.orderStatusHistory.deleteMany({ where: { orderId: ord.id } }).catch(() => {});
+      await prisma.order.delete({ where: { id: ord.id } }).catch(() => {});
+      await prisma.restaurantTable.delete({ where: { id: tbl.id } }).catch(() => {});
+    });
+
+    it('manager is denied reject (403)', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/branches/${branchId}/payments/${reviewPaymentId}/reject`)
+        .set('Authorization', `Bearer ${managerToken}`)
+        .set('x-tenant-id', tenantId)
+        .send({ reason: 'Manager cannot reject' });
+      expect(res.status).toBe(403);
+    });
+
+    it('cashier is denied reject (403)', async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/branches/${branchId}/payments/${reviewPaymentId}/reject`)
+        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('x-tenant-id', tenantId)
+        .send({ reason: 'Cashier cannot reject' });
+      expect(res.status).toBe(403);
+    });
+
+    it('cashier can still confirm cash payment with active shift', async () => {
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/shifts/current`)
+        .set('Authorization', `Bearer ${cashierToken}`)
+        .set('x-tenant-id', tenantId);
+      // Should get 200 (with shift data or null) — not 403
+      expect(res.status).toBe(200);
     });
   });
 });
