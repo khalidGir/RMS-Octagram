@@ -17,9 +17,11 @@ export interface SeedData {
   tenantId: string;
   branchId: string;
   branchSlug: string;
+  publicSlug: string;
   tenantSlug: string;
   menuItemId: string;
   variantId: string;
+  simpleVariantId: string;
   modifierGroupId: string;
   modifierOptionIds: string[];
   tableId: string;
@@ -70,7 +72,8 @@ export default async function globalSetup(): Promise<void> {
 
     // Branch
     const branchId = uuid();
-    await client.query(`INSERT INTO "Branch" ("id","tenantId","name","slug","isActive","createdAt","updatedAt") VALUES ($1,$2,'Main Branch',$3,true,now(),now())`, [branchId, tenantId, branchSlug]);
+    const publicSlug = `pw-pub-${ts}`;
+    await client.query(`INSERT INTO "Branch" ("id","tenantId","name","slug","publicSlug","isActive","createdAt","updatedAt") VALUES ($1,$2,'Main Branch',$3,$4,true,now(),now())`, [branchId, tenantId, branchSlug, publicSlug]);
 
     // Owner user
     const ownerId = uuid();
@@ -124,6 +127,15 @@ export default async function globalSetup(): Promise<void> {
     // Link menu item to branch (required for branch-scoped menu endpoint)
     await client.query(`INSERT INTO "BranchMenuItem" ("tenantId","branchId","menuItemId","isAvailable","updatedAt") VALUES ($1,$2,$3,true,now())`, [tenantId, branchId, menuItemId]);
 
+    // Simple menu item without required modifiers (for easy add-to-cart testing)
+    const simpleCategoryId = uuid();
+    await client.query(`INSERT INTO "MenuCategory" ("id","tenantId","name","sortOrder","isActive","createdAt","updatedAt") VALUES ($1,$2,'Drinks',1,true,now(),now())`, [simpleCategoryId, tenantId]);
+    const simpleItemId = uuid();
+    await client.query(`INSERT INTO "MenuItem" ("id","tenantId","categoryId","name","description","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Water','Bottled water',true,now(),now())`, [simpleItemId, tenantId, simpleCategoryId]);
+    const simpleVariantId = uuid();
+    await client.query(`INSERT INTO "MenuItemVariant" ("id","tenantId","menuItemId","name","sku","basePriceMinor","isDefault","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'500ml','WAT-001',5000,true,true,now(),now())`, [simpleVariantId, tenantId, simpleItemId]);
+    await client.query(`INSERT INTO "BranchMenuItem" ("tenantId","branchId","menuItemId","isAvailable","updatedAt") VALUES ($1,$2,$3,true,now())`, [tenantId, branchId, simpleItemId]);
+
     // Optional modifier group: Extras
     const optModGroupId = uuid();
     await client.query(`INSERT INTO "ModifierGroup" ("id","tenantId","name","minSelections","maxSelections","isRequired","createdAt","updatedAt") VALUES ($1,$2,'Extras',0,2,false,now(),now())`, [optModGroupId, tenantId]);
@@ -175,9 +187,11 @@ export default async function globalSetup(): Promise<void> {
       tenantId,
       branchId,
       branchSlug,
+      publicSlug,
       tenantSlug,
       menuItemId,
       variantId,
+      simpleVariantId,
       modifierGroupId,
       modifierOptionIds: [opt1, opt2, opt3],
       tableId,
