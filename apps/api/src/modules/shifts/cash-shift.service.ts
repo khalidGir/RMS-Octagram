@@ -25,6 +25,21 @@ export interface CashShiftSummary {
   updatedAt: Date;
 }
 
+export interface CashShiftProjection {
+  id: string;
+  tenantId: string;
+  branchId: string;
+  cashierUserId: string;
+  status: string;
+  openingCashMinor: string;
+  approvedCashMinor: string;
+  expectedCashMinor: string;
+  cashOrderCount: number;
+  cashPaymentCount: number;
+  openedAt: Date;
+  version: number;
+}
+
 export interface ShiftReportSnapshotData {
   id: string;
   tenantId: string;
@@ -125,19 +140,64 @@ export class CashShiftService {
 
   /**
    * Get the current active (OPEN) shift for a cashier at a branch.
+   * Returns an authoritative live projection with approved cash totals,
+   * expected drawer, and order/payment counts computed from APPROVED CASH payments.
    */
   async getCurrentShift(params: {
     tenantId: string;
     branchId: string;
     cashierUserId: string;
-  }): Promise<CashShiftSummary | null> {
+  }): Promise<CashShiftProjection | null> {
     const { tenantId, branchId, cashierUserId } = params;
 
     const shift = await this.prisma.cashShift.findFirst({
       where: { tenantId, branchId, cashierUserId, status: 'OPEN' },
     });
 
-    return shift ? this.serializeShift(shift) : null;
+    if (!shift) return null;
+
+    // Compute live projection from APPROVED CASH payments attributed to this shift
+    const paymentAgg = await this.prisma.$queryRaw<
+      Array<{ total: bigint; count: bigint }>
+    >`
+      SELECT COALESCE(SUM("amountMinor"), 0::bigint) as total, COUNT(*)::bigint as count
+      FROM "Payment"
+      WHERE "cashierShiftId" = ${shift.id}
+        AND status = 'APPROVED'
+        AND method = 'CASH'
+    `;
+
+    const approvedCashMinor = BigInt(paymentAgg[0].total);
+    const cashPaymentCount = safeNumberFromBigInt(BigInt(paymentAgg[0].count), 'cashPaymentCount');
+
+    // Count distinct orders with approved payments (any method) attributed to this shift
+    const orderCount = await this.prisma.$queryRaw<
+      Array<{ count: bigint }>
+    >`
+      SELECT COUNT(DISTINCT "orderId")::bigint as count
+      FROM "Payment"
+      WHERE "cashierShiftId" = ${shift.id}
+        AND status = 'APPROVED'
+    `;
+
+    const cashOrderCount = safeNumberFromBigInt(BigInt(orderCount[0].count), 'cashOrderCount');
+
+    const expectedCashMinor = BigInt(shift.openingCashMinor) + approvedCashMinor;
+
+    return {
+      id: shift.id,
+      tenantId: shift.tenantId,
+      branchId: shift.branchId,
+      cashierUserId: shift.cashierUserId,
+      status: shift.status,
+      openingCashMinor: shift.openingCashMinor.toString(),
+      approvedCashMinor: approvedCashMinor.toString(),
+      expectedCashMinor: expectedCashMinor.toString(),
+      cashOrderCount,
+      cashPaymentCount,
+      openedAt: shift.openedAt,
+      version: shift.version,
+    };
   }
 
   /**
@@ -377,7 +437,7 @@ export class CashShiftService {
     tenantId: string;
     branchId: string;
     cashierUserId: string;
-  }): Promise<{ shiftId: string; shift: CashShiftSummary }> {
+  }): Promise<{ shiftId: string; shift: CashShiftProjection }> {
     const shift = await this.getCurrentShift(params);
     if (!shift) {
       throw new ConflictException('No active cash shift. Open a shift before confirming cash payments.');

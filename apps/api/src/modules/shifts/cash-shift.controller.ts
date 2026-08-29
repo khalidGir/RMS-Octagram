@@ -18,7 +18,7 @@ import { CashShiftService } from './cash-shift.service';
 /**
  * Custom validator: string must be a non-negative decimal integer string.
  * Allows "0", "12345", but rejects "-1", "1.5", "1e3", "", " 123 ".
- * Max length 15 digits (max safe minor units for ~9 quadrillion).
+ * Max length 16 digits (max safe minor units for ~9 quadrillion, exceeds Number.MAX_SAFE_INTEGER).
  */
 function IsMinorUnitString(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
@@ -37,7 +37,7 @@ function IsMinorUnitString(validationOptions?: ValidationOptions) {
           return true;
         },
         defaultMessage() {
-          return `${propertyName} must be a non-negative integer string (max 15 digits, no decimals, exponents, signs, or leading zeros)`;
+          return `${propertyName} must be a non-negative integer string (max 16 digits, no decimals, exponents, signs, or leading zeros)`;
         },
       },
     });

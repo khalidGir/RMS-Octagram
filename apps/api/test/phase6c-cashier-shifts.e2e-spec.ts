@@ -189,11 +189,121 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
     expect(res.status).toBe(409);
   });
 
-  it('3. get current shift returns the active shift', async () => {
+  it('3. get current shift returns the active shift with projection', async () => {
     const res = await getCurrentShift(app, cashierToken, tenantId, branchId);
     expect(res.status).toBe(200);
     expect(res.body.data).not.toBeNull();
     expect(res.body.data.status).toBe('OPEN');
+    expect(res.body.data.openingCashMinor).toBe('10000');
+    expect(res.body.data.approvedCashMinor).toBe('0');
+    expect(res.body.data.expectedCashMinor).toBe('10000');
+    expect(res.body.data.cashOrderCount).toBe(0);
+    expect(res.body.data.cashPaymentCount).toBe(0);
+    expect(typeof res.body.data.approvedCashMinor).toBe('string');
+    expect(typeof res.body.data.expectedCashMinor).toBe('string');
+    expect(typeof res.body.data.cashOrderCount).toBe('number');
+    expect(typeof res.body.data.cashPaymentCount).toBe('number');
+  });
+
+  it('3b. projection accumulates after cash confirm', async () => {
+    const { paymentId } = await createCashPayment(app, ownerToken, tenantId, branchId, variantId);
+    const confirm = await confirmCash(app, cashierToken, tenantId, branchId, paymentId);
+    expect(confirm.status).toBe(200);
+    const res = await getCurrentShift(app, cashierToken, tenantId, branchId);
+    expect(res.status).toBe(200);
+    expect(res.body.data.approvedCashMinor).toBe('5000');
+    expect(res.body.data.expectedCashMinor).toBe('15000');
+    expect(res.body.data.cashOrderCount).toBe(1);
+    expect(res.body.data.cashPaymentCount).toBe(1);
+  });
+
+  it('3c. projection excludes pending/non-cash payments', async () => {
+    const orderRes = await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/orders`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-tenant-id', tenantId)
+      .send({ orderType: 'POS', lines: [{ variantId, quantity: 1 }] });
+    const orderId = orderRes.body.data.order.id;
+    await prisma.payment.create({
+      data: { tenantId, branchId, orderId, method: 'CASH', amountMinor: 5000n, currency: 'ETB', status: 'PENDING' },
+    });
+    await prisma.payment.create({
+      data: { tenantId, branchId, orderId, method: 'MOBILE', amountMinor: 3000n, currency: 'ETB', status: 'APPROVED' },
+    });
+    const res = await getCurrentShift(app, cashierToken, tenantId, branchId);
+    expect(res.body.data.approvedCashMinor).toBe('5000');
+    expect(res.body.data.cashPaymentCount).toBe(1);
+    expect(res.body.data.expectedCashMinor).toBe('15000');
+  });
+
+  it('3d. projection excludes payments attributed to another shift', async () => {
+    const otherOpen = await openShift(app, cashier2Token, tenantId, branchId, '1000');
+    expect(otherOpen.status).toBe(201);
+    const otherShiftId = otherOpen.body.data.id;
+    const orderRes = await request(app.getHttpServer())
+      .post(`/api/v1/branches/${branchId}/orders`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-tenant-id', tenantId)
+      .send({ orderType: 'POS', lines: [{ variantId, quantity: 1 }] });
+    const orderId = orderRes.body.data.order.id;
+    await prisma.payment.create({
+      data: { tenantId, branchId, orderId, method: 'CASH', amountMinor: 2000n, currency: 'ETB', status: 'APPROVED', cashierShiftId: otherShiftId },
+    });
+    const res = await getCurrentShift(app, cashierToken, tenantId, branchId);
+    expect(res.body.data.approvedCashMinor).toBe('5000');
+    expect(res.body.data.cashPaymentCount).toBe(1);
+    await closeShift(app, cashier2Token, tenantId, branchId, otherShiftId, '3000', 1, 'closing other shift');
+  });
+
+  it('3e. projection equals close report when no intervening payment', async () => {
+    const pre = await getCurrentShift(app, cashierToken, tenantId, branchId);
+    expect(pre.body.data).not.toBeNull();
+    const openApproved = pre.body.data.approvedCashMinor;
+    const openExpected = pre.body.data.expectedCashMinor;
+    const openOrderCount = pre.body.data.cashOrderCount;
+    const close = await closeShift(app, cashierToken, tenantId, branchId, pre.body.data.id, openExpected, 1);
+    expect(close.status).toBe(200);
+    expect(close.body.report.approvedCashMinor).toBe(openApproved);
+    expect(close.body.report.expectedCashMinor).toBe(openExpected);
+    expect(close.body.report.orderCount).toBe(openOrderCount);
+  });
+
+  it('3f. projection cross-branch isolation', async () => {
+    const branch2 = await prisma.branch.create({ data: { tenantId, name: 'Branch Proj', slug: `phase6c-proj-${ts}`, isActive: true } });
+    const open = await openShift(app, cashierToken, tenantId, branch2.id, '7000');
+    expect(open.status).toBe(201);
+    const res = await getCurrentShift(app, cashierToken, tenantId, branch2.id);
+    expect(res.body.data.approvedCashMinor).toBe('0');
+    expect(res.body.data.expectedCashMinor).toBe('7000');
+    await closeShift(app, cashierToken, tenantId, branch2.id, open.body.data.id, '7000', 1);
+  });
+
+  it('3g. projection cross-tenant isolation', async () => {
+    const tenant2 = await prisma.tenant.create({ data: { name: 'TenantProj', slug: `phase6c-tp-${ts}`, status: 'ACTIVE' } });
+    await seedEntitlements(prisma, tenant2.id);
+    const br = await prisma.branch.create({ data: { tenantId: tenant2.id, name: 'T2 Branch', slug: `phase6c-tpb-${ts}`, isActive: true } });
+    const ow = await prisma.user.create({ data: { email: `phase6c-tp-ow-${ts}@test.com`, passwordHash, displayName: 'T2 Owner', status: 'ACTIVE' } });
+    const tm = await prisma.tenantMembership.create({ data: { tenantId: tenant2.id, userId: ow.id, role: 'OWNER', status: 'ACTIVE' } });
+    await prisma.branchAssignment.create({ data: { tenantId: tenant2.id, branchId: br.id, membershipId: tm.id } });
+    const t2token = await login(app, `phase6c-tp-ow-${ts}@test.com`);
+    const open = await openShift(app, t2token, tenant2.id, br.id, '8000');
+    expect(open.status).toBe(201);
+    const res = await getCurrentShift(app, t2token, tenant2.id, br.id);
+    expect(res.body.data.approvedCashMinor).toBe('0');
+    expect(res.body.data.expectedCashMinor).toBe('8000');
+    await closeShift(app, t2token, tenant2.id, br.id, open.body.data.id, '8000', 1);
+  });
+
+  it('3h. projection large money above MAX_SAFE_INTEGER', async () => {
+    const branch3 = await prisma.branch.create({ data: { tenantId, name: 'Branch Large', slug: `phase6c-lg-${ts}`, isActive: true } });
+    const large = '9007199254740993';
+    const open = await openShift(app, cashierToken, tenantId, branch3.id, large);
+    expect(open.status).toBe(201);
+    const res = await getCurrentShift(app, cashierToken, tenantId, branch3.id);
+    expect(res.body.data.openingCashMinor).toBe(large);
+    expect(res.body.data.expectedCashMinor).toBe(large);
+    expect(res.body.data.approvedCashMinor).toBe('0');
+    await closeShift(app, cashierToken, tenantId, branch3.id, open.body.data.id, large, 1);
   });
 
   it('4. owner can open and close a shift', async () => {
@@ -218,6 +328,11 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
     const { paymentId } = await createCashPayment(app, ownerToken, tenantId, branchId, variantId);
     const res = await confirmCash(app, cashier2Token, tenantId, branchId, paymentId);
     expect(res.status).toBe(409);
+  });
+
+  it('6b. reopen shift for remaining tests', async () => {
+    const reopen = await openShift(app, cashierToken, tenantId, branchId, '10000');
+    expect(reopen.status).toBe(201);
   });
 
   it('7. cash confirmation succeeds with active shift and attributes payment', async () => {
