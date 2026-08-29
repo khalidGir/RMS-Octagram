@@ -106,7 +106,7 @@ describe('Phase 6B — Public Context & Table Sessions (e2e)', () => {
       .post(`/api/v1/branches/${branchId}/shifts/open`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-tenant-id', tenantId)
-      .send({ openingCashMinor: 10000 });
+      .send({ openingCashMinor: '10000' });
     expect(shiftRes.status).toBe(201);
     shiftId = shiftRes.body.data.id;
 

@@ -1,6 +1,8 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PrismaClient } from '@prisma/client';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { BusinessDayService } from '../business-day/business-day.service';
 
 export type PrismaTransactionClient = PrismaClient | Parameters<Parameters<PrismaClient['$transaction']>[0]>[0];
 
@@ -10,10 +12,10 @@ export interface CashShiftSummary {
   branchId: string;
   cashierUserId: string;
   status: string;
-  openingCashMinor: number;
-  expectedCashMinor: number | null;
-  countedCashMinor: number | null;
-  varianceMinor: number | null;
+  openingCashMinor: string;
+  expectedCashMinor: string | null;
+  countedCashMinor: string | null;
+  varianceMinor: string | null;
   varianceReason: string | null;
   openedAt: Date;
   closedAt: Date | null;
@@ -28,11 +30,11 @@ export interface ShiftReportSnapshotData {
   tenantId: string;
   branchId: string;
   cashShiftId: string;
-  openingCashMinor: number;
-  approvedCashMinor: number;
-  expectedCashMinor: number;
-  countedCashMinor: number;
-  varianceMinor: number;
+  openingCashMinor: string;
+  approvedCashMinor: string;
+  expectedCashMinor: string;
+  countedCashMinor: string;
+  varianceMinor: string;
   varianceReason: string | null;
   orderCount: number;
   paymentCount: number;
@@ -48,7 +50,10 @@ export interface ShiftReportSnapshotData {
 
 @Injectable()
 export class CashShiftService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(BusinessDayService) private readonly businessDayService: BusinessDayService,
+  ) {}
 
   /**
    * Open a new cash shift for a cashier at a branch.
@@ -59,12 +64,12 @@ export class CashShiftService {
     tenantId: string;
     branchId: string;
     cashierUserId: string;
-    openingCashMinor: number;
+    openingCashMinor: bigint;
     actorUserId: string;
   }): Promise<CashShiftSummary> {
     const { tenantId, branchId, cashierUserId, openingCashMinor, actorUserId } = params;
 
-    if (openingCashMinor < 0) {
+    if (openingCashMinor < 0n) {
       throw new BadRequestException('Opening cash cannot be negative');
     }
 
@@ -85,7 +90,7 @@ export class CashShiftService {
             branchId,
             cashierUserId,
             status: 'OPEN',
-            openingCashMinor: BigInt(openingCashMinor),
+            openingCashMinor,
           },
         });
 
@@ -99,7 +104,7 @@ export class CashShiftService {
             entityId: newShift.id,
             afterJson: {
               cashierUserId,
-              openingCashMinor,
+              openingCashMinor: openingCashMinor.toString(),
               status: 'OPEN',
             },
           },
@@ -146,7 +151,7 @@ export class CashShiftService {
     tenantId: string;
     branchId: string;
     shiftId: string;
-    countedCashMinor: number;
+    countedCashMinor: bigint;
     varianceReason?: string;
     expectedVersion: number;
     actorUserId: string;
@@ -185,20 +190,20 @@ export class CashShiftService {
 
       // Compute expectedCashMinor from opening cash + confirmed CASH payments attributed to this shift
       const paymentAgg = await tx.$queryRaw<Array<{ total: bigint; count: bigint }>>`
-        SELECT COALESCE(SUM("amountMinor"), 0) as total, COUNT(*) as count
+        SELECT COALESCE(SUM("amountMinor"), 0::bigint) as total, COUNT(*)::bigint as count
         FROM "Payment"
         WHERE "cashierShiftId" = ${shiftId}
           AND status = 'APPROVED'
           AND method = 'CASH'
       `;
 
-      const approvedCashMinor = Number(paymentAgg[0].total);
-      const expectedCashMinor = Number(shift.openingCashMinor) + approvedCashMinor;
-      const paymentCount = Number(paymentAgg[0].count);
+      const approvedCashMinor = BigInt(paymentAgg[0].total);
+      const expectedCashMinor = BigInt(shift.openingCashMinor) + approvedCashMinor;
+      const paymentCount = safeNumberFromBigInt(BigInt(paymentAgg[0].count), 'paymentCount');
 
       // Count orders
       const orderCount = await tx.$queryRaw<Array<{ count: bigint }>>`
-        SELECT COUNT(DISTINCT "orderId") as count
+        SELECT COUNT(DISTINCT "orderId")::bigint as count
         FROM "Payment"
         WHERE "cashierShiftId" = ${shiftId}
           AND status = 'APPROVED'
@@ -206,7 +211,7 @@ export class CashShiftService {
 
       // Count cancellations and voids during this shift
       const cancellationCount = await tx.$queryRaw<Array<{ count: bigint }>>`
-        SELECT COUNT(*) as count
+        SELECT COUNT(*)::bigint as count
         FROM "Order"
         WHERE "tenantId" = ${tenantId}
           AND "branchId" = ${branchId}
@@ -215,7 +220,7 @@ export class CashShiftService {
       `;
 
       const voidCount = await tx.$queryRaw<Array<{ count: bigint }>>`
-        SELECT COUNT(*) as count
+        SELECT COUNT(*)::bigint as count
         FROM "Order"
         WHERE "tenantId" = ${tenantId}
           AND "branchId" = ${branchId}
@@ -226,7 +231,7 @@ export class CashShiftService {
       const varianceMinor = countedCashMinor - expectedCashMinor;
 
       // Validate variance reason for non-zero variance
-      if (varianceMinor !== 0 && (!varianceReason || varianceReason.trim().length === 0)) {
+      if (varianceMinor !== 0n && (!varianceReason || varianceReason.trim().length === 0)) {
         throw new BadRequestException('Variance reason is required for non-zero variance');
       }
 
@@ -234,17 +239,24 @@ export class CashShiftService {
         throw new BadRequestException('Variance reason must be 255 characters or less');
       }
 
+      // Derive localBusinessDate using branch timezone and cutoff
+      const branch = await tx.branch.findUniqueOrThrow({ where: { id: branchId } });
       const now = new Date();
-      const localBusinessDate = new Date(now.toISOString().split('T')[0]);
+      const localBusinessDateStr = this.businessDayService.utcToLocalBusinessDate(
+        now,
+        branch.businessDayCutoffLocal,
+        branch.timezone,
+      );
+      const localBusinessDate = new Date(localBusinessDateStr + 'T00:00:00Z');
 
       // Close the shift
       await tx.cashShift.update({
         where: { id: shiftId },
         data: {
           status: 'CLOSED',
-          expectedCashMinor: BigInt(expectedCashMinor),
-          countedCashMinor: BigInt(countedCashMinor),
-          varianceMinor: BigInt(varianceMinor),
+          expectedCashMinor,
+          countedCashMinor,
+          varianceMinor,
           varianceReason: varianceReason ?? null,
           closedAt: now,
           closedByUserId: actorUserId,
@@ -258,16 +270,16 @@ export class CashShiftService {
           tenantId,
           branchId,
           cashShiftId: shiftId,
-          openingCashMinor: shift.openingCashMinor,
-          approvedCashMinor: BigInt(approvedCashMinor),
-          expectedCashMinor: BigInt(expectedCashMinor),
-          countedCashMinor: BigInt(countedCashMinor),
-          varianceMinor: BigInt(varianceMinor),
+          openingCashMinor: BigInt(shift.openingCashMinor),
+          approvedCashMinor,
+          expectedCashMinor,
+          countedCashMinor,
+          varianceMinor,
           varianceReason: varianceReason ?? null,
-          orderCount: Number(orderCount[0].count),
+          orderCount: safeNumberFromBigInt(BigInt(orderCount[0].count), 'orderCount'),
           paymentCount,
-          cancellationCount: Number(cancellationCount[0].count),
-          voidCount: Number(voidCount[0].count),
+          cancellationCount: safeNumberFromBigInt(BigInt(cancellationCount[0].count), 'cancellationCount'),
+          voidCount: safeNumberFromBigInt(BigInt(voidCount[0].count), 'voidCount'),
           localOpenedAt: shift.openedAt,
           localClosedAt: now,
           localBusinessDate,
@@ -287,11 +299,11 @@ export class CashShiftService {
           beforeJson: { status: 'OPEN', version: shift.version },
           afterJson: {
             status: 'CLOSED',
-            expectedCashMinor,
-            countedCashMinor,
-            varianceMinor,
+            expectedCashMinor: expectedCashMinor.toString(),
+            countedCashMinor: countedCashMinor.toString(),
+            varianceMinor: varianceMinor.toString(),
             paymentCount,
-            orderCount: Number(orderCount[0].count),
+            orderCount: safeNumberFromBigInt(orderCount[0].count, 'orderCount'),
           },
         },
       });
@@ -412,10 +424,10 @@ export class CashShiftService {
       branchId: shift.branchId,
       cashierUserId: shift.cashierUserId,
       status: shift.status,
-      openingCashMinor: Number(shift.openingCashMinor),
-      expectedCashMinor: shift.expectedCashMinor !== null ? Number(shift.expectedCashMinor) : null,
-      countedCashMinor: shift.countedCashMinor !== null ? Number(shift.countedCashMinor) : null,
-      varianceMinor: shift.varianceMinor !== null ? Number(shift.varianceMinor) : null,
+      openingCashMinor: shift.openingCashMinor.toString(),
+      expectedCashMinor: shift.expectedCashMinor !== null ? shift.expectedCashMinor.toString() : null,
+      countedCashMinor: shift.countedCashMinor !== null ? shift.countedCashMinor.toString() : null,
+      varianceMinor: shift.varianceMinor !== null ? shift.varianceMinor.toString() : null,
       varianceReason: shift.varianceReason,
       openedAt: shift.openedAt,
       closedAt: shift.closedAt,
@@ -432,11 +444,11 @@ export class CashShiftService {
       tenantId: report.tenantId,
       branchId: report.branchId,
       cashShiftId: report.cashShiftId,
-      openingCashMinor: Number(report.openingCashMinor),
-      approvedCashMinor: Number(report.approvedCashMinor),
-      expectedCashMinor: Number(report.expectedCashMinor),
-      countedCashMinor: Number(report.countedCashMinor),
-      varianceMinor: Number(report.varianceMinor),
+      openingCashMinor: report.openingCashMinor.toString(),
+      approvedCashMinor: report.approvedCashMinor.toString(),
+      expectedCashMinor: report.expectedCashMinor.toString(),
+      countedCashMinor: report.countedCashMinor.toString(),
+      varianceMinor: report.varianceMinor.toString(),
       varianceReason: report.varianceReason,
       orderCount: report.orderCount,
       paymentCount: report.paymentCount,
@@ -450,4 +462,16 @@ export class CashShiftService {
       createdAt: report.createdAt,
     };
   }
+}
+
+/**
+ * Safely convert a BigInt from PostgreSQL to a JavaScript number.
+ * Throws if the value exceeds Number.MAX_SAFE_INTEGER.
+ */
+function safeNumberFromBigInt(value: bigint | number, fieldName: string): number {
+  if (typeof value === 'number') return value;
+  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(-Number.MAX_SAFE_INTEGER)) {
+    throw new BadRequestException(`${fieldName} exceeds safe integer range: ${value.toString()}`);
+  }
+  return Number(value);
 }

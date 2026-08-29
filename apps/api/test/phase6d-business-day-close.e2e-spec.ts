@@ -253,7 +253,7 @@ describe('Phase 6D — Business Day Close (e2e)', () => {
       .post(`/api/v1/branches/${branchId}/shifts/open`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-tenant-id', tenantId)
-      .send({ openingCashMinor: 5000 });
+      .send({ openingCashMinor: '5000' });
     expect(shiftRes.status).toBe(201);
 
     // Try normal close
@@ -269,7 +269,7 @@ describe('Phase 6D — Business Day Close (e2e)', () => {
       .post(`/api/v1/branches/${branchId}/shifts/${shiftRes.body.data.id}/close`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-tenant-id', tenantId)
-      .send({ countedCashMinor: 5000, expectedVersion: 1 });
+      .send({ countedCashMinor: '5000', expectedVersion: 1 });
   });
 
   it('11. close with exception bypasses open-shift blocker', async () => {
@@ -278,7 +278,7 @@ describe('Phase 6D — Business Day Close (e2e)', () => {
       .post(`/api/v1/branches/${branchId}/shifts/open`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-tenant-id', tenantId)
-      .send({ openingCashMinor: 3000 });
+      .send({ openingCashMinor: '3000' });
     expect(shiftRes.status).toBe(201);
 
     const futureDate = '2026-08-29';
@@ -296,7 +296,7 @@ describe('Phase 6D — Business Day Close (e2e)', () => {
       .post(`/api/v1/branches/${branchId}/shifts/${shiftRes.body.data.id}/close`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-tenant-id', tenantId)
-      .send({ countedCashMinor: 3000, expectedVersion: 1 });
+      .send({ countedCashMinor: '3000', expectedVersion: 1 });
   });
 
   it('12. exception close requires reason', async () => {
