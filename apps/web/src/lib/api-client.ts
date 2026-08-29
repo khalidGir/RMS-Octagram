@@ -55,9 +55,11 @@ export function newIdempotencyKey(): string {
 
 export function formatEtbMinor(value: string | number | bigint, locale = 'en-ET'): string {
   const minor = typeof value === 'bigint' ? value : BigInt(value);
-  const whole = minor / 100n;
-  const fraction = minor % 100n;
+  const negative = minor < 0n;
+  const absolute = negative ? -minor : minor;
+  const whole = absolute / 100n;
+  const fraction = absolute % 100n;
   const formattedWhole = new Intl.NumberFormat(locale).format(whole);
   const decimals = fraction === 0n ? '' : `.${fraction.toString().padStart(2, '0')}`;
-  return `ETB ${formattedWhole}${decimals}`;
+  return `${negative ? '−' : ''}ETB ${formattedWhole}${decimals}`;
 }
