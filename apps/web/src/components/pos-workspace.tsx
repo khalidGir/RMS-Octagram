@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiRequest, formatEtbMinor, newIdempotencyKey, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
@@ -41,6 +41,22 @@ function makeLineKey(variantId: string, modifierSelections: Record<string, strin
   return `${variantId}__${modParts}__${notes.trim().slice(0, 200)}`;
 }
 
+interface StaleLine {
+  variantId: string;
+  lineTotal: string;
+}
+
+interface StalePriceDetail {
+  code?: string;
+  serverTotal?: string;
+  message?: string;
+  lines?: StaleLine[];
+}
+
+function findCartLineForVariant(cart: CartLine[], variantId: string): CartLine | undefined {
+  return cart.find((l) => l.variant.id === variantId);
+}
+
 export function PosWorkspace() {
   const { accessToken, csrfToken, profile } = useAuth();
   const membership = profile?.memberships[0];
@@ -57,6 +73,7 @@ export function PosWorkspace() {
   const [pending, setPending] = useState<CreatedOrder | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [staleDetail, setStaleDetail] = useState<StalePriceDetail | null>(null);
 
   const orderKey = useRef(newIdempotencyKey());
   const paymentKey = useRef(newIdempotencyKey());
@@ -190,9 +207,11 @@ export function PosWorkspace() {
       setPending(response.data.order);
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        const details = error.details as { code?: string; serverTotal?: string; message?: string } | undefined;
+        const details = error.details as StalePriceDetail | undefined;
         if (details?.code === 'PRICE_CHANGED') {
-          setMessage(`Prices changed since you added items. Server total: ${details.serverTotal ? formatEtbMinor(details.serverTotal) : 'unknown'}. Please review your cart.`);
+          setStaleDetail(details);
+          setMessage('Prices changed since you added items. Review the affected lines below, then update your cart or retry.');
+          void menuQuery.refetch();
         } else {
           setMessage('The menu or order changed. Refresh the menu and review the ticket before retrying.');
         }
@@ -258,6 +277,36 @@ export function PosWorkspace() {
       {message && (
         <div role="alert" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">
           {message}
+        </div>
+      )}
+
+      {staleDetail?.lines && staleDetail.lines.length > 0 && (
+        <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <p className="text-xs font-black uppercase tracking-wider text-amber-800">Affected lines</p>
+          <ul className="mt-2 divide-y divide-amber-200">
+            {staleDetail.lines.map((sl) => {
+              const cartLine = findCartLineForVariant(cart, sl.variantId);
+              return (
+                <li key={sl.variantId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <span>
+                    <b>{cartLine?.item.name ?? 'Unknown item'}</b>
+                    <span className="ml-1 text-ink-muted">{cartLine?.variant.name ?? sl.variantId}</span>
+                  </span>
+                  <span className="font-black text-amber-900">{formatEtbMinor(sl.lineTotal)}</span>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-2 text-xs text-ink-muted">
+            Server total: {staleDetail.serverTotal ? formatEtbMinor(staleDetail.serverTotal) : 'unknown'}. 
+            Update the affected items in your cart, then retry with the same order.
+          </p>
+          <button
+            onClick={() => setStaleDetail(null)}
+            className="mt-3 min-h-9 rounded-lg border border-amber-300 bg-white px-4 text-xs font-bold text-amber-800 hover:bg-amber-100"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -475,9 +524,45 @@ function VariantSelector({
   onSelect: (variant: Variant) => void;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    cancelRef.current?.focus();
+    const root = document.getElementById('__next');
+    if (root) root.inert = true;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    function getFocusable(): HTMLElement[] {
+      return Array.from(dialog!.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+      if (e.key !== 'Tab') return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      if (root) root.inert = false;
+      previousFocusRef.current?.focus();
+    };
+  }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40" role="dialog" aria-modal="true" aria-label={`Select variant for ${item.name}`}>
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
+      <div ref={dialogRef} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
         <h2 className="text-xl font-black">{item.name}</h2>
         <p className="mt-1 text-sm text-ink-muted">Choose a size or variant</p>
         <div className="mt-4 space-y-2">
@@ -492,7 +577,7 @@ function VariantSelector({
             </button>
           ))}
         </div>
-        <button onClick={onClose} className="mt-4 min-h-11 w-full rounded-xl border border-line bg-white font-bold">
+        <button ref={cancelRef} onClick={onClose} className="mt-4 min-h-11 w-full rounded-xl border border-line bg-white font-bold">
           Cancel
         </button>
       </div>
@@ -513,6 +598,42 @@ function ModifierSelector({
   onConfirm: (variant: Variant, selectedModifiers: Record<string, string[]>, notes: string) => void;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement as HTMLElement;
+    cancelRef.current?.focus();
+    const root = document.getElementById('__next');
+    if (root) root.inert = true;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    function getFocusable(): HTMLElement[] {
+      return Array.from(dialog!.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+      if (e.key !== 'Tab') return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+      } else {
+        if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    }
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('keydown', handleKey);
+      if (root) root.inert = false;
+      previousFocusRef.current?.focus();
+    };
+  }, [onClose]);
   const defaultVariant = item.variants.find((v) => v.isDefault) ?? item.variants[0];
   const [selectedVariant, setSelectedVariant] = useState<Variant>(existingLine?.variant ?? defaultVariant);
   const [selections, setSelections] = useState<Record<string, string[]>>(
@@ -571,7 +692,7 @@ function ModifierSelector({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40" role="dialog" aria-modal="true" aria-label={`Customize ${item.name}`}>
-      <div className="w-full max-w-lg max-h-[85vh] overflow-auto rounded-2xl bg-white p-6 shadow-lg">
+      <div ref={dialogRef} className="w-full max-w-lg max-h-[85vh] overflow-auto rounded-2xl bg-white p-6 shadow-lg">
         <h2 className="text-xl font-black">{item.name}</h2>
         <p className="mt-1 text-sm text-ink-muted">{item.description}</p>
 
@@ -650,7 +771,7 @@ function ModifierSelector({
         <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
           <span className="text-lg font-black text-brand">{formatEtbMinor(unitTotal)}</span>
           <div className="flex gap-2">
-            <button onClick={onClose} className="min-h-11 rounded-xl border border-line bg-white px-5 font-bold">
+            <button ref={cancelRef} onClick={onClose} className="min-h-11 rounded-xl border border-line bg-white px-5 font-bold">
               Cancel
             </button>
             <button onClick={handleConfirm} className="min-h-11 rounded-xl bg-[#18241f] px-5 font-black text-white">

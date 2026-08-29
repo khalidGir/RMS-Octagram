@@ -38,7 +38,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ ttl: 60_000, limit: 10, name: 'login' })
+  @Throttle({ ttl: 60_000, limit: 100, name: 'login' })
   @ApiOperation({ summary: 'Staff login' })
   async login(
     @Body() body: LoginDto,
