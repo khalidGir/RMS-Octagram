@@ -12,7 +12,7 @@ function landingPage(profile: StaffProfile): Route {
   if (role === 'KITCHEN_STAFF') return '/kitchen';
   if (role === 'WAITER') return '/waiter' as Route;
   if (role === 'CASHIER') return '/pos';
-  return '/';
+  return '/dashboard';
 }
 
 export function LoginForm() {

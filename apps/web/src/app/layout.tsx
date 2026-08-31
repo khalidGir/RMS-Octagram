@@ -6,9 +6,9 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: { default: 'Buna House · RMS', template: '%s · Buna House' },
-  description: 'Restaurant operations, point of sale, kitchen, and inventory.',
-  applicationName: 'RMS',
+  title: { default: 'RestaurantMS', template: '%s · RestaurantMS' },
+  description: 'Restaurant operations, point of sale, kitchen, payments, and inventory for modern hospitality teams.',
+  applicationName: 'RestaurantMS',
   manifest: '/manifest.webmanifest',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'RMS' },
 };
