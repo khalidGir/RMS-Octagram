@@ -108,7 +108,7 @@ export function MarketingLanding() {
         {/* Capabilities strip */}
         <section className="border-b border-black/[.06] bg-ink px-5 py-7 text-white sm:px-8" aria-label="Capabilities">
           <div className="mx-auto flex max-w-[1380px] flex-wrap items-center justify-between gap-5">
-            <p className="text-xs font-black uppercase tracking-[.18em] text-white/45">
+            <p className="text-xs font-black uppercase tracking-[.18em] text-white/55">
               One system from first order to final report
             </p>
             <div className="flex flex-wrap gap-6 text-sm font-black text-white/80">
@@ -149,7 +149,7 @@ export function MarketingLanding() {
         <section id="roles" className="bg-surface-subtle px-5 py-20 sm:px-8 sm:py-28 lg:px-12">
           <div className="mx-auto grid max-w-[1380px] gap-12 lg:grid-cols-[.8fr_1.2fr]">
             <div>
-              <p className="text-xs font-black uppercase tracking-[.2em] text-brand">Made for the whole room</p>
+              <p className="text-xs font-black uppercase tracking-[.2em] text-brand-700">Made for the whole room</p>
               <h2 className="mt-4 text-4xl font-black leading-[.96] tracking-[-.055em] sm:text-6xl">
                 The right amount of system for every role.
               </h2>
@@ -163,11 +163,11 @@ export function MarketingLanding() {
                   className={`rounded-2xl p-6 ${i === 0 ? 'bg-ink text-white' : 'border border-black/10 bg-canvas'}`}
                   key={role}
                 >
-                  <span className="text-[10px] font-black uppercase tracking-[.16em] opacity-50">
+                  <span className="text-[10px] font-black uppercase tracking-[.16em] opacity-65">
                     0{i + 1}
                   </span>
                   <h3 className="mt-6 text-xl font-black">{role}</h3>
-                  <p className="mt-2 text-sm opacity-60">{copy}</p>
+                  <p className="mt-2 text-sm opacity-70">{copy}</p>
                 </article>
               ))}
             </div>
@@ -194,7 +194,7 @@ export function MarketingLanding() {
                   ].map(([title, copy]) => (
                     <div className="border-t border-white/20 pt-5" key={title}>
                       <h3 className="font-black">{title}</h3>
-                      <p className="mt-2 text-sm leading-6 text-white/60">{copy}</p>
+                      <p className="mt-2 text-sm leading-6 text-white/70">{copy}</p>
                     </div>
                   ))}
                 </div>
@@ -249,7 +249,7 @@ export function MarketingLanding() {
         {/* CTA */}
         <section className="px-5 pb-20 sm:px-8 sm:pb-28 lg:px-12">
           <div className="mx-auto max-w-[1380px] overflow-hidden rounded-[2rem] bg-brand px-7 py-14 text-center text-white sm:px-12 sm:py-20">
-            <p className="text-xs font-black uppercase tracking-[.2em] text-white/60">
+            <p className="text-xs font-black uppercase tracking-[.2em] text-white/95">
               Your next service can feel calmer
             </p>
             <h2 className="mx-auto mt-5 max-w-4xl text-4xl font-black leading-[.95] tracking-[-.06em] sm:text-7xl">
@@ -345,12 +345,12 @@ export function MarketingFooter() {
               <span className="grid size-10 place-items-center rounded-xl bg-brand text-sm font-black">R</span>
               <b>RestaurantMS</b>
             </div>
-            <p className="mt-4 max-w-sm text-sm leading-6 text-white/45">
+            <p className="mt-4 max-w-sm text-sm leading-6 text-white/55">
               A modern restaurant operating system designed for hospitality teams in Ethiopia.
             </p>
           </div>
           <div>
-            <p className="text-xs font-black uppercase tracking-widest text-white/35">Product</p>
+            <p className="text-xs font-black uppercase tracking-widest text-white/50">Product</p>
             <div className="mt-4 grid gap-3 text-sm text-white/65">
               <a href="/#product">Features</a>
               <a href="/#roles">Roles</a>
@@ -359,7 +359,7 @@ export function MarketingFooter() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-black uppercase tracking-widest text-white/35">Legal</p>
+            <p className="text-xs font-black uppercase tracking-widest text-white/50">Legal</p>
             <div className="mt-4 grid gap-3 text-sm text-white/65">
               <Link href="/legal/terms">Terms of Service</Link>
               <Link href="/legal/privacy">Privacy Notice</Link>
@@ -367,7 +367,7 @@ export function MarketingFooter() {
             </div>
           </div>
         </div>
-        <div className="flex flex-col gap-3 pt-6 text-[11px] text-white/35 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 pt-6 text-[11px] text-white/50 sm:flex-row sm:items-center sm:justify-between">
           <p>© 2026 RestaurantMS. All rights reserved.</p>
           <p>ETB amounts shown are illustrative. RestaurantMS is not a bank or payment provider.</p>
         </div>
@@ -388,7 +388,7 @@ function ProductPreview() {
           <span className="size-2 rounded-full bg-red-300" />
           <span className="size-2 rounded-full bg-amber-300" />
           <span className="size-2 rounded-full bg-emerald-300" />
-          <span className="ml-auto text-[9px] font-black text-black/35">BOLE MAIN · LIVE</span>
+          <span className="ml-auto text-[9px] font-black text-black/65">BOLE MAIN · LIVE</span>
         </div>
 
         <div className="grid min-h-[480px] grid-cols-[82px_1fr] sm:grid-cols-[120px_1fr]">
@@ -398,7 +398,7 @@ function ProductPreview() {
             <div className="mt-8 space-y-3">
               {['OV', 'PS', 'OR', 'KD', 'IN', 'RP'].map((x, i) => (
                 <div
-                  className={`rounded-lg px-2 py-2 text-[8px] font-black ${i === 0 ? 'bg-white text-black' : 'text-white/40'}`}
+                  className={`rounded-lg px-2 py-2 text-[8px] font-black ${i === 0 ? 'bg-white text-black' : 'text-white/55'}`}
                   key={x}
                 >
                   {x}
@@ -415,7 +415,7 @@ function ProductPreview() {
             <div className="mt-5 grid grid-cols-2 gap-2">
               {[['Revenue', 'ETB 48,260'], ['Active orders', '24'], ['Prep time', '18 min'], ['Reviews', '5']].map(([x, y], i) => (
                 <div className="rounded-xl border border-black/[.06] bg-white p-3" key={x}>
-                  <p className="text-[8px] font-bold text-black/45">{x}</p>
+                  <p className="text-[8px] font-bold text-black/60">{x}</p>
                   <p className={`mt-2 text-sm font-black ${i === 3 ? 'text-brand' : ''}`}>{y}</p>
                 </div>
               ))}
