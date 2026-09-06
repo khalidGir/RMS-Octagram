@@ -81,17 +81,12 @@ async function setupAuthRoute(page: import('@playwright/test').Page, tokens: Tok
     });
   });
   await page.route('**/auth/me', async (route) => {
-    const url = route.request().url();
-    if (url.includes('/auth/me')) {
-      const meRes = await httpPost('/auth/me', { Authorization: `Bearer ${tokens.accessToken}` });
-      await route.fulfill({
-        status: meRes.status,
-        contentType: 'application/json',
-        body: JSON.stringify(meRes.body),
-      });
-    } else {
-      await route.continue();
-    }
+    const meRes = await httpPost('/auth/me', { Authorization: `Bearer ${tokens.accessToken}` });
+    await route.fulfill({
+      status: meRes.status,
+      contentType: 'application/json',
+      body: JSON.stringify(meRes.body),
+    });
   });
 }
 
@@ -129,6 +124,7 @@ async function loginViaUI(
 
   await page.goto(profile.landing, { timeout: 60_000 });
   await page.waitForLoadState('networkidle', { timeout: 60_000 });
+  await page.locator('aside nav').first().waitFor({ state: 'visible', timeout: 30_000 });
 }
 
 async function loginAndCaptureToken(
@@ -143,6 +139,7 @@ async function loginAndCaptureToken(
 
   await page.goto(profile.landing);
   await page.waitForLoadState('networkidle');
+  await page.locator('aside nav').first().waitFor({ state: 'visible', timeout: 30_000 });
 
   return tokens;
 }

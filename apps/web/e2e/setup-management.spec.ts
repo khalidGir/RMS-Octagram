@@ -62,6 +62,6 @@ test.describe('Settings Management', () => {
   test('Manager can see feature flags section', async ({ managerPage }) => {
     await clientNavigate(managerPage, '/settings');
     await managerPage.waitForLoadState('networkidle');
-    await expect(managerPage.getByText('Feature flags')).toBeVisible({ timeout: 15_000 });
+    await expect(managerPage.getByRole('heading', { name: 'Feature flags' })).toBeVisible({ timeout: 15_000 });
   });
 });
