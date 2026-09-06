@@ -56,7 +56,7 @@ test.describe('Settings Management', () => {
   test('Manager can see restaurant identity section', async ({ managerPage }) => {
     await clientNavigate(managerPage, '/settings');
     await managerPage.waitForLoadState('networkidle');
-    await expect(managerPage.getByText('Restaurant identity')).toBeVisible({ timeout: 15_000 });
+    await expect(managerPage.getByRole('heading', { name: 'Restaurant identity' })).toBeVisible({ timeout: 15_000 });
   });
 
   test('Manager can see feature flags section', async ({ managerPage }) => {
