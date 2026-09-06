@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
-import { useOnlineStatus } from './connectivity-indicator';
+import { useOnlineStatus } from '@/hooks';
 
 interface QueuePayment {
   id: string;
@@ -412,7 +412,7 @@ function State({ title, detail, retry }: { title: string; detail: string; retry?
         <h2 className="text-xl font-black">{title}</h2>
         <p className="mt-2 text-sm text-ink-muted">{detail}</p>
         {retry && (
-          <button onClick={retry} className="mt-4 min-h-11 rounded-xl bg-[#18241f] px-5 font-black text-white">
+          <button onClick={retry} className="mt-4 min-h-11 rounded-xl bg-dark px-5 font-black text-white">
             Try again
           </button>
         )}

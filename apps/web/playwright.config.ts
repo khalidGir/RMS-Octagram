@@ -42,7 +42,7 @@ export default defineConfig({
     {
       command: 'cd ../../apps/api && node dist/main.js',
       url: `${API_URL}/api/v1/auth/me`,
-      reuseExistingServer: false,
+      reuseExistingServer: true,
       timeout: 30_000,
       env: {
         TEST_DATABASE_URL: process.env.TEST_DATABASE_URL ?? '',
@@ -56,7 +56,7 @@ export default defineConfig({
     {
       command: 'pnpm dev',
       url: FRONTEND_URL,
-      reuseExistingServer: false,
+      reuseExistingServer: true,
       timeout: 60_000,
       env: {
         NEXT_PUBLIC_API_URL: `${API_URL}/api/v1`,

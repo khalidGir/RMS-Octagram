@@ -1,4 +1,6 @@
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
+import { API_BASE_URL } from './config';
+
+export { formatEtbMinor } from './money';
 
 export type ApiEnvelope<T> = { data: T };
 
@@ -53,13 +55,4 @@ export function newIdempotencyKey(): string {
   return crypto.randomUUID();
 }
 
-export function formatEtbMinor(value: string | number | bigint, locale = 'en-ET'): string {
-  const minor = typeof value === 'bigint' ? value : BigInt(value);
-  const negative = minor < 0n;
-  const absolute = negative ? -minor : minor;
-  const whole = absolute / 100n;
-  const fraction = absolute % 100n;
-  const formattedWhole = new Intl.NumberFormat(locale).format(whole);
-  const decimals = fraction === 0n ? '' : `.${fraction.toString().padStart(2, '0')}`;
-  return `${negative ? '−' : ''}ETB ${formattedWhole}${decimals}`;
-}
+

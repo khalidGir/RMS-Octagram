@@ -44,7 +44,7 @@ export function FeatureControlPanel() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button className="min-h-11 rounded-control border border-line bg-white px-4 text-sm font-extrabold shadow-sm">View audit history</button>
-          <button onClick={() => setSaved(true)} disabled={saved} className="min-h-11 rounded-control bg-[#18241f] px-5 text-sm font-extrabold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-45">{saved ? 'Changes saved' : 'Save changes'}</button>
+          <button onClick={() => setSaved(true)} disabled={saved} className="min-h-11 rounded-control bg-dark px-5 text-sm font-extrabold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-45">{saved ? 'Changes saved' : 'Save changes'}</button>
         </div>
       </header>
 
@@ -57,9 +57,9 @@ export function FeatureControlPanel() {
       <section className="mt-5 rounded-panel border border-line bg-white p-4 shadow-card sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex gap-2 overflow-x-auto hide-scrollbar" aria-label="Feature categories">
-            {['All', 'Ordering', 'Payments', 'Operations', 'Growth'].map((item) => <button key={item} onClick={() => setCategory(item)} className={`min-h-10 whitespace-nowrap rounded-full px-4 text-xs font-black ${category === item ? 'bg-[#18241f] text-white' : 'bg-muted text-ink-muted hover:text-ink'}`}>{item}</button>)}
+            {['All', 'Ordering', 'Payments', 'Operations', 'Growth'].map((item) => <button key={item} onClick={() => setCategory(item)} className={`min-h-10 whitespace-nowrap rounded-full px-4 text-xs font-black ${category === item ? 'bg-dark text-white' : 'bg-muted text-ink-muted hover:text-ink'}`}>{item}</button>)}
           </div>
-          <label className="flex min-w-64 items-center gap-3 rounded-control border border-line bg-[#faf8f4] px-3 py-2"><span className="text-xs font-black text-ink-muted">Branch view</span><select value={branch} onChange={(event) => setBranch(event.target.value)} className="min-h-8 flex-1 bg-transparent text-sm font-extrabold outline-none"><option>Bole Main</option><option>Downtown</option><option>Airport</option></select></label>
+          <label className="flex min-w-64 items-center gap-3 rounded-control border border-line bg-surface-subtle px-3 py-2"><span className="text-xs font-black text-ink-muted">Branch view</span><select value={branch} onChange={(event) => setBranch(event.target.value)} className="min-h-8 flex-1 bg-transparent text-sm font-extrabold outline-none"><option>Bole Main</option><option>Downtown</option><option>Airport</option></select></label>
         </div>
       </section>
 
@@ -90,6 +90,6 @@ function Control({ label, children }: { label: string; children: React.ReactNode
 }
 
 function SummaryCard({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: 'brand' | 'dark' | 'amber' }) {
-  const styles = tone === 'dark' ? 'bg-[#18241f] text-white' : tone === 'amber' ? 'border-amber-200 bg-amber-50' : 'border-line bg-white';
+  const styles = tone === 'dark' ? 'bg-dark text-white' : tone === 'amber' ? 'border-amber-200 bg-amber-50' : 'border-line bg-white';
   return <article className={`rounded-card border border-transparent p-5 shadow-card ${styles}`}><p className={`text-xs font-black ${tone === 'dark' ? 'text-white/55' : 'text-ink-muted'}`}>{label}</p><p className="mt-3 text-2xl font-black tracking-[-0.04em]">{value}</p><p className={`mt-1 text-xs font-semibold ${tone === 'dark' ? 'text-white/50' : 'text-ink-muted'}`}>{detail}</p></article>;
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiRequest, formatEtbMinor, newIdempotencyKey, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
-import { useOnlineStatus } from './connectivity-indicator';
+import { useOnlineStatus } from '@/hooks';
 
 interface ModifierOption { id: string; name: string; priceDeltaMinor: string; }
 interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number | null; options: ModifierOption[]; }
@@ -268,7 +268,7 @@ export function PosWorkspace() {
           </p>
         </div>
         {!shiftQuery.data && (
-          <a href="/shifts" className="grid min-h-11 place-items-center rounded-xl bg-[#18241f] px-5 font-black text-white">
+          <a href="/shifts" className="grid min-h-11 place-items-center rounded-xl bg-dark px-5 font-black text-white">
             Open shift
           </a>
         )}
@@ -322,12 +322,13 @@ export function PosWorkspace() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search menu"
+            aria-label="Search menu"
             className="min-h-12 w-full rounded-xl border border-line bg-white px-4"
           />
           <div className="hide-scrollbar mt-4 flex gap-2 overflow-auto">
             <button
               onClick={() => setCategory('')}
-              className={`min-h-11 shrink-0 rounded-full px-4 font-bold ${!category ? 'bg-[#18241f] text-white' : 'bg-white'}`}
+              className={`min-h-11 shrink-0 rounded-full px-4 font-bold ${!category ? 'bg-dark text-white' : 'bg-white'}`}
             >
               All
             </button>
@@ -335,7 +336,7 @@ export function PosWorkspace() {
               <button
                 key={g.id}
                 onClick={() => setCategory(g.id)}
-                className={`min-h-11 shrink-0 rounded-full px-4 font-bold ${category === g.id ? 'bg-[#18241f] text-white' : 'bg-white'}`}
+                className={`min-h-11 shrink-0 rounded-full px-4 font-bold ${category === g.id ? 'bg-dark text-white' : 'bg-white'}`}
               >
                 {g.name}
               </button>
@@ -409,11 +410,11 @@ export function PosWorkspace() {
                     )}
                     {line.notes && <p className="text-[10px] text-ink-muted">Note: {line.notes}</p>}
                     <div className="mt-2 flex items-center gap-2">
-                      <button onClick={() => updateLineQty(line.lineKey, -1)} className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-white text-sm font-bold">
+                      <button onClick={() => updateLineQty(line.lineKey, -1)} aria-label={`Decrease ${line.item.name} quantity`} className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-white text-sm font-bold">
                         −
                       </button>
                       <span className="w-8 text-center text-sm font-black">{line.quantity}</span>
-                      <button onClick={() => updateLineQty(line.lineKey, 1)} className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-white text-sm font-bold">
+                      <button onClick={() => updateLineQty(line.lineKey, 1)} aria-label={`Increase ${line.item.name} quantity`} className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-white text-sm font-bold">
                         +
                       </button>
                       <button
@@ -475,7 +476,7 @@ export function PosWorkspace() {
             <button
               onClick={createOrder}
               disabled={busy || !cart.length || !isOnline}
-              className="mt-4 min-h-12 w-full rounded-xl bg-[#18241f] font-black text-white disabled:opacity-50"
+              className="mt-4 min-h-12 w-full rounded-xl bg-dark font-black text-white disabled:opacity-50"
             >
               {busy ? 'Creating…' : 'Create order'}
             </button>
@@ -483,7 +484,7 @@ export function PosWorkspace() {
             <button
               onClick={confirmCash}
               disabled={busy || !shiftQuery.data || !isOnline}
-              className="mt-4 min-h-12 w-full rounded-xl bg-[#18241f] font-black text-white disabled:opacity-50"
+              className="mt-4 min-h-12 w-full rounded-xl bg-dark font-black text-white disabled:opacity-50"
             >
               {busy ? 'Confirming…' : `Confirm cash — ${formatEtbMinor(pending.totalMinor)}`}
             </button>
@@ -705,7 +706,7 @@ function ModifierSelector({
                   key={v.id}
                   onClick={() => setSelectedVariant(v)}
                   className={`min-h-10 rounded-xl px-4 text-sm font-bold ${
-                    selectedVariant.id === v.id ? 'bg-[#18241f] text-white' : 'border border-line bg-white'
+                    selectedVariant.id === v.id ? 'bg-dark text-white' : 'border border-line bg-white'
                   }`}
                 >
                   {v.name} — {formatEtbMinor(v.priceMinor)}
@@ -774,7 +775,7 @@ function ModifierSelector({
             <button ref={cancelRef} onClick={onClose} className="min-h-11 rounded-xl border border-line bg-white px-5 font-bold">
               Cancel
             </button>
-            <button onClick={handleConfirm} className="min-h-11 rounded-xl bg-[#18241f] px-5 font-black text-white">
+            <button onClick={handleConfirm} className="min-h-11 rounded-xl bg-dark px-5 font-black text-white">
               {editLineKey ? 'Update item' : 'Add to order'}
             </button>
           </div>

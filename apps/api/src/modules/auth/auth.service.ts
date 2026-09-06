@@ -230,7 +230,7 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    return this.prisma.user.findUnique({
+    const profile = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -259,6 +259,26 @@ export class AuthService {
         },
       },
     });
+
+    // Owners are authorized for every active branch and intentionally do not
+    // require explicit BranchAssignment rows. Expose those branches in the
+    // same shape as assigned staff so clients can use one branch picker model.
+    if (profile) {
+      for (const membership of profile.memberships) {
+        if (membership.role !== 'OWNER') continue;
+        const branches = await this.prisma.branch.findMany({
+          where: { tenantId: membership.tenant.id, isActive: true },
+          select: { id: true, name: true, slug: true, isActive: true },
+          orderBy: { name: 'asc' },
+        });
+        membership.branchAssignments = branches.map((branch) => ({
+          branchId: branch.id,
+          branch,
+        }));
+      }
+    }
+
+    return profile;
   }
 
   private async generateTokenPair(user: {

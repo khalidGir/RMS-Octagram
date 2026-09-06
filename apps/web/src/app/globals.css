@@ -3,9 +3,75 @@
 @tailwind utilities;
 
 :root {
+  /* Brand */
   --brand-primary: 180 83 42;
   --brand-primary-foreground: 255 255 255;
   --brand-accent: 192 138 46;
+  --brand-50: 255 247 237;
+  --brand-100: 255 237 213;
+  --brand-500: 199 91 42;
+  --brand-600: 171 71 32;
+  --brand-700: 137 57 29;
+
+  /* Ink / Text */
+  --ink: 23 33 29;
+  --ink-muted: 102 113 108;
+  --ink-faint: 150 158 154;
+
+  /* Canvas / Surface */
+  --canvas: 247 243 235;
+  --surface: 255 255 255;
+  --surface-subtle: 240 242 239;
+  --surface-sunken: 235 237 234;
+  --surface-warm: 255 250 243;
+  --surface-cream: 247 243 235;
+
+  /* Dark surfaces */
+  --dark: 24 36 31;
+  --dark-deep: 16 24 21;
+  --dark-muted: 23 35 31;
+
+  /* Accent */
+  --accent-teal: 49 88 74;
+  --accent-gold: 227 178 98;
+  --accent-gold-muted: 240 199 122;
+
+  /* Text tones */
+  --text-secondary: 98 93 87;
+  --text-secondary-light: 111 105 97;
+  --text-secondary-dark: 102 95 87;
+
+  /* Border */
+  --border: 221 226 222;
+  --border-strong: 199 206 201;
+
+  /* Status */
+  --success: 19 122 82;
+  --success-surface: 230 247 240;
+  --warning: 167 90 0;
+  --warning-surface: 255 243 220;
+  --danger: 179 38 30;
+  --danger-surface: 254 235 233;
+  --info: 40 100 220;
+  --info-surface: 234 242 255;
+
+  /* Elevation */
+  --shadow-raised: 0 12px 40px rgb(37 27 20 / 0.07);
+  --shadow-floating: 0 20px 60px rgb(37 27 20 / 0.14);
+  --shadow-modal: 0 24px 80px rgb(37 27 20 / 0.22);
+
+  /* Focus */
+  --focus-ring: 3px solid rgb(var(--brand-accent));
+  --focus-offset: 3px;
+
+  /* Motion */
+  --duration-fast: 140ms;
+  --duration-normal: 180ms;
+  --duration-slow: 240ms;
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+
+  /* Legacy (preserved) */
   --surface-customer: 255 250 243;
   --surface-card: 255 255 255;
   --surface-muted: 245 240 233;
@@ -17,50 +83,66 @@
   --radius-panel: 1rem;
 }
 
-* { box-sizing: border-box; }
+@layer base {
+  * { box-sizing: border-box; }
 
-html {
-  background: rgb(var(--surface-customer));
-  color: rgb(var(--text-primary));
-  font-family: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
-  text-rendering: optimizeLegibility;
+  html {
+    background: rgb(var(--canvas));
+    color: rgb(var(--ink));
+    font-family: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
+    text-rendering: optimizeLegibility;
+  }
+
+  body { min-height: 100vh; margin: 0; }
+  button, input, select, textarea { font: inherit; }
+  button, a, input, select { -webkit-tap-highlight-color: transparent; }
+
+  :focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-offset);
+  }
+
+  ::selection { background: rgb(var(--brand-primary) / 0.18); }
 }
 
-body { min-height: 100vh; margin: 0; }
-button, input, select, textarea { font: inherit; }
-button, a, input, select { -webkit-tap-highlight-color: transparent; }
+@layer components {
+  .staff-grid {
+    background-color: rgb(var(--canvas));
+    background-image:
+      radial-gradient(circle at 10% 0%, rgb(var(--brand-accent) / 0.08), transparent 28rem),
+      linear-gradient(rgb(255 255 255 / 0.38) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 0.38) 1px, transparent 1px);
+    background-size: auto, 32px 32px, 32px 32px;
+  }
 
-:focus-visible {
-  outline: 3px solid rgb(var(--brand-accent));
-  outline-offset: 3px;
-}
+  .control-select {
+    min-height: 2.5rem;
+    width: 100%;
+    cursor: pointer;
+    border: 1px solid rgb(var(--border));
+    border-radius: var(--radius-control);
+    background: rgb(var(--surface));
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    outline: none;
+  }
 
-::selection { background: rgb(var(--brand-primary) / 0.18); }
-
-.staff-grid {
-  background-color: #f6f3ed;
-  background-image:
-    radial-gradient(circle at 10% 0%, rgb(var(--brand-accent) / 0.08), transparent 28rem),
-    linear-gradient(rgb(255 255 255 / 0.38) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(255 255 255 / 0.38) 1px, transparent 1px);
-  background-size: auto, 32px 32px, 32px 32px;
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
 }
 
 .hide-scrollbar { scrollbar-width: none; }
 .hide-scrollbar::-webkit-scrollbar { display: none; }
-
-.control-select {
-  min-height: 2.5rem;
-  width: 100%;
-  cursor: pointer;
-  border: 1px solid rgb(var(--border-default));
-  border-radius: var(--radius-control);
-  background: white;
-  padding: 0 0.75rem;
-  font-size: 0.875rem;
-  font-weight: 700;
-  outline: none;
-}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

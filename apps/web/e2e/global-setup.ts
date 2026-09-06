@@ -14,6 +14,7 @@ export interface SeedData {
   owner: { email: string; password: string };
   manager: { email: string; password: string };
   cashier: { email: string; password: string };
+  kitchenStaff: { email: string; password: string };
   tenantId: string;
   branchId: string;
   branchSlug: string;
@@ -28,6 +29,7 @@ export interface SeedData {
   paymentInstructionId: string;
   trackingToken: string;
   paymentToken: string;
+  kitchenStationId: string;
 }
 
 function uuid(): string {
@@ -55,6 +57,7 @@ export default async function globalSetup(): Promise<void> {
   const ownerEmail = `pw-owner-${ts}@test.com`;
   const managerEmail = `pw-manager-${ts}@test.com`;
   const cashierEmail = `pw-cashier-${ts}@test.com`;
+  const kitchenStaffEmail = `pw-kitchen-${ts}@test.com`;
   const tenantSlug = `pw-tenant-${ts}`;
   const branchSlug = `pw-branch-${ts}`;
 
@@ -95,6 +98,13 @@ export default async function globalSetup(): Promise<void> {
     const cashierMembershipId = uuid();
     await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'CASHIER','ACTIVE',now(),now())`, [cashierMembershipId, tenantId, cashierId]);
     await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, cashierMembershipId]);
+
+    // Kitchen Staff user
+    const kitchenStaffId = uuid();
+    await client.query(`INSERT INTO "User" ("id","email","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,'PW Kitchen Staff','ACTIVE',now(),now())`, [kitchenStaffId, kitchenStaffEmail, passwordHash]);
+    const kitchenStaffMembershipId = uuid();
+    await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'KITCHEN_STAFF','ACTIVE',now(),now())`, [kitchenStaffMembershipId, tenantId, kitchenStaffId]);
+    await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, kitchenStaffMembershipId]);
 
     // Menu category
     const categoryId = uuid();
@@ -147,8 +157,15 @@ export default async function globalSetup(): Promise<void> {
     const tableId = uuid();
     await client.query(`INSERT INTO "RestaurantTable" ("id","tenantId","branchId","label","capacity","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'T1',4,true,now(),now())`, [tableId, tenantId, branchId]);
 
-    // Branch order counter
-    await client.query(`INSERT INTO "BranchOrderCounter" ("branchId","lastNumber","createdAt","updatedAt") VALUES ($1,0,now(),now()) ON CONFLICT ("branchId") DO NOTHING`, [branchId]);
+    // Kitchen Station
+    const kitchenStationId = uuid();
+    await client.query(`INSERT INTO "KitchenStation" ("id","tenantId","branchId","name","displayOrder","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Grill',0,true,now(),now())`, [kitchenStationId, tenantId, branchId]);
+
+    // Assign Test Burger to Grill station
+    await client.query(`INSERT INTO "MenuItemStation" ("tenantId","branchId","menuItemId","stationId") VALUES ($1,$2,$3,$4)`, [tenantId, branchId, menuItemId, kitchenStationId]);
+
+    // Branch order counter — start at 1 because global-setup pre-creates order #1
+    await client.query(`INSERT INTO "BranchOrderCounter" ("branchId","lastNumber","createdAt","updatedAt") VALUES ($1,1,now(),now()) ON CONFLICT ("branchId") DO NOTHING`, [branchId]);
 
     // Payment instruction
     const paymentInstructionId = uuid();
@@ -184,6 +201,7 @@ export default async function globalSetup(): Promise<void> {
       owner: { email: ownerEmail, password: PASSWORD },
       manager: { email: managerEmail, password: PASSWORD },
       cashier: { email: cashierEmail, password: PASSWORD },
+      kitchenStaff: { email: kitchenStaffEmail, password: PASSWORD },
       tenantId,
       branchId,
       branchSlug,
@@ -198,12 +216,13 @@ export default async function globalSetup(): Promise<void> {
       paymentInstructionId,
       trackingToken: trackingRaw,
       paymentToken: trackingRaw,
+      kitchenStationId,
     };
 
     fs.writeFileSync(SEED_FILE, JSON.stringify(seedData, null, 2));
     console.log(`  Seed data written to ${SEED_FILE}`);
     console.log(`  Tenant: ${tenantSlug}, Branch: ${branchSlug}`);
-    console.log(`  Owner: ${ownerEmail}, Manager: ${managerEmail}, Cashier: ${cashierEmail}`);
+    console.log(`  Owner: ${ownerEmail}, Manager: ${managerEmail}, Cashier: ${cashierEmail}, Kitchen: ${kitchenStaffEmail}`);
   } finally {
     await client.end();
   }

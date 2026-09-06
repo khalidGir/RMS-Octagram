@@ -95,29 +95,29 @@ export function CustomerMenu() {
   if (query.isError || !menu) return <StateScreen title="Menu unavailable" detail="Please ask restaurant staff for a current ordering link." retry={() => void query.refetch()} />;
 
   return (
-    <main className="min-h-screen bg-[#fffaf3] pb-24 lg:pb-8">
-      <header className="sticky top-0 z-30 border-b border-line bg-[#fffaf3]/90 backdrop-blur-xl">
+    <main className="min-h-screen bg-surface-warm pb-24 lg:pb-8">
+      <header className="sticky top-0 z-30 border-b border-line bg-surface-warm/90 backdrop-blur-xl">
         <div className="mx-auto flex min-h-[72px] max-w-7xl items-center justify-between px-4 sm:px-7">
           <Link href={`/r/${encodeURIComponent(branchSlug)}`} className="flex items-center gap-3" aria-label={menu.tenant.name}>
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand text-sm font-black text-white shadow-lg shadow-brand/20">{menu.tenant.name[0]}</span>
             <span className="leading-none"><span className="block text-[15px] font-extrabold tracking-[-0.02em]">{menu.tenant.name}</span><span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted">{menu.branch.name}</span></span>
           </Link>
-          <button onClick={() => setCartOpen(true)} aria-label={`Open cart with ${count} items`} className="relative grid size-11 place-items-center rounded-xl bg-[#18241f] text-white">
+          <button onClick={() => setCartOpen(true)} aria-label={`Open cart with ${count} items`} className="relative grid size-11 place-items-center rounded-xl bg-dark text-white">
             ▢{count > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-brand text-[9px] font-black">{count}</span>}
           </button>
         </div>
       </header>
 
-      <section className="bg-[#14201b] px-4 py-10 text-white">
+      <section className="bg-dark-muted px-4 py-10 text-white">
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-black uppercase tracking-[.18em] text-[#e3b262]">{menu.branch.name} · Pickup</p>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-accent-gold">{menu.branch.name} · Pickup</p>
           <h1 className="mt-3 max-w-2xl text-4xl font-black tracking-[-.05em] sm:text-5xl">Made with warmth.<br/>Served with pride.</h1>
           <p className="mt-4 text-sm text-white/60">Order ahead for pickup · Payment by bank transfer or Telebirr</p>
         </div>
       </section>
 
       <div className="mx-auto max-w-7xl px-4 sm:px-7">
-        <div className="hide-scrollbar sticky top-[72px] z-20 -mx-4 flex gap-2 overflow-auto border-b border-line bg-[#fffaf3]/95 px-4 py-4 sm:-mx-7 sm:px-7">
+        <div className="hide-scrollbar sticky top-[72px] z-20 -mx-4 flex gap-2 overflow-auto border-b border-line bg-surface-warm/95 px-4 py-4 sm:-mx-7 sm:px-7">
           {menu.categories.map(c => <button key={c.id} onClick={() => setCategoryId(c.id)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-black ${c.id === category?.id ? 'bg-brand text-white' : 'border border-line bg-white text-ink-muted'}`}>{c.name}</button>)}
         </div>
         <div className="grid gap-6 py-7 lg:grid-cols-[1fr_360px]">
@@ -152,7 +152,7 @@ export function CustomerMenu() {
       </button>}
 
       {cartOpen && <div className="fixed inset-0 z-50 flex items-end bg-black/45 lg:hidden" onClick={e => { if (e.currentTarget === e.target) setCartOpen(false); }}>
-        <div className="max-h-[88vh] w-full overflow-auto rounded-t-3xl bg-[#fffaf3] p-4">
+        <div className="max-h-[88vh] w-full overflow-auto rounded-t-3xl bg-surface-warm p-4">
           <div className="mb-3 flex justify-between"><h2 className="text-xl font-black">Your order</h2><button onClick={() => setCartOpen(false)} aria-label="Close cart">×</button></div>
           <CartSidebar cart={cart} subtotal={subtotal} change={change} onContinue={continueOrder} />
         </div>
@@ -182,5 +182,5 @@ function CartSidebar({ cart, subtotal, change, onContinue }: { cart: CartLine[];
 }
 
 function StateScreen({ title, detail, retry }: { title: string; detail: string; retry?: () => void }) {
-  return <main className="grid min-h-screen place-items-center bg-[#fffaf3] p-6 text-center"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-2 max-w-md text-sm text-ink-muted">{detail}</p>{retry && <button onClick={retry} className="mt-5 min-h-11 rounded-xl bg-[#18241f] px-5 font-black text-white">Try again</button>}</div></main>;
+  return <main className="grid min-h-screen place-items-center bg-surface-warm p-6 text-center"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-2 max-w-md text-sm text-ink-muted">{detail}</p>{retry && <button onClick={retry} className="mt-5 min-h-11 rounded-xl bg-dark px-5 font-black text-white">Try again</button>}</div></main>;
 }

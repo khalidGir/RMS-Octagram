@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { validateEnv } from '@rms/config';
 import { AppThrottlerGuard } from './modules/rate-limit/app-throttler.guard';
+import { BigIntSerializationInterceptor } from './common/interceptors/bigint-serialization.interceptor';
 
 async function bootstrap() {
   validateEnv(process.env);
@@ -86,6 +87,10 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  // Prisma represents money columns as BigInt. Convert them to lossless
+  // decimal strings before Express serializes API responses.
+  app.useGlobalInterceptors(new BigIntSerializationInterceptor());
 
   // Global throttler guard
   try {

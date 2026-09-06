@@ -1,4 +1,4 @@
-import { PrismaClient, TenantStatus, UserStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
@@ -23,7 +23,7 @@ async function main() {
       passwordHash: superAdminPasswordHash,
       displayName: 'Platform Admin',
       platformRole: 'SUPER_ADMIN',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
   console.log(`Super admin: ${superAdmin.email} (admin123)`);
@@ -35,7 +35,7 @@ async function main() {
     create: {
       name: 'Demo Coffee House',
       slug: 'demo-coffee-house',
-      status: TenantStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -48,7 +48,7 @@ async function main() {
       email: 'owner@demo.com',
       passwordHash: ownerPasswordHash,
       displayName: 'Abebe Kebede',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -73,7 +73,7 @@ async function main() {
       email: 'manager@demo.com',
       passwordHash: managerPasswordHash,
       displayName: 'Almaz Tesfaye',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -97,7 +97,7 @@ async function main() {
       email: 'cashier@demo.com',
       passwordHash: cashierPasswordHash,
       displayName: 'Dawit Mulugeta',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -121,7 +121,7 @@ async function main() {
       email: 'kitchen@demo.com',
       passwordHash: kitchenPasswordHash,
       displayName: 'Fatima Hassan',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -171,7 +171,7 @@ async function main() {
 
   for (const a of assignments) {
     await prisma.branchAssignment.upsert({
-      where: { membershipId_branchId: { membershipId: a.membershipId, branchId: a.branchId } },
+      where: { branchId_membershipId: { branchId: a.branchId, membershipId: a.membershipId } },
       update: {},
       create: {
         tenantId: tenant.id,
@@ -188,18 +188,69 @@ async function main() {
   // 9. Feature defaults
   const features = ['KDS', 'HOLD_RELEASE', 'RESERVATIONS', 'PROMOS', 'INVENTORY', 'EXPENSES', 'ADVANCE_ORDERS'];
   for (const key of features) {
-    await prisma.featureSetting.upsert({
-      where: { tenantId_branchId_featureKey: { tenantId: tenant.id, branchId: null, featureKey: key } },
-      update: {},
-      create: {
+    const existingFeature = await prisma.featureSetting.findFirst({
+      where: { tenantId: tenant.id, branchId: null, featureKey: key },
+    });
+    if (!existingFeature) {
+      await prisma.featureSetting.create({
+        data: {
         tenantId: tenant.id,
         branchId: null,
         featureKey: key,
         enabled: true,
         updatedByUserId: owner.id,
-      },
-    });
+        },
+      });
+    }
   }
+
+  // 10. Demo catalog. Keep this idempotent so reseeding never duplicates data.
+  const categoryDefinitions = [
+    { name: 'Main dishes', description: 'Traditional Ethiopian main dishes', sortOrder: 0 },
+    { name: 'Breakfast', description: 'Breakfast and early service dishes', sortOrder: 1 },
+    { name: 'Drinks', description: 'Hot and cold beverages', sortOrder: 2 },
+    { name: 'Desserts', description: 'Desserts and sweet dishes', sortOrder: 3 },
+  ];
+  const categories = new Map<string, { id: string }>();
+  for (const definition of categoryDefinitions) {
+    const existing = await prisma.menuCategory.findFirst({ where: { tenantId: tenant.id, name: definition.name } });
+    const category = existing ?? await prisma.menuCategory.create({ data: { tenantId: tenant.id, ...definition } });
+    categories.set(definition.name, category);
+  }
+
+  const catalogItems = [
+    { name: 'Special Tibs', description: 'Sizzling beef tibs with peppers and onions', category: 'Main dishes', priceMinor: 40000n, available: true },
+    { name: 'Shiro Wot', description: 'Slow-cooked chickpea stew served with injera', category: 'Main dishes', priceMinor: 29000n, available: true },
+    { name: 'Beyaynetu', description: 'A colorful selection of fasting dishes', category: 'Main dishes', priceMinor: 35000n, available: true },
+    { name: 'Special Firfir', description: 'Spiced injera firfir prepared for breakfast', category: 'Breakfast', priceMinor: 26000n, available: true },
+    { name: 'Buna Ceremony', description: 'Traditional Ethiopian coffee service', category: 'Drinks', priceMinor: 15000n, available: true },
+    { name: 'House Baklava', description: 'Layered pastry with nuts and honey', category: 'Desserts', priceMinor: 12000n, available: false },
+  ];
+
+  for (const definition of catalogItems) {
+    const categoryId = categories.get(definition.category)!.id;
+    const existing = await prisma.menuItem.findFirst({ where: { tenantId: tenant.id, name: definition.name } });
+    const item = existing
+      ? await prisma.menuItem.update({ where: { id: existing.id }, data: { categoryId, description: definition.description, isActive: true, deletedAt: null } })
+      : await prisma.menuItem.create({ data: { tenantId: tenant.id, categoryId, name: definition.name, description: definition.description } });
+
+    const existingVariant = await prisma.menuItemVariant.findFirst({ where: { tenantId: tenant.id, menuItemId: item.id, name: 'Regular' } });
+    if (existingVariant) {
+      await prisma.menuItemVariant.update({ where: { id: existingVariant.id }, data: { basePriceMinor: definition.priceMinor, isDefault: true, isActive: true } });
+    } else {
+      await prisma.menuItemVariant.create({ data: { tenantId: tenant.id, menuItemId: item.id, name: 'Regular', basePriceMinor: definition.priceMinor, isDefault: true } });
+    }
+
+    for (const branch of [branchMain, branchDowntown]) {
+      await prisma.branchMenuItem.upsert({
+        where: { branchId_menuItemId: { branchId: branch.id, menuItemId: item.id } },
+        update: { isAvailable: definition.available },
+        create: { tenantId: tenant.id, branchId: branch.id, menuItemId: item.id, isAvailable: definition.available },
+      });
+    }
+  }
+
+  console.log(`Catalog: ${catalogItems.length} menu items across ${categoryDefinitions.length} categories`);
 
   console.log('Seed complete.');
 }

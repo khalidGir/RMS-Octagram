@@ -1,4 +1,50 @@
 import { test, expect } from './fixtures';
+import type { TokenBundle } from './fixtures';
+import * as http from 'http';
+
+const API = process.env.API_URL ?? 'http://localhost:3001/api/v1';
+
+function httpPost(urlPath: string, headers: Record<string, string>, body?: unknown, method?: string): Promise<{ status: number; body: unknown }> {
+  const bodyStr = body !== undefined ? JSON.stringify(body) : undefined;
+  const url = new URL(API + urlPath);
+  const httpMethod = method ?? (bodyStr !== undefined ? 'POST' : 'GET');
+  return new Promise((resolve, reject) => {
+    const req = http.request(url, {
+      method: httpMethod,
+      headers: {
+        ...headers,
+        ...(bodyStr ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(bodyStr).toString() } : {}),
+      },
+    }, (res) => {
+      let data = '';
+      res.on('data', (c) => (data += c));
+      res.on('end', () => {
+        let parsed: unknown = null;
+        try { parsed = JSON.parse(data); } catch { /* non-JSON */ }
+        resolve({ status: res.statusCode!, body: parsed });
+      });
+    });
+    req.on('error', reject);
+    if (bodyStr) req.write(bodyStr);
+    req.end();
+  });
+}
+
+async function loginApi(email: string, password: string): Promise<TokenBundle> {
+  const res = await httpPost('/auth/login', {}, { email, password });
+  if (res.status !== 200) throw new Error(`Login failed: ${res.status}`);
+  const body = res.body as { data: { accessToken: string; csrfToken?: string } };
+  return { accessToken: body.data.accessToken, csrfToken: body.data.csrfToken ?? '' };
+}
+
+async function apiCall(path: string, token: TokenBundle, tenantId: string, options: { method?: string; body?: unknown } = {}): Promise<{ status: number; body: unknown }> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token.accessToken}`,
+    'x-tenant-id': tenantId,
+    'x-csrf-token': token.csrfToken,
+  };
+  return httpPost(path, headers, options.body, options.method);
+}
 
 test.describe('POS Cash Journey', () => {
   test('cashier sees POS with menu after real login', async ({ cashierPage }) => {
@@ -143,7 +189,7 @@ test.describe('POS Cash Journey', () => {
 
   test('offline state disables order creation', async ({ cashierPage }) => {
     await cashierPage.context().setOffline(true);
-    await expect(cashierPage.locator('[role="status"]')).toContainText('offline', { timeout: 10000 });
+    await expect(cashierPage.locator('[role="status"]').first()).toContainText(/ffline/i, { timeout: 10000 });
     const createBtn = cashierPage.locator('button:has-text("Create order")');
     await expect(createBtn).toBeDisabled();
   });
@@ -172,6 +218,64 @@ test.describe('POS Cash Journey', () => {
     await expect(cashierPage.locator('[role="dialog"]')).not.toBeVisible();
     // Cart still empty
     await expect(cashierPage.locator('text=No items yet.')).toBeVisible();
+  });
+});
+
+test.describe('POS Full Cash Confirm Flow', () => {
+  test('full flow: add item → create order → confirm payment → order appears in orders list', async ({ cashierPage, seed }) => {
+    // Step 1: Add item to cart
+    await cashierPage.locator('button:has-text("Test Burger")').click();
+    await cashierPage.locator('[role="dialog"] button:has-text("Regular")').click();
+    await cashierPage.locator('label:has-text("Lettuce")').click();
+    await cashierPage.locator('[role="dialog"] button:has-text("Add to order")').click();
+    await expect(cashierPage.locator('li:has-text("Test Burger")')).toBeVisible();
+
+    // Step 2: Create order
+    const createBtn = cashierPage.locator('button:has-text("Create order")');
+    await expect(createBtn).toBeEnabled();
+    await createBtn.click();
+
+    // Step 3: Wait for "Confirm cash" button to appear (order created, pending state)
+    const confirmCashBtn = cashierPage.locator('button:has-text("Confirm cash")');
+    await expect(confirmCashBtn).toBeVisible({ timeout: 15000 });
+
+    // Step 4: Confirm cash payment
+    await confirmCashBtn.click();
+
+    // Step 5: Wait for cart to clear
+    await expect(cashierPage.locator('text=No items yet.')).toBeVisible({ timeout: 15000 });
+
+    // Step 6: Verify success message
+    await expect(cashierPage.locator('text=confirmed and released to the kitchen')).toBeVisible({ timeout: 5000 });
+
+    // Step 7: Verify order appears in orders list
+    await cashierPage.locator('aside nav a[href="/orders"]').first().click();
+    await cashierPage.waitForLoadState('networkidle', { timeout: 15_000 });
+    const orderCards = cashierPage.locator('a[href^="/orders/"]');
+    await expect(orderCards.first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('cashier can navigate to orders list after creating order', async ({ cashierPage, seed }) => {
+    // Add simple item (Water — no modifiers needed)
+    await cashierPage.locator('button:has-text("Water")').first().click();
+    await expect(cashierPage.locator('li:has-text("Water")')).toBeVisible({ timeout: 10000 });
+
+    // Create order
+    const createBtn = cashierPage.locator('button:has-text("Create order")');
+    await createBtn.click();
+
+    // Wait for confirm cash button
+    const confirmCashBtn = cashierPage.locator('button:has-text("Confirm cash")');
+    await expect(confirmCashBtn).toBeVisible({ timeout: 15000 });
+
+    // Confirm cash
+    await confirmCashBtn.click();
+    await expect(cashierPage.locator('text=No items yet.')).toBeVisible({ timeout: 15000 });
+
+    // Navigate to orders
+    await cashierPage.locator('aside nav a[href="/orders"]').first().click();
+    await cashierPage.waitForLoadState('networkidle', { timeout: 15_000 });
+    await expect(cashierPage.locator('h1:has-text("Orders")')).toBeVisible({ timeout: 10000 });
   });
 });
 

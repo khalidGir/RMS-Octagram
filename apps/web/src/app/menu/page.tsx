@@ -1,1 +1,6 @@
-import { OperationsPage } from '@/components/operations-page'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><OperationsPage kind="menu"/></StaffShell>}
+import { MenuManagement } from '@/components/menu-management';
+import { StaffShell } from '@/components/staff-shell';
+
+export default function Page() {
+  return <StaffShell><MenuManagement /></StaffShell>;
+}

@@ -107,9 +107,9 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
           </label>
         </div>
       </header>
-      <section className="bg-[#14201b] px-4 py-9 text-white">
+      <section className="bg-dark-muted px-4 py-9 text-white">
         <div className="mx-auto max-w-6xl">
-          <p className="text-xs font-black uppercase tracking-[.16em] text-[#e3b262]">{isPickup ? 'Pickup pre-order' : `Table ${tableLabel}`}</p>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-accent-gold">{isPickup ? 'Pickup pre-order' : `Table ${tableLabel}`}</p>
           <h1 className="mt-3 text-4xl font-black tracking-[-.045em]">Choose your meal</h1>
           <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">{isPickup ? 'Order ahead for pickup. Payment is available by bank transfer or Telebirr.' : 'Order for this table or choose takeaway using the options configured by the restaurant.'}</p>
         </div>
@@ -124,7 +124,7 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
             {category.items.map((item) => {
               const variant = item.variants.find((candidate) => candidate.isDefault) ?? item.variants[0];
               const needsOptions = item.modifierGroups.some((group) => group.isRequired || group.minSelections > 0);
-              return <article key={item.id} className="flex min-h-44 flex-col rounded-2xl border border-line bg-white p-5 shadow-card"><h3 className="text-lg font-black">{item.name}</h3><p className="mt-2 flex-1 text-sm leading-6 text-ink-muted">{item.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="font-black text-brand">{variant ? formatEtbMinor(variant.priceMinor) : 'Unavailable'}</span><button disabled={!variant || needsOptions} onClick={() => add(item)} className="min-h-11 rounded-xl bg-[#18241f] px-4 text-sm font-black text-white disabled:bg-stone-300">{needsOptions ? 'Choose options' : 'Add'}</button></div></article>;
+              return <article key={item.id} className="flex min-h-44 flex-col rounded-2xl border border-line bg-white p-5 shadow-card"><h3 className="text-lg font-black">{item.name}</h3><p className="mt-2 flex-1 text-sm leading-6 text-ink-muted">{item.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="font-black text-brand">{variant ? formatEtbMinor(variant.priceMinor) : 'Unavailable'}</span><button disabled={!variant || needsOptions} onClick={() => add(item)} className="min-h-11 rounded-xl bg-dark px-4 text-sm font-black text-white disabled:bg-stone-300">{needsOptions ? 'Choose options' : 'Add'}</button></div></article>;
             })}
           </section> : <PublicState title="No items available" detail="Please check again later." />}
         </div>
@@ -135,5 +135,5 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
 }
 
 function PublicState({ title, detail, retry }: { title: string; detail: string; retry?: () => void }) {
-  return <section className="mx-auto grid min-h-72 max-w-xl place-items-center px-5 text-center"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-2 text-sm leading-6 text-ink-muted">{detail}</p>{retry && <button onClick={retry} className="mt-5 min-h-11 rounded-xl bg-[#18241f] px-5 font-black text-white">Try again</button>}</div></section>;
+  return <section className="mx-auto grid min-h-72 max-w-xl place-items-center px-5 text-center"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-2 text-sm leading-6 text-ink-muted">{detail}</p>{retry && <button onClick={retry} className="mt-5 min-h-11 rounded-xl bg-dark px-5 font-black text-white">Try again</button>}</div></section>;
 }

@@ -1,1 +1,10 @@
-import { OperationsPage } from '@/components/operations-page'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><OperationsPage kind="orders"/></StaffShell>}
+import { StaffShell } from '@/components/staff-shell';
+import { OrdersList } from '@/components/orders-list';
+
+export default function Page() {
+  return (
+    <StaffShell>
+      <OrdersList />
+    </StaffShell>
+  );
+}
