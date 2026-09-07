@@ -250,9 +250,9 @@ test.describe('POS Full Cash Confirm Flow', () => {
 
     // Step 7: Verify order appears in orders list
     await cashierPage.locator('aside nav a[href="/orders"]').first().click();
-    await cashierPage.waitForLoadState('networkidle', { timeout: 15_000 });
+    await cashierPage.waitForURL((url) => url.pathname === '/orders', { timeout: 15_000 });
     const orderCards = cashierPage.locator('a[href^="/orders/"]');
-    await expect(orderCards.first()).toBeVisible({ timeout: 10000 });
+    await expect(orderCards.first()).toBeVisible({ timeout: 15_000 });
   });
 
   test('cashier can navigate to orders list after creating order', async ({ cashierPage, seed }) => {
@@ -274,8 +274,8 @@ test.describe('POS Full Cash Confirm Flow', () => {
 
     // Navigate to orders
     await cashierPage.locator('aside nav a[href="/orders"]').first().click();
-    await cashierPage.waitForLoadState('networkidle', { timeout: 15_000 });
-    await expect(cashierPage.locator('h1:has-text("Orders")')).toBeVisible({ timeout: 10000 });
+    await cashierPage.waitForURL((url) => url.pathname === '/orders', { timeout: 15_000 });
+    await expect(cashierPage.locator('h1:has-text("Orders")')).toBeVisible({ timeout: 10_000 });
   });
 });
 

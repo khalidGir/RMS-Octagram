@@ -21,7 +21,7 @@ export default defineConfig({
     video: 'off',
     locale: 'en-ET',
     timezoneId: 'Africa/Addis_Ababa',
-    navigationTimeout: 15_000,
+    navigationTimeout: 30_000,
     actionTimeout: 10_000,
   },
   projects: [

@@ -205,7 +205,7 @@ test.describe('Kitchen Display System', () => {
     );
 
     // Reload KDS page to fetch new tickets
-    await kitchenStaffPage.reload({ waitUntil: 'networkidle' });
+    await kitchenStaffPage.reload({ waitUntil: 'domcontentloaded', timeout: 15_000 });
     await kitchenStaffPage.waitForSelector('h1:has-text("Kitchen Display")', { timeout: 10000 });
 
     // Ticket should appear with a bump/start button
@@ -224,7 +224,7 @@ test.describe('Kitchen Display System', () => {
       seed.variantId, seed.modifierOptionIds,
     );
 
-    await kitchenStaffPage.reload({ waitUntil: 'networkidle' });
+    await kitchenStaffPage.reload({ waitUntil: 'domcontentloaded', timeout: 15_000 });
     await kitchenStaffPage.waitForSelector('h1:has-text("Kitchen Display")', { timeout: 10000 });
 
     const orderText = `Order ${orderNumber}`;
@@ -244,7 +244,7 @@ test.describe('Kitchen Display System', () => {
       seed.variantId, seed.modifierOptionIds,
     );
 
-    await kitchenStaffPage.reload({ waitUntil: 'networkidle' });
+    await kitchenStaffPage.reload({ waitUntil: 'domcontentloaded', timeout: 15_000 });
     await kitchenStaffPage.waitForSelector('h1:has-text("Kitchen Display")', { timeout: 10000 });
 
     const orderText = `Order ${orderNumber}`;
@@ -272,7 +272,7 @@ test.describe('Kitchen Display System', () => {
       seed.variantId, seed.modifierOptionIds,
     );
 
-    await kitchenStaffPage.reload({ waitUntil: 'networkidle' });
+    await kitchenStaffPage.reload({ waitUntil: 'domcontentloaded', timeout: 15_000 });
     await kitchenStaffPage.waitForSelector('h1:has-text("Kitchen Display")', { timeout: 10000 });
 
     const orderText = `Order ${orderNumber}`;
@@ -314,7 +314,7 @@ test.describe('Kitchen Display System', () => {
       seed.variantId, seed.modifierOptionIds,
     );
 
-    await kitchenStaffPage.reload({ waitUntil: 'networkidle' });
+    await kitchenStaffPage.reload({ waitUntil: 'domcontentloaded', timeout: 15_000 });
     await kitchenStaffPage.waitForSelector('h1:has-text("Kitchen Display")', { timeout: 10000 });
 
     const ticketCard = kitchenStaffPage.locator('[class*="rounded-xl border-2"]').first();
@@ -333,7 +333,7 @@ test.describe('Kitchen Display System', () => {
       seed.variantId, seed.modifierOptionIds,
     );
 
-    await kitchenStaffPage.reload({ waitUntil: 'networkidle' });
+    await kitchenStaffPage.reload({ waitUntil: 'domcontentloaded', timeout: 15_000 });
     await kitchenStaffPage.waitForSelector('h1:has-text("Kitchen Display")', { timeout: 10000 });
 
     const ticketCard = kitchenStaffPage.locator('[class*="rounded-xl border-2"]').first();

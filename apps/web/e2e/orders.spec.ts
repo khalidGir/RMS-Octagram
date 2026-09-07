@@ -126,9 +126,10 @@ test.describe('Orders List Page', () => {
     // Click on the order card
     const orderCard = cashierPage.locator(`a[href^="/orders/"]`).filter({ hasText: `#${orderNumber}` });
     await orderCard.first().click();
-    // Wait for client-side navigation to complete
-    await cashierPage.waitForLoadState('networkidle', { timeout: 15_000 });
-    await expect(cashierPage.locator('text=Order items')).toBeVisible({ timeout: 10000 });
+    // Wait for client-side navigation to the detail page
+    await cashierPage.waitForURL((url) => url.pathname.startsWith('/orders/'), { timeout: 15_000 });
+    // Wait for order detail content to render
+    await expect(cashierPage.locator('h2:text("Order items")')).toBeVisible({ timeout: 15_000 });
   });
 
   test('New order button links to POS', async ({ cashierPage }) => {

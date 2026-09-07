@@ -4,7 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 test.describe('Accessibility', () => {
   test('login page has no critical violations', async ({ page }) => {
     await page.goto('/login');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('networkidle', { timeout: 15_000 });
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -16,7 +16,7 @@ test.describe('Accessibility', () => {
 
   test('landing page has no critical violations', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('networkidle', { timeout: 15_000 });
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])

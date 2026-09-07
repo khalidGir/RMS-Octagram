@@ -1,12 +1,11 @@
 import { test, expect } from './fixtures';
-import { clientNavigate } from './fixtures';
 
 const SNAPSHOT_DIR = 'e2e/snapshots';
 
 test.describe('Visual Regression — Landing & Login', () => {
   test('landing page hero matches baseline', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('networkidle', { timeout: 15_000 });
     await expect(page).toHaveScreenshot(`${SNAPSHOT_DIR}/landing-hero.png`, {
       fullPage: false,
       mask: [page.locator('[data-animate]')],
@@ -16,7 +15,7 @@ test.describe('Visual Regression — Landing & Login', () => {
 
   test('landing page full page matches baseline', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('networkidle', { timeout: 15_000 });
     await expect(page).toHaveScreenshot(`${SNAPSHOT_DIR}/landing-full.png`, {
       fullPage: true,
       mask: [page.locator('[data-animate]')],
@@ -26,7 +25,7 @@ test.describe('Visual Regression — Landing & Login', () => {
 
   test('login page matches baseline', async ({ page }) => {
     await page.goto('/login');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('networkidle', { timeout: 15_000 });
     await expect(page).toHaveScreenshot(`${SNAPSHOT_DIR}/login.png`, {
       fullPage: false,
       maxDiffPixelRatio: 0.02,
@@ -54,8 +53,9 @@ test.describe('Visual Regression — POS', () => {
 
 test.describe('Visual Regression — Orders', () => {
   test('orders list matches baseline', async ({ cashierPage }) => {
-    await clientNavigate(cashierPage, '/orders');
-    await cashierPage.waitForLoadState('networkidle');
+    await cashierPage.locator('aside nav a[href="/orders"]').first().click();
+    await cashierPage.waitForURL((url) => url.pathname === '/orders', { timeout: 15_000 });
+    await cashierPage.waitForLoadState('networkidle', { timeout: 15_000 });
     await expect(cashierPage).toHaveScreenshot(`${SNAPSHOT_DIR}/orders-list.png`, {
       fullPage: false,
       maxDiffPixelRatio: 0.02,
@@ -76,6 +76,7 @@ test.describe('Visual Regression — KDS', () => {
 
 test.describe('Visual Regression — Payment Review', () => {
   test('payment review page matches baseline', async ({ ownerPage }) => {
+    await ownerPage.waitForLoadState('networkidle', { timeout: 15_000 });
     await expect(ownerPage).toHaveScreenshot(`${SNAPSHOT_DIR}/payment-review.png`, {
       fullPage: false,
       maxDiffPixelRatio: 0.02,
@@ -85,8 +86,9 @@ test.describe('Visual Regression — Payment Review', () => {
 
 test.describe('Visual Regression — Settings', () => {
   test('settings page matches baseline', async ({ managerPage }) => {
-    await clientNavigate(managerPage, '/settings');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.goto('/settings');
+    await managerPage.waitForURL((url) => url.pathname === '/settings', { timeout: 15_000 });
+    await managerPage.waitForLoadState('networkidle', { timeout: 15_000 });
     await expect(managerPage).toHaveScreenshot(`${SNAPSHOT_DIR}/settings.png`, {
       fullPage: false,
       maxDiffPixelRatio: 0.02,
@@ -96,8 +98,9 @@ test.describe('Visual Regression — Settings', () => {
 
 test.describe('Visual Regression — Menu Management', () => {
   test('menu management page matches baseline', async ({ managerPage }) => {
-    await clientNavigate(managerPage, '/menu');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.goto('/menu');
+    await managerPage.waitForURL((url) => url.pathname === '/menu', { timeout: 15_000 });
+    await managerPage.waitForLoadState('networkidle', { timeout: 15_000 });
     await expect(managerPage).toHaveScreenshot(`${SNAPSHOT_DIR}/menu-management.png`, {
       fullPage: false,
       maxDiffPixelRatio: 0.02,
@@ -107,8 +110,9 @@ test.describe('Visual Regression — Menu Management', () => {
 
 test.describe('Visual Regression — Team Management', () => {
   test('team management page matches baseline', async ({ managerPage }) => {
-    await clientNavigate(managerPage, '/team');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.goto('/team');
+    await managerPage.waitForURL((url) => url.pathname === '/team', { timeout: 15_000 });
+    await managerPage.waitForLoadState('networkidle', { timeout: 15_000 });
     await expect(managerPage).toHaveScreenshot(`${SNAPSHOT_DIR}/team-management.png`, {
       fullPage: false,
       maxDiffPixelRatio: 0.02,

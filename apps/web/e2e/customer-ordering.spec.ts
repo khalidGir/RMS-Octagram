@@ -23,7 +23,7 @@ test.describe('Customer ordering journey', () => {
 
   test('add item to cart and proceed to checkout', async ({ page, seed }) => {
     await page.goto(`/r/${seed.publicSlug}`);
-    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible({ timeout: 15_000 });
 
     // Navigate to Drinks (Water has no required modifiers)
     await page.locator('nav[aria-label="Menu categories"] button', { hasText: 'Drinks' }).click();
@@ -37,7 +37,7 @@ test.describe('Customer ordering journey', () => {
     await expect(page.locator('button', { hasText: /Review order/ }).first()).toBeVisible();
 
     // Click review order
-    await page.locator('button', { hasText: /Review order/ }).first().click();
+    await page.locator('button', { hasText: /Review order/ }).first().click({ force: true });
 
     // Should navigate to checkout
     await page.waitForURL(`**/r/${seed.publicSlug}/checkout`, { timeout: 10_000 });

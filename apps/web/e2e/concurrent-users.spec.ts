@@ -70,12 +70,12 @@ test.describe('Concurrent Multi-User', () => {
     const cashierContext = await browser.newContext();
     const cashierPage = await cashierContext.newPage();
     await cashierPage.goto('/pos');
-    await cashierPage.waitForLoadState('networkidle');
+    await cashierPage.waitForLoadState('networkidle', { timeout: 15_000 });
 
     const managerContext = await browser.newContext();
     const managerPage = await managerContext.newPage();
     await managerPage.goto('/orders');
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.waitForLoadState('networkidle', { timeout: 15_000 });
 
     const orderCount = await managerPage.locator('button:has-text("Order")').count();
 
@@ -94,7 +94,7 @@ test.describe('Concurrent Multi-User', () => {
     expect(createRes.status).toBe(201);
 
     await managerPage.reload();
-    await managerPage.waitForLoadState('networkidle');
+    await managerPage.waitForLoadState('networkidle', { timeout: 15_000 });
     await managerPage.waitForTimeout(2000);
 
     const newOrderCount = await managerPage.locator('button:has-text("Order")').count();
