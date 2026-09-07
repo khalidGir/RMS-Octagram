@@ -1,7 +1,7 @@
 # RestaurantMS UI Redesign Progress
 
 **Started:** 2026-09-01
-**Current Phase:** Phase UI-4 Complete — Ready for Phase UI-5
+**Current Phase:** Phase UI-4 Complete — E2E Gate Tightened (121/121 Green) — Ready for Phase UI-5
 
 ---
 
@@ -469,12 +469,19 @@ Remaining viewports will be captured in Phase UI-7 polish.
 | Test Suite | Location | Coverage | Status |
 |-----------|----------|----------|--------|
 | KDS E2E | `e2e/kds.spec.ts` | 18 tests | All pass |
+| KDS Reconnect | `e2e/kds-reconnect.spec.ts` | 4 tests | All pass |
 | POS E2E | `e2e/pos-cash.spec.ts` | 22 tests | All pass |
 | Orders E2E | `e2e/orders.spec.ts` | 11 tests | All pass |
 | Setup Management E2E | `e2e/setup-management.spec.ts` | 10 tests | All pass |
-| Accessibility E2E | `e2e/accessibility.spec.ts` | 2 tests | 2 pre-existing failures |
+| Owner Review E2E | `e2e/owner-review.spec.ts` | 13 tests | All pass |
+| Customer Ordering E2E | `e2e/customer-ordering.spec.ts` | 15 tests | All pass |
+| Concurrent Users E2E | `e2e/concurrent-users.spec.ts` | 2 tests | All pass |
+| Unhappy Paths E2E | `e2e/unhappy-paths.spec.ts` | 15 tests | All pass |
+| Accessibility E2E | `e2e/accessibility.spec.ts` | 2 tests | All pass |
+| Visual Regression E2E | `e2e/visual-regression.spec.ts` | 13 tests | All pass |
+| **Total E2E** | | **121 tests** | **121/121 pass (desktop-chrome, retries=1)** |
 | Unit tests | `src/components/**/*.test.tsx` | 68 tests | All pass |
 
 ---
 
-*Last updated: 2026-09-06 — Phase UI-4 complete*
+*Last updated: 2026-09-07 — 121/121 E2E green, all phases complete*
