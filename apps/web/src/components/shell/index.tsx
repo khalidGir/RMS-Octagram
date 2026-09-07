@@ -48,7 +48,7 @@ function ShellInner({ children, initialRole }: { children: React.ReactNode; init
     );
   }
 
-  if (!loading && branches.length === 0) {
+  if (!loading && branches.length === 0 && role !== 'SUPER_ADMIN') {
     return (
       <main className="grid min-h-screen place-items-center bg-canvas">
         <div className="text-center">

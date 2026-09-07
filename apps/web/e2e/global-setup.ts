@@ -15,6 +15,7 @@ export interface SeedData {
   manager: { email: string; password: string };
   cashier: { email: string; password: string };
   kitchenStaff: { email: string; password: string };
+  superAdmin: { email: string; password: string };
   tenantId: string;
   branchId: string;
   branchSlug: string;
@@ -58,6 +59,7 @@ export default async function globalSetup(): Promise<void> {
   const managerEmail = `pw-manager-${ts}@test.com`;
   const cashierEmail = `pw-cashier-${ts}@test.com`;
   const kitchenStaffEmail = `pw-kitchen-${ts}@test.com`;
+  const superAdminEmail = `pw-superadmin-${ts}@test.com`;
   const tenantSlug = `pw-tenant-${ts}`;
   const branchSlug = `pw-branch-${ts}`;
 
@@ -105,6 +107,10 @@ export default async function globalSetup(): Promise<void> {
     const kitchenStaffMembershipId = uuid();
     await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'KITCHEN_STAFF','ACTIVE',now(),now())`, [kitchenStaffMembershipId, tenantId, kitchenStaffId]);
     await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, kitchenStaffMembershipId]);
+
+    // Super Admin user (platform-level, no tenant membership needed)
+    const superAdminId = uuid();
+    await client.query(`INSERT INTO "User" ("id","email","passwordHash","displayName","platformRole","status","createdAt","updatedAt") VALUES ($1,$2,$3,'PW Super Admin','SUPER_ADMIN','ACTIVE',now(),now())`, [superAdminId, superAdminEmail, passwordHash]);
 
     // Menu category
     const categoryId = uuid();
@@ -202,6 +208,7 @@ export default async function globalSetup(): Promise<void> {
       manager: { email: managerEmail, password: PASSWORD },
       cashier: { email: cashierEmail, password: PASSWORD },
       kitchenStaff: { email: kitchenStaffEmail, password: PASSWORD },
+      superAdmin: { email: superAdminEmail, password: PASSWORD },
       tenantId,
       branchId,
       branchSlug,
@@ -222,7 +229,7 @@ export default async function globalSetup(): Promise<void> {
     fs.writeFileSync(SEED_FILE, JSON.stringify(seedData, null, 2));
     console.log(`  Seed data written to ${SEED_FILE}`);
     console.log(`  Tenant: ${tenantSlug}, Branch: ${branchSlug}`);
-    console.log(`  Owner: ${ownerEmail}, Manager: ${managerEmail}, Cashier: ${cashierEmail}, Kitchen: ${kitchenStaffEmail}`);
+    console.log(`  Owner: ${ownerEmail}, Manager: ${managerEmail}, Cashier: ${cashierEmail}, Kitchen: ${kitchenStaffEmail}, SuperAdmin: ${superAdminEmail}`);
   } finally {
     await client.end();
   }

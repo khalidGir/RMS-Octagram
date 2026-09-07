@@ -23,6 +23,7 @@ interface TestFixtures {
   managerPage: import('@playwright/test').Page;
   cashierPage: import('@playwright/test').Page;
   kitchenStaffPage: import('@playwright/test').Page;
+  superAdminPage: import('@playwright/test').Page;
   managerToken: TokenBundle;
   ownerToken: TokenBundle;
   cashierToken: TokenBundle;
@@ -212,6 +213,14 @@ export const test = base.extend<TestFixtures>({
     const page = await context.newPage();
     await loginViaUI(page, seed.kitchenStaff.email, seed.kitchenStaff.password);
     await page.waitForURL((url) => url.pathname.includes('/kitchen'), { timeout: 15_000 });
+    await use(page);
+    await context.close();
+  },
+  superAdminPage: async ({ browser, seed }, use) => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    await loginViaUI(page, seed.superAdmin.email, seed.superAdmin.password);
+    await page.waitForURL((url) => url.pathname === '/platform', { timeout: 15_000 });
     await use(page);
     await context.close();
   },
