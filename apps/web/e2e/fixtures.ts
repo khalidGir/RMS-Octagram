@@ -125,7 +125,6 @@ async function loginViaUI(
   await setupAuthRoute(page, tokens);
 
   await page.goto(profile.landing, { timeout: 60_000 });
-  await page.waitForLoadState('networkidle', { timeout: 60_000 });
   await page.locator('aside nav').first().waitFor({ state: 'visible', timeout: 30_000 });
 }
 
@@ -140,7 +139,6 @@ async function loginAndCaptureToken(
   await setupAuthRoute(page, tokens);
 
   await page.goto(profile.landing, { timeout: 60_000 });
-  await page.waitForLoadState('networkidle', { timeout: 60_000 });
   await page.locator('aside nav').first().waitFor({ state: 'visible', timeout: 30_000 });
 
   return tokens;

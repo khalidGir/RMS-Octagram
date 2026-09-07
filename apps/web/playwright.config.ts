@@ -30,12 +30,32 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
+      name: 'desktop-firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'desktop-webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
       name: 'tablet-portrait',
       use: { ...devices['iPad (gen 7)'] },
     },
     {
       name: 'tablet-landscape',
       use: { ...devices['iPad (gen 7)'], viewport: { width: 1024, height: 768 } },
+    },
+    {
+      name: 'large-phone',
+      use: { viewport: { width: 430, height: 932 }, isMobile: true },
+    },
+    {
+      name: 'laptop',
+      use: { viewport: { width: 1366, height: 768 } },
+    },
+    {
+      name: 'wide-display',
+      use: { viewport: { width: 1920, height: 1080 } },
     },
   ],
   webServer: [
