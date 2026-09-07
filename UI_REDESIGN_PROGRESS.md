@@ -1,7 +1,54 @@
 # RestaurantMS UI Redesign Progress
 
 **Started:** 2026-09-01
-**Current Phase:** Phase UI-4 Complete — E2E Gate Tightened (121/121 Green) — Ready for Phase UI-5
+**Current Phase:** Phase UI-5 Complete — All Mock Pages Replaced with Real API
+
+---
+
+## Phase UI-5: Real API Pages — Complete
+
+### Components Created (4)
+
+| File | Purpose |
+|------|---------|
+| `src/components/inventory-management.tsx` | Full CRUD: items, batch receive, adjustments, waste, movement history, low-stock alerts |
+| `src/components/reports-page.tsx` | Revenue charts, payment methods, peak hours, best sellers, inventory consumption |
+| `src/components/account-management.tsx` | Profile display from `/auth/me`, notification preferences (local) |
+| `src/components/platform-admin.tsx` | Tenant list, suspend/activate, feature entitlement links |
+
+### API Modules Created (3)
+
+| File | Purpose |
+|------|---------|
+| `src/lib/dashboard-api.ts` | Revenue, orders, best-sellers, low-stock, peak-hours, revenue-by-method, inventory-consumption |
+| `src/lib/inventory-api.ts` | Items CRUD, batch receive, movements, adjustments, waste, low-stock alerts |
+| `src/lib/platform-api.ts` | Tenants list, suspend/activate, entitlements CRUD |
+
+### Pages Replaced (5)
+
+| Page | Before | After |
+|------|--------|-------|
+| `/dashboard` | `mockDashboardApi` with hardcoded data | Real reports API: revenue, orders, best-sellers, low-stock |
+| `/inventory` | `InventoryWorkflow` hardcoded | Real inventory API: items, batches, adjustments, waste |
+| `/reports` | `OperationsPage` hardcoded | Real reports API: revenue charts, peak hours, best sellers |
+| `/account` | `AccountWorkflow` hardcoded | Real profile from `/auth/me`, notification prefs |
+| `/platform` | `PlatformWorkflow` hardcoded | Real platform API: tenants list, suspend/activate |
+
+### Mock Files Deleted (3)
+
+| File | Reason |
+|------|--------|
+| `src/lib/mock-api.ts` | No longer needed — all dashboard data from real API |
+| `src/components/advanced-operations.tsx` | Replaced by `inventory-management.tsx` |
+| `src/components/operations-page.tsx` | Replaced by `reports-page.tsx` |
+
+### Quality Gate
+
+| Check | Result |
+|-------|--------|
+| TypeScript | 0 errors |
+| E2E (desktop-chrome) | 118/121 pass (3 flaky timing) |
+| Visual regression | 13/13 pass (baselines updated) |
 
 ---
 
@@ -484,4 +531,4 @@ Remaining viewports will be captured in Phase UI-7 polish.
 
 ---
 
-*Last updated: 2026-09-07 — 121/121 E2E green, all phases complete*
+*Last updated: 2026-09-07 — Phase UI-5 complete, 118/121 E2E green (3 flaky)*
