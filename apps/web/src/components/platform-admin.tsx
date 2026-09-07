@@ -95,43 +95,50 @@ export function PlatformAdmin() {
       </section>
 
       <section className="mt-5 rounded-panel border border-line bg-white shadow-card overflow-x-auto">
-        <table className="w-full min-w-[700px] text-left">
-          <thead>
-            <tr className="border-b border-line text-xs uppercase tracking-wider text-ink-muted">
-              <th className="px-5 py-4">Restaurant</th>
-              <th className="px-5 py-4">Slug</th>
-              <th className="px-5 py-4">Members</th>
-              <th className="px-5 py-4">Branches</th>
-              <th className="px-5 py-4">Status</th>
-              <th className="px-5 py-4">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tenants.map((tenant) => (
-              <tr key={tenant.id} className="border-b border-line last:border-0 text-sm">
-                <td className="px-5 py-5 font-black">{tenant.name}</td>
-                <td className="px-5 py-5 text-ink-muted">{tenant.slug}</td>
-                <td className="px-5 py-5">{tenant._count?.memberships ?? 0}</td>
-                <td className="px-5 py-5">{tenant._count?.branches ?? 0}</td>
-                <td className="px-5 py-5">
-                  <StatusChip status={statusVariant[tenant.status] ?? 'idle'}>{tenant.status}</StatusChip>
-                </td>
-                <td className="px-5 py-5">
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => void handleToggle(tenant)}
-                      disabled={actionLoading === tenant.id}
-                      className={cn('text-xs font-black', tenant.status === 'SUSPENDED' ? 'text-emerald-700' : 'text-amber-700')}
-                    >
-                      {actionLoading === tenant.id ? '...' : tenant.status === 'SUSPENDED' ? 'Activate' : 'Suspend'}
-                    </button>
-                    <Link href="/platform/features" className="text-xs font-black text-brand">Features →</Link>
-                  </div>
-                </td>
+        {tenants.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-sm font-bold text-ink-muted">No restaurants registered yet</p>
+            <p className="mt-1 text-xs text-ink-muted">Tenants will appear here once they sign up.</p>
+          </div>
+        ) : (
+          <table className="w-full min-w-[700px] text-left">
+            <thead>
+              <tr className="border-b border-line text-xs uppercase tracking-wider text-ink-muted">
+                <th className="px-5 py-4">Restaurant</th>
+                <th className="px-5 py-4">Slug</th>
+                <th className="px-5 py-4">Members</th>
+                <th className="px-5 py-4">Branches</th>
+                <th className="px-5 py-4">Status</th>
+                <th className="px-5 py-4">Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {tenants.map((tenant) => (
+                <tr key={tenant.id} className="border-b border-line last:border-0 text-sm">
+                  <td className="px-5 py-5 font-black">{tenant.name}</td>
+                  <td className="px-5 py-5 text-ink-muted">{tenant.slug}</td>
+                  <td className="px-5 py-5">{tenant._count?.memberships ?? 0}</td>
+                  <td className="px-5 py-5">{tenant._count?.branches ?? 0}</td>
+                  <td className="px-5 py-5">
+                    <StatusChip status={statusVariant[tenant.status] ?? 'idle'}>{tenant.status}</StatusChip>
+                  </td>
+                  <td className="px-5 py-5">
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => void handleToggle(tenant)}
+                        disabled={actionLoading === tenant.id}
+                        className={cn('text-xs font-black', tenant.status === 'SUSPENDED' ? 'text-emerald-700' : 'text-amber-700')}
+                      >
+                        {actionLoading === tenant.id ? '...' : tenant.status === 'SUSPENDED' ? 'Activate' : 'Suspend'}
+                      </button>
+                      <Link href="/platform/features" className="text-xs font-black text-brand">Features →</Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </section>
     </div>
   );

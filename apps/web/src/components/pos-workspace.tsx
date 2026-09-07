@@ -342,8 +342,24 @@ export function PosWorkspace() {
               </button>
             ))}
           </div>
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
-            {items.map((item) => {
+          {menuQuery.isLoading ? (
+            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-40 animate-pulse rounded-2xl bg-white" />
+              ))}
+            </div>
+          ) : menuQuery.isError ? (
+            <div role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-6 text-center">
+              <p className="text-sm font-bold text-red-800">Could not load menu</p>
+              <button onClick={() => void menuQuery.refetch()} className="mt-3 min-h-9 rounded-lg bg-red-700 px-4 text-xs font-black text-white">Retry</button>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="mt-5 rounded-xl border border-line bg-white p-6 text-center">
+              <p className="text-sm font-bold text-ink-muted">No menu items found</p>
+            </div>
+          ) : (
+            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
+              {items.map((item) => {
               const variant = item.variants.find((v) => v.isDefault) ?? item.variants[0];
               const needsSelection = item.variants.length > 1 || item.modifierGroups.length > 0;
               return (
@@ -366,7 +382,8 @@ export function PosWorkspace() {
                 </button>
               );
             })}
-          </div>
+            </div>
+          )}
         </section>
 
         <aside className="h-fit rounded-2xl border border-line bg-white p-5 shadow-card">

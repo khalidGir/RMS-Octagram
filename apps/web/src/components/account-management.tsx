@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export function AccountManagement() {
-  const { profile } = useAuth();
+  const { profile, loading } = useAuth();
   const [displayName, setDisplayName] = useState(profile?.displayName ?? '');
   const [email, setEmail] = useState(profile?.email ?? '');
   const [phone, setPhone] = useState('');
@@ -23,6 +24,16 @@ export function AccountManagement() {
   }
 
   const membership = profile?.memberships?.[0];
+
+  if (loading) return (
+    <div className="mx-auto max-w-[1500px] animate-pulse">
+      <Skeleton className="h-10 w-64 rounded-xl" />
+      <div className="mt-7 grid gap-5 xl:grid-cols-2">
+        <Skeleton className="h-64 rounded-panel" />
+        <Skeleton className="h-64 rounded-panel" />
+      </div>
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-[1500px]">

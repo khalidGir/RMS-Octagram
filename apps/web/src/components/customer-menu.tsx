@@ -125,6 +125,7 @@ export function CustomerMenu() {
             <p className="text-xs font-black uppercase tracking-[.16em] text-brand">Explore the menu</p>
             <h2 className="mt-2 text-2xl font-black">{category?.name}</h2>
             {query.isLoading ? <div className="mt-5 grid gap-4 sm:grid-cols-2">{Array.from({ length: 6 }, (_, i) => <div className="h-40 animate-pulse rounded-xl bg-white" key={i} />)}</div>
+              : category?.items.length === 0 ? <p className="mt-5 rounded-xl border border-line bg-white p-6 text-center text-sm font-bold text-ink-muted">No items in this category yet.</p>
               : <div className="mt-5 grid gap-4 sm:grid-cols-2">{category?.items.map((item, idx) => {
                 const variant = item.variants.find(v => v.isDefault) ?? item.variants[0];
                 const needsOptions = item.modifierGroups.some(g => g.isRequired || g.minSelections > 0);
