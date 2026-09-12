@@ -132,6 +132,8 @@ model Branch {
   cashShifts        CashShift[]
   shiftReports      ShiftReportSnapshot[]
   businessDayCloses BusinessDayClose[]
+  kdsDevices        KdsDevice[]
+  fulfillmentPolicy BranchFulfillmentPolicy?
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
@@ -762,11 +764,11 @@ model KitchenTicketLine {
   orderLineId       String
   routeType         String    @default("PREPARE") // PREPARE | ASSEMBLE
   isRequired        Boolean   @default(true)
-  quantity              Int       // CHECK >= 0 via migration SQL
-  quantityPrepared      Int       @default(0) // CHECK >= 0
-  quantityReady         Int       @default(0) // CHECK >= 0
-  quantityCollected     Int       @default(0) // CHECK >= 0 AND <= quantity
-  quantityServed        Int       @default(0) // CHECK >= 0 AND <= quantity
+  quantity              Int       // CHECK >= 0
+  quantityPrepared      Int       @default(0) // CHECK >= 0 AND <= quantity
+  quantityReady         Int       @default(0) // CHECK >= 0 AND <= quantityPrepared
+  quantityCollected     Int       @default(0) // CHECK >= 0 AND <= quantityReady
+  quantityServed        Int       @default(0) // CHECK >= 0 AND <= quantityCollected
   itemNameSnapshot  String?
   variantNameSnapshot String?
   notesSnapshot     String?
@@ -829,6 +831,7 @@ model KdsDevice {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  branch          Branch    @relation(fields: [branchId], references: [id])
   stations        KdsDeviceStation[]
 
   @@index([tenantId, branchId])
@@ -889,6 +892,8 @@ model BranchFulfillmentPolicy {
   autoCompleteKitchenTicketOnCollected Boolean @default(false)
   createdAt                             DateTime  @default(now())
   updatedAt                             DateTime  @updatedAt
+
+  branch          Branch    @relation(fields: [branchId], references: [id])
 
   @@index([tenantId, branchId])
 }

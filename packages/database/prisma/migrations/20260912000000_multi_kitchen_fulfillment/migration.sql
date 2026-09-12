@@ -22,6 +22,10 @@ CREATE TABLE "Kitchen" (
 CREATE UNIQUE INDEX "Kitchen_branchId_name_key" ON "Kitchen"("branchId", "name");
 CREATE INDEX "Kitchen_tenantId_branchId_isActive_idx" ON "Kitchen"("tenantId", "branchId", "isActive");
 
+-- FIX 1: Branch FK for Kitchen
+ALTER TABLE "Kitchen" ADD CONSTRAINT "Kitchen_branchId_fkey"
+  FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
 -- ============================================================
 -- 2. Extend KitchenStation
 -- ============================================================
@@ -90,21 +94,26 @@ ALTER TABLE "KitchenTicketLine" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1;
 
 CREATE INDEX "KitchenTicketLine_tenantId_branchId_orderLineId_idx" ON "KitchenTicketLine"("tenantId", "branchId", "orderLineId");
 
--- FIX 7: Numeric constraints on KitchenTicketLine
+-- FIX 7: Numeric constraints on KitchenTicketLine — full invariant chain
+-- served <= collected <= ready <= prepared <= quantity
 ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantity_nonneg"
   CHECK ("quantity" >= 0);
 ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityPrepared_nonneg"
   CHECK ("quantityPrepared" >= 0);
+ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityPrepared_lte_quantity"
+  CHECK ("quantityPrepared" <= "quantity");
 ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityReady_nonneg"
   CHECK ("quantityReady" >= 0);
+ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityReady_lte_prepared"
+  CHECK ("quantityReady" <= "quantityPrepared");
 ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityCollected_nonneg"
   CHECK ("quantityCollected" >= 0);
-ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityCollected_lte_quantity"
-  CHECK ("quantityCollected" <= "quantity");
+ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityCollected_lte_ready"
+  CHECK ("quantityCollected" <= "quantityReady");
 ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityServed_nonneg"
   CHECK ("quantityServed" >= 0);
-ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityServed_lte_quantity"
-  CHECK ("quantityServed" <= "quantity");
+ALTER TABLE "KitchenTicketLine" ADD CONSTRAINT "KitchenTicketLine_quantityServed_lte_collected"
+  CHECK ("quantityServed" <= "quantityCollected");
 
 -- ============================================================
 -- 6. Extend Order
@@ -157,6 +166,10 @@ CREATE TABLE "KdsDevice" (
 CREATE UNIQUE INDEX "KdsDevice_deviceTokenHash_key" ON "KdsDevice"("deviceTokenHash") WHERE "deviceTokenHash" IS NOT NULL;
 CREATE INDEX "KdsDevice_tenantId_branchId_idx" ON "KdsDevice"("tenantId", "branchId");
 CREATE INDEX "KdsDevice_tenantId_branchId_isActive_idx" ON "KdsDevice"("tenantId", "branchId", "isActive");
+
+-- FIX 1: Branch FK for KdsDevice
+ALTER TABLE "KdsDevice" ADD CONSTRAINT "KdsDevice_branchId_fkey"
+  FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- ============================================================
 -- 9. New table: KdsDeviceStation
@@ -229,6 +242,10 @@ CREATE TABLE "BranchFulfillmentPolicy" (
 );
 CREATE UNIQUE INDEX "BranchFulfillmentPolicy_branchId_key" ON "BranchFulfillmentPolicy"("branchId");
 CREATE INDEX "BranchFulfillmentPolicy_tenantId_branchId_idx" ON "BranchFulfillmentPolicy"("tenantId", "branchId");
+
+-- FIX 1: Branch FK for BranchFulfillmentPolicy
+ALTER TABLE "BranchFulfillmentPolicy" ADD CONSTRAINT "BranchFulfillmentPolicy_branchId_fkey"
+  FOREIGN KEY ("branchId") REFERENCES "Branch"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- FIX 7: Numeric constraints on BranchFulfillmentPolicy
 ALTER TABLE "BranchFulfillmentPolicy" ADD CONSTRAINT "BranchFulfillmentPolicy_readyReminderSeconds_nonneg"
@@ -345,6 +362,9 @@ WHERE NOT EXISTS (
 -- ============================================================
 -- Rollback notes:
 -- - DROP TABLE "ServiceNotification", "KdsDeviceStation", "KdsDevice", "BranchFulfillmentPolicy";
+-- - ALTER TABLE "BranchFulfillmentPolicy" DROP CONSTRAINT "BranchFulfillmentPolicy_branchId_fkey";
+-- - ALTER TABLE "KdsDevice" DROP CONSTRAINT "KdsDevice_branchId_fkey";
+-- - ALTER TABLE "Kitchen" DROP CONSTRAINT "Kitchen_branchId_fkey";
 -- - ALTER TABLE "DiningSession" DROP CONSTRAINT "DiningSession_assignedWaiterUserId_fkey";
 -- - ALTER TABLE "DiningSession" DROP COLUMN "assignedWaiterUserId", "assignedAt", "assignedByUserId";
 -- - ALTER TABLE "Order" DROP CONSTRAINT "Order_assignedWaiterUserId_fkey";

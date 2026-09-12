@@ -1,4 +1,4 @@
-import { PrismaClient, TenantStatus, UserStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
@@ -23,7 +23,7 @@ async function main() {
       passwordHash: superAdminPasswordHash,
       displayName: 'Platform Admin',
       platformRole: 'SUPER_ADMIN',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
   console.log(`Super admin: ${superAdmin.email} (admin123)`);
@@ -35,7 +35,7 @@ async function main() {
     create: {
       name: 'Demo Coffee House',
       slug: 'demo-coffee-house',
-      status: TenantStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -48,7 +48,7 @@ async function main() {
       email: 'owner@demo.com',
       passwordHash: ownerPasswordHash,
       displayName: 'Abebe Kebede',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -73,7 +73,7 @@ async function main() {
       email: 'manager@demo.com',
       passwordHash: managerPasswordHash,
       displayName: 'Almaz Tesfaye',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -97,7 +97,7 @@ async function main() {
       email: 'cashier@demo.com',
       passwordHash: cashierPasswordHash,
       displayName: 'Dawit Mulugeta',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -121,7 +121,7 @@ async function main() {
       email: 'kitchen@demo.com',
       passwordHash: kitchenPasswordHash,
       displayName: 'Fatima Hassan',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -171,7 +171,7 @@ async function main() {
 
   for (const a of assignments) {
     await prisma.branchAssignment.upsert({
-      where: { membershipId_branchId: { membershipId: a.membershipId, branchId: a.branchId } },
+      where: { branchId_membershipId: { membershipId: a.membershipId, branchId: a.branchId } },
       update: {},
       create: {
         tenantId: tenant.id,
@@ -188,17 +188,20 @@ async function main() {
   // 9. Feature defaults
   const features = ['KDS', 'HOLD_RELEASE', 'RESERVATIONS', 'PROMOS', 'INVENTORY', 'EXPENSES', 'ADVANCE_ORDERS'];
   for (const key of features) {
-    await prisma.featureSetting.upsert({
-      where: { tenantId_branchId_featureKey: { tenantId: tenant.id, branchId: null, featureKey: key } },
-      update: {},
-      create: {
-        tenantId: tenant.id,
-        branchId: null,
-        featureKey: key,
-        enabled: true,
-        updatedByUserId: owner.id,
-      },
+    const existing = await prisma.featureSetting.findFirst({
+      where: { tenantId: tenant.id, branchId: null, featureKey: key },
     });
+    if (!existing) {
+      await prisma.featureSetting.create({
+        data: {
+          tenantId: tenant.id,
+          branchId: null,
+          featureKey: key,
+          enabled: true,
+          updatedByUserId: owner.id,
+        },
+      });
+    }
   }
 
   console.log('Seed complete.');
@@ -214,7 +217,7 @@ async function main() {
       email: 'waiter@demo.com',
       passwordHash: waiterPasswordHash,
       displayName: 'Hana Tesfalem',
-      status: UserStatus.ACTIVE,
+      status: 'ACTIVE',
     },
   });
 
@@ -230,7 +233,7 @@ async function main() {
   });
 
   await prisma.branchAssignment.upsert({
-    where: { membershipId_branchId: { membershipId: waiterMembership.id, branchId: branchMain.id } },
+    where: { branchId_membershipId: { membershipId: waiterMembership.id, branchId: branchMain.id } },
     update: {},
     create: {
       tenantId: tenant.id,
@@ -333,7 +336,21 @@ async function main() {
 
   console.log(`Stations: ${grillStation.name}, ${hotLineStation.name}, ${drinksStation.name}, ${dessertStation.name}`);
 
-  // 13. Branch fulfillment policy
+  // 13. Kitchens for Downtown Branch (every branch needs at least one)
+  await prisma.kitchen.upsert({
+    where: { branchId_name: { branchId: branchDowntown.id, name: 'Main Kitchen' } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      branchId: branchDowntown.id,
+      name: 'Main Kitchen',
+      description: 'Primary kitchen',
+      collectionLabel: 'Main pass',
+      displayOrder: 0,
+    },
+  });
+
+  // 14. Branch fulfillment policies — every branch gets one
   await prisma.branchFulfillmentPolicy.upsert({
     where: { branchId: branchMain.id },
     update: {},
@@ -347,7 +364,20 @@ async function main() {
     },
   });
 
-  console.log('Fulfillment policy created for Main Branch');
+  await prisma.branchFulfillmentPolicy.upsert({
+    where: { branchId: branchDowntown.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      branchId: branchDowntown.id,
+      serviceMode: 'ALL_AT_ONCE',
+      expoMode: 'NONE',
+      allowWaiterSelfClaim: false,
+      showUnassignedReadyOrdersToWaiters: false,
+    },
+  });
+
+  console.log('Fulfillment policy created for all branches');
   console.log('Multi-kitchen seed complete.');
 }
 
