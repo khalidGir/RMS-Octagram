@@ -163,6 +163,13 @@ This file records decisions that implementation agents must follow unless a late
 - **Reason:** Restaurants may need onboarding help without granting uncontrolled operational impersonation.
 - **Consequence:** Support context is short-lived, allowlisted, visibly bannered and fully audited.
 
+## ADR-017: Multi-kitchen fulfillment architecture
+
+- **Status:** Accepted
+- **Decision:** Extend the existing kitchen-ticket system with a physical `Kitchen` entity above `KitchenStation`, add `Order.fulfillmentStatus` as a derived/persisted summary, add expo and waiter-fulfillment workflows, and use transactional outbox events for all real-time coordination.
+- **Reason:** The current system assumes one kitchen per branch. Real restaurants have multiple production areas (main kitchen, bar, bakery, coffee counter). The existing ticket/station foundation is solid but lacks physical-kitchen grouping, fulfillment-status tracking, expo coordination, waiter assignment, and durable service notifications.
+- **Consequence:** Every order confirmation must validate routes across all stations in all kitchens, create one ticket per station, and derive a fulfillment summary. KDS displays must be scoped to kitchen and/or station. The migration must backfill a default "Main Kitchen" for every branch with existing stations.
+
 ## Open Product Decisions
 
 These do not block architecture or initial scaffolding, but must be confirmed before their feature is finalized:

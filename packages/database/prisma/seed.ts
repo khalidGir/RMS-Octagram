@@ -202,6 +202,153 @@ async function main() {
   }
 
   console.log('Seed complete.');
+
+  // ─── Multi-Kitchen Seed (Phase MK-1) ─────────────────────
+
+  // 10. Waiter user
+  const waiterPasswordHash = await argon2.hash('waiter123', { type: argon2.argon2id });
+  const waiter = await prisma.user.upsert({
+    where: { email: 'waiter@demo.com' },
+    update: {},
+    create: {
+      email: 'waiter@demo.com',
+      passwordHash: waiterPasswordHash,
+      displayName: 'Hana Tesfalem',
+      status: UserStatus.ACTIVE,
+    },
+  });
+
+  const waiterMembership = await prisma.tenantMembership.upsert({
+    where: { tenantId_userId: { tenantId: tenant.id, userId: waiter.id } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      userId: waiter.id,
+      role: 'WAITER',
+      status: 'ACTIVE',
+    },
+  });
+
+  await prisma.branchAssignment.upsert({
+    where: { membershipId_branchId: { membershipId: waiterMembership.id, branchId: branchMain.id } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      branchId: branchMain.id,
+      membershipId: waiterMembership.id,
+    },
+  });
+  console.log(`Waiter: ${waiter.email} (waiter123) — assigned to Main only`);
+
+  // 11. Kitchens for Main Branch
+  const mainKitchen = await prisma.kitchen.upsert({
+    where: { branchId_name: { branchId: branchMain.id, name: 'Main Kitchen' } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      branchId: branchMain.id,
+      name: 'Main Kitchen',
+      description: 'Primary hot kitchen',
+      collectionLabel: 'Main pass',
+      displayOrder: 0,
+    },
+  });
+
+  const barKitchen = await prisma.kitchen.upsert({
+    where: { branchId_name: { branchId: branchMain.id, name: 'Bar' } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      branchId: branchMain.id,
+      name: 'Bar',
+      description: 'Drinks and cocktails',
+      collectionLabel: 'Bar counter',
+      displayOrder: 1,
+    },
+  });
+
+  const bakeryKitchen = await prisma.kitchen.upsert({
+    where: { branchId_name: { branchId: branchMain.id, name: 'Bakery' } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      branchId: branchMain.id,
+      name: 'Bakery',
+      description: 'Desserts and pastries',
+      collectionLabel: 'Dessert window',
+      displayOrder: 2,
+    },
+  });
+
+  console.log(`Kitchens: ${mainKitchen.name}, ${barKitchen.name}, ${bakeryKitchen.name}`);
+
+  // 12. Stations
+  const grillStation = await prisma.kitchenStation.create({
+    data: {
+      tenantId: tenant.id,
+      branchId: branchMain.id,
+      kitchenId: mainKitchen.id,
+      name: 'Grill',
+      code: 'GRILL',
+      displayOrder: 0,
+      defaultPrepMinutes: 15,
+    },
+  });
+
+  const hotLineStation = await prisma.kitchenStation.create({
+    data: {
+      tenantId: tenant.id,
+      branchId: branchMain.id,
+      kitchenId: mainKitchen.id,
+      name: 'Hot Line',
+      code: 'HOT',
+      displayOrder: 1,
+      defaultPrepMinutes: 12,
+    },
+  });
+
+  const drinksStation = await prisma.kitchenStation.create({
+    data: {
+      tenantId: tenant.id,
+      branchId: branchMain.id,
+      kitchenId: barKitchen.id,
+      name: 'Drinks',
+      code: 'DRINKS',
+      displayOrder: 0,
+      defaultPrepMinutes: 5,
+    },
+  });
+
+  const dessertStation = await prisma.kitchenStation.create({
+    data: {
+      tenantId: tenant.id,
+      branchId: branchMain.id,
+      kitchenId: bakeryKitchen.id,
+      name: 'Dessert',
+      code: 'DESSERT',
+      displayOrder: 0,
+      defaultPrepMinutes: 8,
+    },
+  });
+
+  console.log(`Stations: ${grillStation.name}, ${hotLineStation.name}, ${drinksStation.name}, ${dessertStation.name}`);
+
+  // 13. Branch fulfillment policy
+  await prisma.branchFulfillmentPolicy.upsert({
+    where: { branchId: branchMain.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      branchId: branchMain.id,
+      serviceMode: 'ALL_AT_ONCE',
+      expoMode: 'NONE',
+      allowWaiterSelfClaim: true,
+      showUnassignedReadyOrdersToWaiters: true,
+    },
+  });
+
+  console.log('Fulfillment policy created for Main Branch');
+  console.log('Multi-kitchen seed complete.');
 }
 
 main()
