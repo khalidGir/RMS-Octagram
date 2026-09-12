@@ -28,6 +28,7 @@ function createMockPrisma() {
     },
     order: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       updateMany: vi.fn(),
     },
     orderStatusHistory: {
@@ -49,12 +50,17 @@ describe('KitchenTicketsService', () => {
 
   beforeEach(() => {
     prisma = createMockPrisma();
-    service = new KitchenTicketsService(prisma as any, {
-      assertEffective: vi.fn().mockResolvedValue(undefined),
-      resolve: vi.fn().mockResolvedValue({ effective: true }),
-      resolveAll: vi.fn().mockResolvedValue({}),
-      getCatalog: vi.fn().mockReturnValue([]),
-    } as any);
+    service = new KitchenTicketsService(
+      prisma as any,
+      {
+        assertEffective: vi.fn().mockResolvedValue(undefined),
+        resolve: vi.fn().mockResolvedValue({ effective: true }),
+        resolveAll: vi.fn().mockResolvedValue({}),
+        getCatalog: vi.fn().mockReturnValue([]),
+      } as any,
+      { resolveOrderRoutes: vi.fn().mockResolvedValue([]), validateLineRoute: vi.fn() } as any,
+      { deriveFulfillmentStatus: vi.fn(), applyFulfillmentStatus: vi.fn() } as any,
+    );
   });
 
   describe('createTicketsForOrder', () => {
@@ -72,10 +78,8 @@ describe('KitchenTicketsService', () => {
 
     it('should return empty if no stations assigned', async () => {
       prisma.kitchenTicket.findMany.mockResolvedValue([]);
-      prisma.order.findUnique.mockResolvedValue({
-        id: 'o1', branchId: 'b1', lines: [{ id: 'l1', menuItemId: 'mi1', quantity: 2 }],
-      });
-      prisma.menuItemStation.findMany.mockResolvedValue([]);
+      const routingMock = service['routingService'] as any;
+      routingMock.resolveOrderRoutes.mockResolvedValue([]);
 
       const result = await service.createTicketsForOrder({
         tenantId: 't1', branchId: 'b1', orderId: 'o1',
@@ -87,17 +91,20 @@ describe('KitchenTicketsService', () => {
 
     it('should create tickets grouped by station', async () => {
       prisma.kitchenTicket.findMany.mockResolvedValue([]);
-      prisma.order.findUnique.mockResolvedValue({
-        id: 'o1', branchId: 'b1',
-        lines: [
-          { id: 'l1', menuItemId: 'mi1', quantity: 2 },
-          { id: 'l2', menuItemId: 'mi2', quantity: 1 },
-        ],
-      });
-      // mi1 → station s1, mi2 → station s1 (same station)
-      prisma.menuItemStation.findMany
-        .mockResolvedValueOnce([{ stationId: 's1' }])
-        .mockResolvedValueOnce([{ stationId: 's1' }]);
+      const routingMock = service['routingService'] as any;
+      routingMock.resolveOrderRoutes.mockResolvedValue([
+        {
+          stationId: 's1',
+          kitchenId: 'k1',
+          ticketType: 'PREPARATION',
+          collectionLabelSnapshot: null,
+          routes: [{ stationId: 's1', stationName: 'Grill', routeType: 'PREPARE' }],
+          ticketLines: [
+            { orderLineId: 'l1', quantity: 2, routeType: 'PREPARE', menuItemId: 'mi1', itemNameSnapshot: null, variantNameSnapshot: null, notesSnapshot: null },
+            { orderLineId: 'l2', quantity: 1, routeType: 'PREPARE', menuItemId: 'mi2', itemNameSnapshot: null, variantNameSnapshot: null, notesSnapshot: null },
+          ],
+        },
+      ]);
 
       const tx = createMockPrisma();
       tx.stationTicketCounter.upsert.mockResolvedValue({ lastNumber: 1n });
@@ -111,6 +118,15 @@ describe('KitchenTicketsService', () => {
       expect(result.idempotent).toBe(false);
       expect(result.tickets).toHaveLength(1);
       expect(tx.kitchenTicketLine.create).toHaveBeenCalledTimes(2);
+      expect(tx.kitchenTicket.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            kitchenId: 'k1',
+            ticketType: 'PREPARATION',
+            collectionLabelSnapshot: null,
+          }),
+        }),
+      );
       expect(tx.auditLog.create).toHaveBeenCalled();
     });
   });
@@ -194,7 +210,7 @@ describe('KitchenTicketsService', () => {
   });
 
   describe('completeTicket', () => {
-    it('should complete READY → COMPLETED', async () => {
+    it('should complete READY → COMPLETED and apply fulfillment status', async () => {
       prisma.kitchenTicket.findFirst.mockResolvedValue({
         id: 't1', status: 'READY', version: 2, orderId: 'o1', stationId: 's1',
       });
@@ -206,16 +222,24 @@ describe('KitchenTicketsService', () => {
       tx.kitchenTicket.count.mockResolvedValue(0); // All tickets done
       prisma.$transaction.mockImplementation(async (fn: any) => fn(tx));
 
+      const fulfillMock = service['fulfillmentStatusService'] as any;
+      fulfillMock.deriveFulfillmentStatus.mockResolvedValue({
+        fulfillmentStatus: 'READY_FOR_SERVICE',
+        readyAt: new Date(),
+        servedAt: null,
+      });
+
       const result = await service.completeTicket({
         tenantId: 't1', branchId: 'b1', ticketId: 't1', actorUserId: 'u1', expectedVersion: 2,
       });
 
       expect(result.status).toBe('COMPLETED');
-      // Should also mark order as READY
       expect(tx.order.updateMany).toHaveBeenCalled();
+      expect(tx.orderStatusHistory.create).toHaveBeenCalled();
+      expect(tx.outboxEvent.create).toHaveBeenCalled();
     });
 
-    it('should not mark order READY if other tickets pending', async () => {
+    it('should not apply fulfillment status if other tickets pending', async () => {
       prisma.kitchenTicket.findFirst.mockResolvedValue({
         id: 't1', status: 'READY', version: 2, orderId: 'o1', stationId: 's1',
       });

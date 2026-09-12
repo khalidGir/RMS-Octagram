@@ -3,7 +3,11 @@ import { Injectable, Inject, NotFoundException, ConflictException } from '@nestj
 import { PrismaService } from '../prisma/prisma.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { FeatureResolver } from '../features/feature-resolver.service';
-import { FeatureKey } from '@rms/contracts';
+import { FeatureKey, FulfillmentStatus } from '@rms/contracts';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { KitchenRoutingService } from './kitchen-routing.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { FulfillmentStatusService } from './fulfillment-status.service';
 
 // ─── Ticket State Machine ──────────────────
 
@@ -24,6 +28,8 @@ export class KitchenTicketsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
+    @Inject(KitchenRoutingService) private readonly routingService: KitchenRoutingService,
+    @Inject(FulfillmentStatusService) private readonly fulfillmentStatusService: FulfillmentStatusService,
   ) {}
 
   // ─── Create Tickets for a Confirmed Order ──
@@ -51,8 +57,12 @@ export class KitchenTicketsService {
       return { tickets: existingTickets.map((t) => this.serializeTicket(t)), idempotent: true };
     }
 
-    // Resolve order lines grouped by station
-    const stationGroups = await this.resolveOrderStations(orderId);
+    // Resolve order lines to station routes via routing service
+    const stationGroups = await this.routingService.resolveOrderRoutes({
+      tenantId,
+      branchId,
+      orderId,
+    });
     if (stationGroups.length === 0) {
       return { tickets: [], idempotent: false, reason: 'NO_STATIONS_ASSIGNED' };
     }
@@ -74,13 +84,16 @@ export class KitchenTicketsService {
             branchId,
             orderId,
             stationId: group.stationId,
+            kitchenId: group.kitchenId,
             ticketNumber: counter.lastNumber,
+            ticketType: group.ticketType,
             status: 'QUEUED',
             priority: 0,
+            collectionLabelSnapshot: group.collectionLabelSnapshot,
           },
         });
 
-        // Create ticket lines
+        // Create ticket lines with route snapshots
         for (const tl of group.ticketLines) {
           await tx.kitchenTicketLine.create({
             data: {
@@ -88,11 +101,38 @@ export class KitchenTicketsService {
               branchId,
               ticketId: ticket.id,
               orderLineId: tl.orderLineId,
+              routeType: tl.routeType,
+              isRequired: true,
               quantity: tl.quantity,
-              status: 'QUEUED',
+              itemNameSnapshot: tl.itemNameSnapshot,
+              variantNameSnapshot: tl.variantNameSnapshot,
+              notesSnapshot: tl.notesSnapshot,
             },
           });
         }
+
+        // Write route snapshots as ticket history for audit trail
+        await tx.kitchenTicketHistory.create({
+          data: {
+            tenantId,
+            branchId,
+            ticketId: ticket.id,
+            fromStatus: null,
+            toStatus: 'QUEUED',
+            actorUserId: actorUserId ?? null,
+            metadata: {
+              ticketType: group.ticketType,
+              kitchenId: group.kitchenId,
+              collectionLabel: group.collectionLabelSnapshot,
+              routes: group.routes.map((r) => ({
+                stationId: r.stationId,
+                stationName: r.stationName,
+                routeType: r.routeType,
+                kitchenName: r.kitchenName,
+              })),
+            },
+          },
+        });
 
         // Audit
         await tx.auditLog.create({
@@ -106,8 +146,11 @@ export class KitchenTicketsService {
             afterJson: {
               orderId,
               stationId: group.stationId,
+              kitchenId: group.kitchenId,
               ticketNumber: counter.lastNumber.toString(),
+              ticketType: group.ticketType,
               lineCount: group.ticketLines.length,
+              routeCount: group.routes.length,
             },
           },
         });
@@ -530,11 +573,24 @@ export class KitchenTicketsService {
       });
 
       if (pendingCount === 0) {
-        // All tickets done → mark order READY
+        // All tickets done → derive and apply fulfillment status
+        const fulfillment = await this.fulfillmentStatusService.deriveFulfillmentStatus({
+          tenantId,
+          branchId,
+          orderId: ticket.orderId,
+        });
+
         await tx.order.updateMany({
           where: { id: ticket.orderId },
-          data: { status: 'READY' },
+          data: { fulfillmentStatus: fulfillment.fulfillmentStatus },
         });
+
+        if (fulfillment.fulfillmentStatus === FulfillmentStatus.READY_FOR_SERVICE && fulfillment.readyAt) {
+          await tx.order.updateMany({
+            where: { id: ticket.orderId },
+            data: { readyForServiceAt: fulfillment.readyAt },
+          });
+        }
 
         await tx.orderStatusHistory.create({
           data: {
@@ -542,7 +598,7 @@ export class KitchenTicketsService {
             branchId,
             orderId: ticket.orderId,
             fromStatus: 'IN_PROGRESS',
-            toStatus: 'READY',
+            toStatus: fulfillment.fulfillmentStatus,
             actorUserId,
           },
         });
@@ -553,8 +609,11 @@ export class KitchenTicketsService {
             branchId,
             aggregateType: 'Order',
             aggregateId: ticket.orderId,
-            eventType: 'order.ready',
-            payload: { orderId: ticket.orderId },
+            eventType: 'order.fulfillment.status_changed',
+            payload: {
+              orderId: ticket.orderId,
+              toStatus: fulfillment.fulfillmentStatus,
+            },
           },
         });
       }
@@ -644,38 +703,6 @@ export class KitchenTicketsService {
   }
 
   // ─── Helpers ──────────────────────────────
-
-  private async resolveOrderStations(orderId: string) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      include: { lines: { select: { id: true, menuItemId: true, quantity: true } } },
-    });
-    if (!order) throw new NotFoundException('Order not found');
-
-    const stationMap = new Map<string, { orderLineId: string; quantity: number }[]>();
-
-    for (const line of order.lines) {
-      if (!line.menuItemId) continue;
-      const assignments = await this.prisma.menuItemStation.findMany({
-        where: {
-          branchId: order.branchId,
-          menuItemId: line.menuItemId,
-        },
-      });
-
-      if (assignments.length === 0) continue;
-
-      const stationId = assignments[0].stationId;
-      const existing = stationMap.get(stationId) ?? [];
-      existing.push({ orderLineId: line.id, quantity: line.quantity });
-      stationMap.set(stationId, existing);
-    }
-
-    return Array.from(stationMap.entries()).map(([stationId, ticketLines]) => ({
-      stationId,
-      ticketLines,
-    }));
-  }
 
   private serializeTicket(ticket: any) {
     return {

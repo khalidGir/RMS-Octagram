@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { KitchenStationsService } from './kitchen-stations.service';
 import { KitchenTicketsService } from './kitchen-tickets.service';
+import { KitchenRoutingService } from './kitchen-routing.service';
+import { FulfillmentStatusService } from './fulfillment-status.service';
 import { KitchenStationsController } from './kitchen-stations.controller';
 import { KitchenTicketsController } from './kitchen-tickets.controller';
 import { KdsGateway } from './kds.gateway';
@@ -13,8 +15,16 @@ import { FeaturesModule } from '../features/features.module';
   providers: [
     KitchenStationsService,
     KitchenTicketsService,
+    KitchenRoutingService,
+    FulfillmentStatusService,
     KdsGateway,
   ],
-  exports: [KitchenStationsService, KitchenTicketsService, KdsGateway],
+  exports: [
+    KitchenStationsService,
+    KitchenTicketsService,
+    KitchenRoutingService,
+    FulfillmentStatusService,
+    KdsGateway,
+  ],
 })
 export class KitchenModule {}
