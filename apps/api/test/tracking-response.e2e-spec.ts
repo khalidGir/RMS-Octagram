@@ -98,7 +98,7 @@ describe('Public Tracking Response — End-to-End (e2e)', () => {
       data: { tenantId, branchId, name: 'Grill', displayOrder: 0 },
     });
     await prisma.menuItemStation.create({
-      data: { tenantId, branchId, menuItemId: item.id, stationId: station.id },
+      data: { tenantId, branchId, menuItemId: item.id, stationId: station.id, routeType: 'PREPARE' },
     });
 
     await prisma.$executeRaw`

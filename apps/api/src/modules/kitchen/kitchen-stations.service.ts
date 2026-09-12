@@ -177,13 +177,13 @@ export class KitchenStationsService {
 
     // Check for existing assignment (idempotent)
     const existing = await this.prisma.menuItemStation.findUnique({
-      where: { branchId_menuItemId_stationId: { branchId, menuItemId, stationId } },
+      where: { branchId_menuItemId_stationId_routeType: { branchId, menuItemId, stationId, routeType: 'PREPARE' } },
     });
     if (existing) return { assigned: true, idempotent: true };
 
     await this.prisma.$transaction(async (tx) => {
       await tx.menuItemStation.create({
-        data: { tenantId, branchId, menuItemId, stationId },
+        data: { tenantId, branchId, menuItemId, stationId, routeType: 'PREPARE' },
       });
 
       await tx.auditLog.create({
@@ -212,13 +212,13 @@ export class KitchenStationsService {
     const { tenantId, branchId, stationId, menuItemId, actorUserId } = params;
 
     const existing = await this.prisma.menuItemStation.findUnique({
-      where: { branchId_menuItemId_stationId: { branchId, menuItemId, stationId } },
+      where: { branchId_menuItemId_stationId_routeType: { branchId, menuItemId, stationId, routeType: 'PREPARE' } },
     });
     if (!existing) throw new NotFoundException('Assignment not found');
 
     await this.prisma.$transaction(async (tx) => {
       await tx.menuItemStation.delete({
-        where: { branchId_menuItemId_stationId: { branchId, menuItemId, stationId } },
+        where: { branchId_menuItemId_stationId_routeType: { branchId, menuItemId, stationId, routeType: 'PREPARE' } },
       });
 
       await tx.auditLog.create({

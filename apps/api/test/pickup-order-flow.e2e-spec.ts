@@ -165,7 +165,7 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
     stationId = station.id;
 
     await prisma.menuItemStation.create({
-      data: { tenantId, branchId, menuItemId: item.id, stationId },
+      data: { tenantId, branchId, menuItemId: item.id, stationId, routeType: 'PREPARE' },
     });
 
     await prisma.paymentInstruction.create({

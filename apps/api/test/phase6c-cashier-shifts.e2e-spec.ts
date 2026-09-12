@@ -136,7 +136,7 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
     await prisma.branchMenuItem.create({ data: { tenantId, branchId, menuItemId: item.id, isAvailable: true } });
 
     const station = await prisma.kitchenStation.create({ data: { tenantId, branchId, name: 'Grill', displayOrder: 0 } });
-    await prisma.menuItemStation.create({ data: { tenantId, branchId, menuItemId: item.id, stationId: station.id } });
+    await prisma.menuItemStation.create({ data: { tenantId, branchId, menuItemId: item.id, stationId: station.id, routeType: 'PREPARE' } });
 
     await prisma.$executeRaw`INSERT INTO "BranchOrderCounter" ("branchId", "lastNumber", "createdAt", "updatedAt") VALUES (${branchId}, 0, NOW(), NOW()) ON CONFLICT ("branchId") DO NOTHING`;
   });

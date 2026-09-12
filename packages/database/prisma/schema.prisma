@@ -25,6 +25,8 @@ model User {
   authSessions    AuthSession[]
   createdInvites  TenantMembership[] @relation("InvitedBy")
   auditLogs       AuditLog[]
+  waiterSessions  DiningSession[] @relation("DiningSessionWaiter")
+  waiterOrders    Order[] @relation("OrderWaiter")
 
   @@index([email])
   @@index([phoneE164])
@@ -345,7 +347,7 @@ model MenuItemStation {
   menuItem   MenuItem       @relation(fields: [menuItemId], references: [id])
   station    KitchenStation @relation(fields: [stationId], references: [id])
 
-  @@id([branchId, menuItemId, stationId])
+  @@id([branchId, menuItemId, stationId, routeType])
 }
 
 // ─── Tables ────────────────────────────────
@@ -412,19 +414,20 @@ model DiningSession {
   status                String    @default("OPEN")
   version               Int       @default(1)
   guestCount            Int?
-  assignedWaiterUserId  String?
-  assignedAt            DateTime?
-  assignedByUserId      String?
-  openedAt              DateTime  @default(now())
-  closedAt              DateTime?
-  openedByUserId        String?
-  clearedByUserId       String?
-  clearReason           String?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  assignedWaiterUserId String?
+  assignedAt           DateTime?
+  assignedByUserId     String?
+  openedAt             DateTime  @default(now())
+  closedAt             DateTime?
+  openedByUserId       String?
+  clearedByUserId      String?
+  clearReason          String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  table                 RestaurantTable @relation(fields: [tableId], references: [id])
-  orders                Order[]
+  table                RestaurantTable @relation(fields: [tableId], references: [id])
+  orders               Order[]
+  assignedWaiter       User?     @relation("DiningSessionWaiter", fields: [assignedWaiterUserId], references: [id])
 
   @@index([tenantId, branchId])
   @@index([tableId, status])
@@ -474,6 +477,7 @@ model Order {
   branch              Branch          @relation(fields: [branchId], references: [id])
   diningSession       DiningSession?  @relation(fields: [diningSessionId], references: [id])
   table               RestaurantTable? @relation(fields: [tableId], references: [id])
+  waiter              User?           @relation("OrderWaiter", fields: [assignedWaiterUserId], references: [id])
   lines               OrderLine[]
   statusHistory       OrderStatusHistory[]
   payments            Payment[]
@@ -692,7 +696,7 @@ model KitchenStation {
   displayOrder  Int       @default(0)
   isActive      Boolean   @default(true)
   isExpo        Boolean   @default(false)
-  defaultPrepMinutes Int?
+  defaultPrepMinutes Int?  // CHECK >= 0 via migration SQL
   collectionLabelOverride String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -702,6 +706,11 @@ model KitchenStation {
   tickets       KitchenTicket[]
   menuItemAssignments MenuItemStation[]
   kdsDeviceStations KdsDeviceStation[]
+
+  // NOTE: Partial unique index enforced via migration SQL:
+  // Only one station per branch may have isExpo = true.
+  // CREATE UNIQUE INDEX "KitchenStation_oneExpoPerBranch_idx"
+  //   ON "KitchenStation"("branchId") WHERE "isExpo" = true AND "isActive" = true;
 
   @@unique([branchId, code])
   @@index([tenantId, branchId])
@@ -738,6 +747,7 @@ model KitchenTicket {
   kitchen               Kitchen?       @relation(fields: [kitchenId], references: [id])
   lines                 KitchenTicketLine[]
   history               KitchenTicketHistory[]
+  serviceNotifications  ServiceNotification[]
 
   @@unique([tenantId, branchId, orderId, stationId])
   @@index([tenantId, branchId, stationId, status, createdAt])
@@ -752,11 +762,11 @@ model KitchenTicketLine {
   orderLineId       String
   routeType         String    @default("PREPARE") // PREPARE | ASSEMBLE
   isRequired        Boolean   @default(true)
-  quantity          Int
-  quantityPrepared  Int       @default(0)
-  quantityReady     Int       @default(0)
-  quantityCollected Int       @default(0)
-  quantityServed    Int       @default(0)
+  quantity              Int       // CHECK >= 0 via migration SQL
+  quantityPrepared      Int       @default(0) // CHECK >= 0
+  quantityReady         Int       @default(0) // CHECK >= 0
+  quantityCollected     Int       @default(0) // CHECK >= 0 AND <= quantity
+  quantityServed        Int       @default(0) // CHECK >= 0 AND <= quantity
   itemNameSnapshot  String?
   variantNameSnapshot String?
   notesSnapshot     String?
@@ -812,7 +822,7 @@ model KdsDevice {
   tenantId        String
   branchId        String
   name            String
-  deviceTokenHash String?
+  deviceTokenHash String?   @unique
   lastSeenAt      DateTime?
   isActive        Boolean   @default(true)
   createdByUserId String?
@@ -857,6 +867,7 @@ model ServiceNotification {
   resolvedAt              DateTime?
 
   order                   Order     @relation(fields: [orderId], references: [id])
+  ticket                  KitchenTicket? @relation(fields: [ticketId], references: [id])
 
   @@index([tenantId, branchId, assignedUserId, status])
   @@index([tenantId, branchId, orderId])
@@ -873,9 +884,9 @@ model BranchFulfillmentPolicy {
   expoMode                              String    @default("NONE") // NONE | OPTIONAL | REQUIRED
   allowWaiterSelfClaim                  Boolean   @default(false)
   showUnassignedReadyOrdersToWaiters    Boolean   @default(false)
-  readyReminderSeconds                  Int?
-  readyEscalationSeconds                Int?
-  autoCompleteKitchenTicketOnCollected  Boolean   @default(false)
+  readyReminderSeconds Int?     // CHECK >= 0 via migration SQL
+  readyEscalationSeconds Int?   // CHECK >= 0 via migration SQL
+  autoCompleteKitchenTicketOnCollected Boolean @default(false)
   createdAt                             DateTime  @default(now())
   updatedAt                             DateTime  @updatedAt
 
