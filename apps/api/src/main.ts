@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { validateEnv } from '@rms/config';
 import { AppThrottlerGuard } from './modules/rate-limit/app-throttler.guard';
+import { WsJwtAdapter } from './modules/kitchen/ws-jwt.adapter';
 
 async function bootstrap() {
   validateEnv(process.env);
@@ -106,6 +107,9 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document);
+
+  // Wire Socket.IO adapter for KDS WebSocket connections
+  app.useWebSocketAdapter(new WsJwtAdapter(app));
 
   // Graceful shutdown
   app.enableShutdownHooks();

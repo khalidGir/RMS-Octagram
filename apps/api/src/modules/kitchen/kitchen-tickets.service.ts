@@ -8,6 +8,8 @@ import { FeatureKey, FulfillmentStatus } from '@rms/contracts';
 import { KitchenRoutingService } from './kitchen-routing.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { FulfillmentStatusService } from './fulfillment-status.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { KdsGateway } from './kds.gateway';
 
 // ─── Ticket State Machine ──────────────────
 
@@ -30,6 +32,7 @@ export class KitchenTicketsService {
     @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
     @Inject(KitchenRoutingService) private readonly routingService: KitchenRoutingService,
     @Inject(FulfillmentStatusService) private readonly fulfillmentStatusService: FulfillmentStatusService,
+    @Inject(KdsGateway) private readonly kdsGateway: KdsGateway,
   ) {}
 
   // ─── Create Tickets for a Confirmed Order ──
@@ -161,7 +164,26 @@ export class KitchenTicketsService {
       return created;
     });
 
+    // Broadcast new tickets to KDS after transaction commit
+    for (const ticket of tickets) {
+      this.broadcastTicketCreated(ticket.branchId, this.serializeTicket(ticket));
+    }
+
     return { tickets: tickets.map((t) => this.serializeTicket(t)), idempotent: false };
+  }
+
+  // ─── Broadcast helpers ──────────────────────
+
+  private broadcastTicketCreated(branchId: string, ticket: any) {
+    try {
+      this.kdsGateway.broadcastTicketCreated(branchId, ticket);
+    } catch { /* gateway may not be connected */ }
+  }
+
+  private broadcastTicketUpdated(branchId: string, stationId: string, ticket: any) {
+    try {
+      this.kdsGateway.broadcastTicketUpdated(branchId, stationId, ticket);
+    } catch { /* gateway may not be connected */ }
   }
 
   // ─── List Tickets (Staff) ─────────────────
@@ -380,7 +402,9 @@ export class KitchenTicketsService {
       return latestTicket;
     });
 
-    return this.serializeTicket(result!);
+    const serialized = this.serializeTicket(result!);
+    this.broadcastTicketUpdated(result!.branchId, result!.stationId, serialized);
+    return serialized;
   }
 
   // ─── Recall Ticket (READY → IN_PROGRESS) ──
@@ -475,7 +499,9 @@ export class KitchenTicketsService {
       return latestTicket;
     });
 
-    return this.serializeTicket(result!);
+    const serialized = this.serializeTicket(result!);
+    this.broadcastTicketUpdated(result!.branchId, result!.stationId, serialized);
+    return serialized;
   }
 
   // ─── Complete Ticket (READY → COMPLETED) ──
@@ -621,7 +647,9 @@ export class KitchenTicketsService {
       return latestTicket;
     });
 
-    return this.serializeTicket(result!);
+    const serialized = this.serializeTicket(result!);
+    this.broadcastTicketUpdated(result!.branchId, result!.stationId, serialized);
+    return serialized;
   }
 
   // ─── Cancel Ticket ────────────────────────
@@ -699,7 +727,9 @@ export class KitchenTicketsService {
       return latestTicket;
     });
 
-    return this.serializeTicket(result!);
+    const serialized = this.serializeTicket(result!);
+    this.broadcastTicketUpdated(result!.branchId, result!.stationId, serialized);
+    return serialized;
   }
 
   // ─── Helpers ──────────────────────────────

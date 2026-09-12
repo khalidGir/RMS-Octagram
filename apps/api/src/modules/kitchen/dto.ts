@@ -262,3 +262,39 @@ export class UpsertFulfillmentPolicyDto {
   @IsBoolean()
   autoCompleteKitchenTicketOnCollected?: boolean;
 }
+
+// ─── KDS Device Management ─────────────
+
+export class RegisterKdsDeviceDto {
+  @ApiProperty({ description: 'Device display name', example: 'KDS Screen 1' })
+  @IsString()
+  @IsNotEmpty()
+  @Length(1, 100)
+  name!: string;
+}
+
+export class UpdateKdsDeviceDto {
+  @ApiPropertyOptional({ description: 'Device display name' })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  name?: string;
+
+  @ApiPropertyOptional({ description: 'Active status' })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class AssignStationToDeviceDto {
+  @ApiProperty({ description: 'Kitchen station ID to assign' })
+  @IsString()
+  @IsNotEmpty()
+  stationId!: string;
+
+  @ApiPropertyOptional({ description: 'Display order for this station on the device', default: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  displayOrder?: number;
+}

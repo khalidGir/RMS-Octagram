@@ -7,11 +7,13 @@ import { FulfillmentStatusService } from './fulfillment-status.service';
 import { KitchensService } from './kitchens.service';
 import { RoutesService } from './routes.service';
 import { FulfillmentPolicyService } from './fulfillment-policy.service';
+import { KdsDevicesService } from './kds-devices.service';
 import { KitchenStationsController } from './kitchen-stations.controller';
 import { KitchenTicketsController } from './kitchen-tickets.controller';
 import { KitchensController } from './kitchens.controller';
 import { RoutesController } from './routes.controller';
 import { FulfillmentPolicyController } from './fulfillment-policy.controller';
+import { KdsDevicesController } from './kds-devices.controller';
 import { KdsGateway } from './kds.gateway';
 import { FeaturesModule } from '../features/features.module';
 
@@ -23,6 +25,7 @@ import { FeaturesModule } from '../features/features.module';
     KitchensController,
     RoutesController,
     FulfillmentPolicyController,
+    KdsDevicesController,
   ],
   providers: [
     KitchenStationsService,
@@ -32,6 +35,7 @@ import { FeaturesModule } from '../features/features.module';
     KitchensService,
     RoutesService,
     FulfillmentPolicyService,
+    KdsDevicesService,
     KdsGateway,
   ],
   exports: [
@@ -42,6 +46,7 @@ import { FeaturesModule } from '../features/features.module';
     KitchensService,
     RoutesService,
     FulfillmentPolicyService,
+    KdsDevicesService,
     KdsGateway,
   ],
 })

@@ -60,6 +60,7 @@ describe('KitchenTicketsService', () => {
       } as any,
       { resolveOrderRoutes: vi.fn().mockResolvedValue([]), validateLineRoute: vi.fn() } as any,
       { deriveFulfillmentStatus: vi.fn(), applyFulfillmentStatus: vi.fn() } as any,
+      { broadcastTicketCreated: vi.fn(), broadcastTicketUpdated: vi.fn(), broadcastOrderConfirmed: vi.fn() } as any,
     );
   });
 
