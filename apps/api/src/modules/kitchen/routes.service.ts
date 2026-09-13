@@ -1,5 +1,6 @@
 import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { Prisma } from '@rms/database';
 
 @Injectable()
 export class RoutesService {
@@ -66,7 +67,7 @@ export class RoutesService {
       throw new ConflictException('routeType must be PREPARE or ASSEMBLE');
     }
 
-    // P0: Reject route-type/station-type mismatch at configuration time
+    // Reject route-type/station-type mismatch at configuration time
     if (station.isExpo && routeType !== 'ASSEMBLE') {
       throw new ConflictException({
         code: 'INVALID_ROUTE_STATION_ASSIGNMENT',
@@ -95,6 +96,7 @@ export class RoutesService {
       return { assigned: true, idempotent: true, route: this.serializeRoute(existing) };
     }
 
+    // Atomic: create route + assert required PREPARE exists, all inside one transaction
     const route = await this.prisma.$transaction(async (tx) => {
       const r = await tx.menuItemStation.create({
         data: {
@@ -128,11 +130,11 @@ export class RoutesService {
         },
       });
 
+      // Assert inside transaction so rollback undoes the write on failure
+      await this.assertRequiredPrepareRouteExistsTx(tx, tenantId, branchId, menuItemId);
+
       return r;
     });
-
-    // P0: After creation, verify at least one required PREPARE route exists for this menu item
-    await this.assertRequiredPrepareRouteExists(tenantId, branchId, menuItemId);
 
     return { assigned: true, idempotent: false, route: this.serializeRoute(route) };
   }
@@ -191,6 +193,9 @@ export class RoutesService {
       }
     }
 
+    // Validate proposed set has at least one required PREPARE route BEFORE writing
+    this.assertProposedRoutesHaveRequiredPrepare(routes, validStations);
+
     // Atomic replace: delete old routes, create new ones
     const result = await this.prisma.$transaction(async (tx) => {
       // Delete existing routes for this menu item
@@ -238,9 +243,6 @@ export class RoutesService {
       return created;
     });
 
-    // P0: After replacement, verify at least one required PREPARE route exists
-    await this.assertRequiredPrepareRouteExists(tenantId, branchId, menuItemId);
-
     return { replaced: true, routes: result.map((r) => this.serializeRoute(r)) };
   }
 
@@ -265,6 +267,11 @@ export class RoutesService {
       },
     });
     if (!existing) throw new NotFoundException('Route not found');
+
+    // Prevent deleting the last required PREPARE route — do BEFORE any writes
+    if (routeType === 'PREPARE' && existing.isRequired) {
+      await this.assertDeleteSafe(tenantId, branchId, menuItemId, stationId, routeType);
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.menuItemStation.delete({
@@ -295,15 +302,16 @@ export class RoutesService {
   }
 
   /**
-   * Assert that a menu item has at least one required PREPARE route on a normal station.
-   * Throws if not — prevents saving configurations that would block customer orders.
+   * Assert using the transaction client that at least one required PREPARE route
+   * exists for the menu item. Called inside $transaction so failure rolls back.
    */
-  private async assertRequiredPrepareRouteExists(
+  private async assertRequiredPrepareRouteExistsTx(
+    tx: Prisma.TransactionClient,
     tenantId: string,
     branchId: string,
     menuItemId: string,
   ): Promise<void> {
-    const requiredPrepare = await this.prisma.menuItemStation.findFirst({
+    const requiredPrepare = await tx.menuItemStation.findFirst({
       where: {
         tenantId,
         branchId,
@@ -318,6 +326,65 @@ export class RoutesService {
       throw new ConflictException({
         code: 'REQUIRED_PREPARE_ROUTE_MISSING',
         message: `Menu item must have at least one required PREPARE route on an active normal station`,
+      });
+    }
+  }
+
+  /**
+   * Validate the proposed route array (before any DB writes) contains at least
+   * one required PREPARE route on a normal station.
+   */
+  private assertProposedRoutesHaveRequiredPrepare(
+    routes: { stationId: string; routeType?: string; isRequired?: boolean }[],
+    stations: { id: string; name: string; isExpo: boolean }[],
+  ): void {
+    const stationMap = new Map(stations.map((s) => [s.id, s]));
+
+    const hasRequiredPrepare = routes.some((r) => {
+      const rt = r.routeType ?? 'PREPARE';
+      const station = stationMap.get(r.stationId);
+      const isRequired = r.isRequired ?? true;
+      return rt === 'PREPARE' && isRequired && station && !station.isExpo;
+    });
+
+    if (!hasRequiredPrepare) {
+      throw new ConflictException({
+        code: 'REQUIRED_PREPARE_ROUTE_MISSING',
+        message: `Menu item must have at least one required PREPARE route on an active normal station`,
+      });
+    }
+  }
+
+  /**
+   * Check that deleting this route leaves at least one required PREPARE route.
+   * Called before the delete transaction — safe because it only reads.
+   */
+  private async assertDeleteSafe(
+    tenantId: string,
+    branchId: string,
+    menuItemId: string,
+    excludeStationId: string,
+    excludeRouteType: string,
+  ): Promise<void> {
+    const remaining = await this.prisma.menuItemStation.findFirst({
+      where: {
+        tenantId,
+        branchId,
+        menuItemId,
+        routeType: 'PREPARE',
+        isRequired: true,
+        station: { isActive: true },
+        NOT: {
+          stationId: excludeStationId,
+          routeType: excludeRouteType,
+        },
+      },
+    });
+
+    if (!remaining) {
+      throw new ConflictException({
+        code: 'REQUIRED_PREPARE_ROUTE_MISSING',
+        message: `Cannot delete the last required PREPARE route for this menu item`,
       });
     }
   }
