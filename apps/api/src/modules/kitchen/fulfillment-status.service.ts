@@ -17,18 +17,20 @@ export class FulfillmentStatusService {
   /**
    * Derive the fulfillment status for an order based on its kitchen tickets.
    *
-   * Status derivation rules:
+   * Status derivation rules (with PREPARE/ASSEMBLE separation):
    * - NOT_ROUTED: no tickets exist for this order
    * - QUEUED: tickets exist but none are in progress or ready
-   * - PREPARING: at least one ticket is IN_PROGRESS, none are READY
-   * - PARTIALLY_READY: at least one READY, at least one still PREPARING
-   * - READY_FOR_SERVICE: all active tickets are READY or COMPLETED
+   * - PREPARING: at least one PREPARATION ticket is IN_PROGRESS, none are READY
+   * - PARTIALLY_READY: at least one PREPARATION ticket is READY, others still active
+   * - READY_FOR_EXPO: all active PREPARATION tickets are READY/COMPLETED, EXPO tickets not yet ready
+   * - READY_FOR_SERVICE: all active tickets (PREPARATION + EXPO) are READY/COMPLETED
    * - PARTIALLY_SERVED: some lines served, others still ready
    * - SERVED: all lines served
    * - CANCELLED: all tickets cancelled
    *
-   * The result is based on a snapshot of current ticket states and should
-   * be applied transactionally by the caller.
+   * PREPARATION tickets (normal stations) drive preparation readiness.
+   * EXPO tickets (expo stations) are assembly/collection and don't count
+   * as duplicated preparation quantities.
    */
   async deriveFulfillmentStatus(params: {
     tenantId: string;
@@ -41,28 +43,37 @@ export class FulfillmentStatusService {
 
     const tickets = await client.kitchenTicket.findMany({
       where: { orderId, tenantId, branchId },
-      select: { status: true, readyAt: true },
+      select: { status: true, readyAt: true, ticketType: true },
     });
 
     if (tickets.length === 0) {
       return { fulfillmentStatus: FulfillmentStatus.NOT_ROUTED, readyAt: null, servedAt: null };
     }
 
-    const statuses = tickets.map((t: { status: string; readyAt: Date | null }) => t.status);
-    const activeStatuses = statuses.filter((s: string) => s !== 'CANCELLED');
+    // Separate PREPARATION and EXPO tickets
+    const prepTickets = tickets.filter((t) => t.ticketType === 'PREPARATION');
+    const expoTickets = tickets.filter((t) => t.ticketType === 'EXPO');
 
     // All tickets cancelled
+    const allStatuses = tickets.map((t) => t.status);
+    const activeStatuses = allStatuses.filter((s) => s !== 'CANCELLED');
     if (activeStatuses.length === 0) {
       return { fulfillmentStatus: FulfillmentStatus.CANCELLED, readyAt: null, servedAt: null };
     }
 
-    const hasReady = activeStatuses.includes('READY');
-    const hasCompleted = activeStatuses.includes('COMPLETED');
-    const hasInProgress = activeStatuses.includes('IN_PROGRESS');
-    const hasQueued = activeStatuses.includes('QUEUED');
+    // Check PREPARATION ticket statuses
+    const prepActive = prepTickets.filter((t) => t.status !== 'CANCELLED');
+    const prepHasReady = prepActive.some((t) => t.status === 'READY');
+    const prepHasInProgress = prepActive.some((t) => t.status === 'IN_PROGRESS');
+    const prepHasQueued = prepActive.some((t) => t.status === 'QUEUED');
+    const prepAllDone = prepActive.every((t) => t.status === 'READY' || t.status === 'COMPLETED');
 
-    // All active tickets are READY or COMPLETED
-    if (!hasInProgress && !hasQueued && (hasReady || hasCompleted)) {
+    // Check EXPO ticket statuses
+    const expoActive = expoTickets.filter((t) => t.status !== 'CANCELLED');
+    const expoAllDone = expoActive.length === 0 || expoActive.every((t) => t.status === 'READY' || t.status === 'COMPLETED');
+
+    // READY_FOR_SERVICE: ALL active tickets (prep + expo) are READY or COMPLETED
+    if (prepAllDone && expoAllDone) {
       return {
         fulfillmentStatus: FulfillmentStatus.READY_FOR_SERVICE,
         readyAt: this.latestReadyAt(tickets),
@@ -70,8 +81,17 @@ export class FulfillmentStatusService {
       };
     }
 
-    // At least one READY but others still in progress
-    if (hasReady && (hasInProgress || hasQueued)) {
+    // READY_FOR_EXPO: all prep tickets READY/COMPLETED, but expo still pending
+    if (prepAllDone && expoActive.length > 0 && !expoAllDone) {
+      return {
+        fulfillmentStatus: FulfillmentStatus.READY_FOR_EXPO,
+        readyAt: this.latestReadyAt(prepTickets),
+        servedAt: null,
+      };
+    }
+
+    // PARTIALLY_READY: at least one prep READY, others still active
+    if (prepHasReady && (prepHasInProgress || prepHasQueued)) {
       return {
         fulfillmentStatus: FulfillmentStatus.PARTIALLY_READY,
         readyAt: null,
@@ -79,8 +99,8 @@ export class FulfillmentStatusService {
       };
     }
 
-    // At least one in progress, none ready yet
-    if (hasInProgress && !hasReady) {
+    // PREPARING: at least one prep IN_PROGRESS, none READY yet
+    if (prepHasInProgress && !prepHasReady) {
       return {
         fulfillmentStatus: FulfillmentStatus.PREPARING,
         readyAt: null,
@@ -88,8 +108,8 @@ export class FulfillmentStatusService {
       };
     }
 
-    // All active are queued
-    if (hasQueued && !hasReady && !hasInProgress) {
+    // QUEUED: all active are queued
+    if (prepHasQueued && !prepHasReady && !prepHasInProgress) {
       return {
         fulfillmentStatus: FulfillmentStatus.QUEUED,
         readyAt: null,
@@ -107,6 +127,7 @@ export class FulfillmentStatusService {
   /**
    * Compute fulfillment status from a set of ticket status strings.
    * Useful for testing and when ticket data is already available.
+   * This overload doesn't distinguish PREPARE/ASSEMBLE — use the instance method for that.
    */
   static computeFromStatuses(ticketStatuses: string[]): FulfillmentStatus {
     if (ticketStatuses.length === 0) return FulfillmentStatus.NOT_ROUTED;

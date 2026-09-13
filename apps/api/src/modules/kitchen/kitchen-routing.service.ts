@@ -41,9 +41,14 @@ export class KitchenRoutingService {
   /**
    * Resolve all order lines to their station routes.
    *
+   * Station type enforcement (P0):
+   * - Normal stations (isExpo=false): only PREPARE routes → ticket type PREPARATION
+   * - Expo stations (isExpo=true): only ASSEMBLE routes → ticket type EXPO
+   * - Mixed route types on the same station are rejected
+   *
    * For each order line:
-   * 1. Look up ALL active MenuItemStation assignments (PREPARE + ASSEMBLE)
-   * 2. If no active route exists and the line has a menuItemId, throw MENU_ITEM_ROUTE_MISSING
+   * 1. Look up all active MenuItemStation assignments
+   * 2. Validate route-type/station-type consistency
    * 3. Each route becomes a RoutedLine on its station group
    *
    * Returns station groups sorted by station displayOrder.
@@ -73,7 +78,7 @@ export class KitchenRoutingService {
     });
     if (!order) throw new BadRequestException('Order not found');
 
-    // Fetch all active stations for this branch (for snapshots)
+    // Fetch all active stations for this branch (for snapshots + isExpo check)
     const stations = await this.prisma.kitchenStation.findMany({
       where: { tenantId, branchId, isActive: true },
       include: { kitchen: { select: { id: true, name: true, collectionLabel: true } } },
@@ -88,10 +93,8 @@ export class KitchenRoutingService {
     // Track which orderLineIds have routes at each station
     const stationLineIds = new Map<string, Set<string>>();
 
-    // Track per-line routeType at each station: lineId -> stationId -> Set<routeType>
-    const lineRouteTypes = new Map<string, Map<string, Set<string>>>();
-
     // Track per-line isRequired at each station: lineId -> stationId -> isRequired
+    // Since each station now has exactly one route type, there's no overwrite concern.
     const lineIsRequired = new Map<string, Map<string, boolean>>();
 
     // Track lines that need routing validation
@@ -99,6 +102,9 @@ export class KitchenRoutingService {
 
     // Track lines that have no PREPARE route
     const noPrepareRouteLines: string[] = [];
+
+    // Track invalid route-type/station-type assignments
+    const invalidRouteAssignments: { menuItemId: string; stationId: string; routeType: string; isExpo: boolean }[] = [];
 
     for (const line of order.lines) {
       if (!line.menuItemId) continue;
@@ -118,7 +124,7 @@ export class KitchenRoutingService {
         continue;
       }
 
-      // P0-5: At least one active PREPARE route is required
+      // P0: At least one active PREPARE route is required (on a normal station)
       const hasPrepare = assignments.some((a) => a.routeType === 'PREPARE');
       if (!hasPrepare) {
         noPrepareRouteLines.push(line.id);
@@ -127,6 +133,26 @@ export class KitchenRoutingService {
       for (const assignment of assignments) {
         const station = stationMap.get(assignment.stationId);
         if (!station) continue;
+
+        // P0: Validate route-type/station-type consistency
+        if (station.isExpo && assignment.routeType !== 'ASSEMBLE') {
+          invalidRouteAssignments.push({
+            menuItemId: line.menuItemId,
+            stationId: station.id,
+            routeType: assignment.routeType,
+            isExpo: true,
+          });
+          continue;
+        }
+        if (!station.isExpo && assignment.routeType !== 'PREPARE') {
+          invalidRouteAssignments.push({
+            menuItemId: line.menuItemId,
+            stationId: station.id,
+            routeType: assignment.routeType,
+            isExpo: false,
+          });
+          continue;
+        }
 
         const snapshot: RouteSnapshot = {
           stationId: station.id,
@@ -147,18 +173,19 @@ export class KitchenRoutingService {
         lineIds.add(line.id);
         stationLineIds.set(assignment.stationId, lineIds);
 
-        // P0-6: Track per-line routeType (supports multiple routes per line/station)
-        const stationTypes = lineRouteTypes.get(line.id) ?? new Map<string, Set<string>>();
-        const types = stationTypes.get(assignment.stationId) ?? new Set<string>();
-        types.add(assignment.routeType);
-        stationTypes.set(assignment.stationId, types);
-        lineRouteTypes.set(line.id, stationTypes);
-
-        // Track isRequired per line/station
+        // Track isRequired per line/station (each station has one route type, no overwrite)
         const stationReq = lineIsRequired.get(line.id) ?? new Map<string, boolean>();
         stationReq.set(assignment.stationId, assignment.isRequired);
         lineIsRequired.set(line.id, stationReq);
       }
+    }
+
+    if (invalidRouteAssignments.length > 0) {
+      throw new BadRequestException({
+        code: 'INVALID_ROUTE_STATION_ASSIGNMENT',
+        message: `${invalidRouteAssignments.length} route assignment(s) violate station type: PREPARE requires normal station, ASSEMBLE requires expo station`,
+        details: invalidRouteAssignments,
+      });
     }
 
     if (unrouteableLines.length > 0) {
@@ -172,7 +199,7 @@ export class KitchenRoutingService {
     if (noPrepareRouteLines.length > 0) {
       throw new BadRequestException({
         code: KITCHEN_ROUTING_ERRORS.MENU_ITEM_ROUTE_MISSING,
-        message: `${noPrepareRouteLines.length} item(s) have no active PREPARE route (assembly-only items require at least one preparation station)`,
+        message: `${noPrepareRouteLines.length} item(s) have no active PREPARE route (every item requires at least one preparation station)`,
         orderLineIds: noPrepareRouteLines,
       });
     }
@@ -193,30 +220,26 @@ export class KitchenRoutingService {
         const lineIds = stationLineIds.get(stationId);
         if (!lineIds?.has(line.id)) continue;
 
-        // P0-6: Create a ticket line for each route type this line has at this station
-        const routeTypes = lineRouteTypes.get(line.id)?.get(stationId) ?? new Set(['PREPARE']);
+        // Each station has exactly one route type — one ticket line per order line per station
         const isRequired = lineIsRequired.get(line.id)?.get(stationId) ?? true;
 
-        for (const routeType of routeTypes) {
-          ticketLines.push({
-            orderLineId: line.id,
-            quantity: line.quantity,
-            routeType,
-            isRequired,
-            menuItemId: line.menuItemId,
-            itemNameSnapshot: line.itemNameSnapshot,
-            variantNameSnapshot: line.variantNameSnapshot,
-            notesSnapshot: line.notes,
-          });
-        }
+        ticketLines.push({
+          orderLineId: line.id,
+          quantity: line.quantity,
+          routeType: routes[0].routeType,
+          isRequired,
+          menuItemId: line.menuItemId,
+          itemNameSnapshot: line.itemNameSnapshot,
+          variantNameSnapshot: line.variantNameSnapshot,
+          notesSnapshot: line.notes,
+        });
       }
 
-      // P0-6: Only classify as EXPO if ALL routes on this station are ASSEMBLE
-      const allAssemble = routes.every((r) => r.routeType === 'ASSEMBLE');
-      const ticketType = allAssemble ? 'EXPO' : 'PREPARATION';
+      // P0: Ticket type determined by station type (enforced above: each station has one route type)
+      const ticketType = station.isExpo ? 'EXPO' : 'PREPARATION';
 
       // Use the kitchen's collection label as the default
-      const kitchen = stations.find((s: StationWithKitchen) => s.id === stationId)?.kitchen;
+      const kitchen = station.kitchen;
       const collectionLabelSnapshot = kitchen?.collectionLabel ?? null;
 
       groups.push({
@@ -264,6 +287,7 @@ export class KitchenRoutingService {
             name: true,
             code: true,
             kitchenId: true,
+            isExpo: true,
             kitchen: { select: { id: true, name: true, collectionLabel: true } },
           },
         },

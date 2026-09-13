@@ -32,7 +32,7 @@ describe('KitchenRoutingService', () => {
             { id: 'line-1', menuItemId: 'item-1', quantity: 2, itemNameSnapshot: null, variantNameSnapshot: null, notes: null },
           ],
         },
-        stations: [{ id: 'station-1', name: 'Grill', code: 'GRILL', kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main', collectionLabel: null }, isActive: true }],
+        stations: [{ id: 'station-1', name: 'Grill', code: 'GRILL', kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main', collectionLabel: null }, isActive: true, isExpo: false }],
         assignments: [],
       });
 
@@ -54,17 +54,11 @@ describe('KitchenRoutingService', () => {
           ],
         },
         stations: [
-          { id: 's-grill', name: 'Grill', code: 'GRILL', kitchenId: 'k-main', kitchen: { id: 'k-main', name: 'Main Kitchen', collectionLabel: 'Pass' }, isActive: true },
-          { id: 's-drinks', name: 'Drinks', code: 'DRINKS', kitchenId: 'k-bar', kitchen: { id: 'k-bar', name: 'Bar', collectionLabel: 'Bar counter' }, isActive: true },
-        ],
-        assignments: [
-          { stationId: 's-grill', menuItemId: 'item-1', routeType: 'PREPARE', isRequired: true, sortOrder: 0 },
-          { stationId: 's-drinks', menuItemId: 'item-2', routeType: 'PREPARE', isRequired: true, sortOrder: 0 },
+          { id: 's-grill', name: 'Grill', code: 'GRILL', kitchenId: 'k-main', kitchen: { id: 'k-main', name: 'Main Kitchen', collectionLabel: 'Pass' }, isActive: true, isExpo: false },
+          { id: 's-drinks', name: 'Drinks', code: 'DRINKS', kitchenId: 'k-bar', kitchen: { id: 'k-bar', name: 'Bar', collectionLabel: 'Bar counter' }, isActive: true, isExpo: false },
         ],
       });
 
-      // Prisma mock returns all assignments regardless of where clause —
-      // use mockResolvedValueOnce to return per-line results
       prisma.menuItemStation.findMany
         .mockResolvedValueOnce([{ stationId: 's-grill', menuItemId: 'item-1', routeType: 'PREPARE', isRequired: true, sortOrder: 0 }])
         .mockResolvedValueOnce([{ stationId: 's-drinks', menuItemId: 'item-2', routeType: 'PREPARE', isRequired: true, sortOrder: 0 }]);
@@ -94,10 +88,7 @@ describe('KitchenRoutingService', () => {
           ],
         },
         stations: [
-          { id: 's-1', name: 'Grill Station', code: 'GRILL', kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main Kitchen', collectionLabel: 'Pass window' }, isActive: true },
-        ],
-        assignments: [
-          { stationId: 's-1', menuItemId: 'item-1', routeType: 'PREPARE', isRequired: true, sortOrder: 0 },
+          { id: 's-1', name: 'Grill Station', code: 'GRILL', kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main Kitchen', collectionLabel: 'Pass window' }, isActive: true, isExpo: false },
         ],
       });
 
@@ -112,45 +103,102 @@ describe('KitchenRoutingService', () => {
       expect(groups[0].routes[0].kitchenName).toBe('Main Kitchen');
     });
 
-    it('supports PREPARE and ASSEMBLE routes on same item/station', async () => {
+    it('creates PREPARATION ticket on normal station and EXPO ticket on expo station', async () => {
       const prisma = mockPrisma({
         order: {
           id: 'order-1',
           branchId: 'branch-1',
           lines: [
-            { id: 'line-1', menuItemId: 'item-1', quantity: 3, itemNameSnapshot: null, variantNameSnapshot: null, notes: null },
+            { id: 'line-1', menuItemId: 'item-1', quantity: 3, itemNameSnapshot: 'Burger', variantNameSnapshot: null, notes: null },
           ],
         },
         stations: [
-          { id: 's-1', name: 'Kitchen', code: null, kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main', collectionLabel: null }, isActive: true },
-        ],
-        assignments: [
-          { stationId: 's-1', menuItemId: 'item-1', routeType: 'PREPARE', isRequired: true, sortOrder: 0 },
-          { stationId: 's-1', menuItemId: 'item-1', routeType: 'ASSEMBLE', isRequired: true, sortOrder: 1 },
+          { id: 's-grill', name: 'Grill', code: null, kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main', collectionLabel: null }, isActive: true, isExpo: false },
+          { id: 's-expo', name: 'Expo', code: null, kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main', collectionLabel: 'Pass' }, isActive: true, isExpo: true },
         ],
       });
 
-      prisma.menuItemStation.findMany.mockResolvedValueOnce([
-        { stationId: 's-1', menuItemId: 'item-1', routeType: 'PREPARE', isRequired: true, sortOrder: 0 },
-        { stationId: 's-1', menuItemId: 'item-1', routeType: 'ASSEMBLE', isRequired: true, sortOrder: 1 },
-      ]);
+      // Both stations have the same item — findMany returns both assignments per line
+      prisma.menuItemStation.findMany
+        .mockResolvedValueOnce([
+          { stationId: 's-grill', menuItemId: 'item-1', routeType: 'PREPARE', isRequired: true, sortOrder: 0 },
+          { stationId: 's-expo', menuItemId: 'item-1', routeType: 'ASSEMBLE', isRequired: true, sortOrder: 0 },
+        ]);
 
       service = new KitchenRoutingService(prisma);
       const groups = await service.resolveOrderRoutes({ tenantId: 't1', branchId: 'branch-1', orderId: 'order-1' });
 
-      // Both routes are on the same station — should produce one group with both routes
-      expect(groups).toHaveLength(1);
-      expect(groups[0].routes).toHaveLength(2);
-      expect(groups[0].routes.map((r) => r.routeType)).toContain('PREPARE');
-      expect(groups[0].routes.map((r) => r.routeType)).toContain('ASSEMBLE');
-      // ASSEMBLE route present but not all routes are ASSEMBLE → PREPARATION
+      expect(groups).toHaveLength(2);
+
+      // Grill station → PREPARATION ticket with PREPARE route
+      expect(groups[0].stationId).toBe('s-grill');
       expect(groups[0].ticketType).toBe('PREPARATION');
-      // One ticket line per route type per order line (PREPARE + ASSEMBLE = 2)
-      expect(groups[0].ticketLines).toHaveLength(2);
+      expect(groups[0].ticketLines).toHaveLength(1);
+      expect(groups[0].ticketLines[0].routeType).toBe('PREPARE');
       expect(groups[0].ticketLines[0].quantity).toBe(3);
-      expect(groups[0].ticketLines[1].quantity).toBe(3);
-      expect(groups[0].ticketLines.map((l) => l.routeType)).toContain('PREPARE');
-      expect(groups[0].ticketLines.map((l) => l.routeType)).toContain('ASSEMBLE');
+
+      // Expo station → EXPO ticket with ASSEMBLE route
+      expect(groups[1].stationId).toBe('s-expo');
+      expect(groups[1].ticketType).toBe('EXPO');
+      expect(groups[1].ticketLines).toHaveLength(1);
+      expect(groups[1].ticketLines[0].routeType).toBe('ASSEMBLE');
+      expect(groups[1].ticketLines[0].quantity).toBe(3);
+    });
+
+    it('rejects ASSEMBLE route on normal station', async () => {
+      const prisma = mockPrisma({
+        order: {
+          id: 'order-1',
+          branchId: 'branch-1',
+          lines: [
+            { id: 'line-1', menuItemId: 'item-1', quantity: 1, itemNameSnapshot: null, variantNameSnapshot: null, notes: null },
+          ],
+        },
+        stations: [
+          { id: 's-1', name: 'Grill', code: null, kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main', collectionLabel: null }, isActive: true, isExpo: false },
+        ],
+      });
+
+      // ASSEMBLE on a normal (non-expo) station is invalid
+      prisma.menuItemStation.findMany.mockResolvedValueOnce([
+        { stationId: 's-1', menuItemId: 'item-1', routeType: 'ASSEMBLE', isRequired: true, sortOrder: 0 },
+      ]);
+
+      service = new KitchenRoutingService(prisma);
+
+      await expect(
+        service.resolveOrderRoutes({ tenantId: 't1', branchId: 'branch-1', orderId: 'order-1' }),
+      ).rejects.toThrow(expect.objectContaining({
+        message: expect.stringContaining('route assignment(s) violate station type'),
+      }));
+    });
+
+    it('rejects PREPARE route on expo station', async () => {
+      const prisma = mockPrisma({
+        order: {
+          id: 'order-1',
+          branchId: 'branch-1',
+          lines: [
+            { id: 'line-1', menuItemId: 'item-1', quantity: 1, itemNameSnapshot: null, variantNameSnapshot: null, notes: null },
+          ],
+        },
+        stations: [
+          { id: 's-1', name: 'Expo', code: null, kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main', collectionLabel: null }, isActive: true, isExpo: true },
+        ],
+      });
+
+      // PREPARE on an expo station is invalid
+      prisma.menuItemStation.findMany.mockResolvedValueOnce([
+        { stationId: 's-1', menuItemId: 'item-1', routeType: 'PREPARE', isRequired: true, sortOrder: 0 },
+      ]);
+
+      service = new KitchenRoutingService(prisma);
+
+      await expect(
+        service.resolveOrderRoutes({ tenantId: 't1', branchId: 'branch-1', orderId: 'order-1' }),
+      ).rejects.toThrow(expect.objectContaining({
+        message: expect.stringContaining('route assignment(s) violate station type'),
+      }));
     });
 
     it('returns empty array when order has no lines with menuItemId', async () => {
@@ -190,7 +238,7 @@ describe('KitchenRoutingService', () => {
             routeType: 'PREPARE',
             isRequired: true,
             sortOrder: 0,
-            station: { id: 's-1', name: 'Grill', code: 'GRILL', kitchenId: 'k-1', kitchen: { id: 'k-1', name: 'Main', collectionLabel: null } },
+            station: { id: 's-1', name: 'Grill', code: 'GRILL', kitchenId: 'k-1', isExpo: false, kitchen: { id: 'k-1', name: 'Main', collectionLabel: null } },
           },
         ],
       });
