@@ -7,13 +7,26 @@ function mockPrisma(overrides: Record<string, any> = {}) {
     menuItemStation: {
       findMany: vi.fn().mockResolvedValue(hasKey('routes') ? overrides.routes : []),
       findUnique: vi.fn().mockResolvedValue(hasKey('existingRoute') ? overrides.existingRoute : null),
+      findFirst: vi.fn().mockResolvedValue(
+        hasKey('requiredPrepare')
+          ? overrides.requiredPrepare
+          : { id: 'route-req', menuItemId: 'mi-1', stationId: 's-1', routeType: 'PREPARE', isRequired: true },
+      ),
       create: vi.fn().mockResolvedValue(hasKey('createdRoute') ? overrides.createdRoute : {}),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       delete: vi.fn().mockResolvedValue({}),
     },
     kitchenStation: {
-      findFirst: vi.fn().mockResolvedValue(hasKey('validStation') ? overrides.validStation : { id: 's-1', name: 'Grill', isActive: true }),
-      findMany: vi.fn().mockResolvedValue(hasKey('validStations') ? overrides.validStations : [{ id: 's-1' }]),
+      findFirst: vi.fn().mockResolvedValue(
+        hasKey('validStation')
+          ? overrides.validStation
+          : { id: 's-1', name: 'Grill', code: 'GRILL', isActive: true, isExpo: false },
+      ),
+      findMany: vi.fn().mockResolvedValue(
+        hasKey('validStations')
+          ? overrides.validStations
+          : [{ id: 's-1', name: 'Grill', isExpo: false }],
+      ),
     },
     menuItem: {
       findFirst: vi.fn().mockResolvedValue(hasKey('validMenuItem') ? overrides.validMenuItem : { id: 'mi-1', name: 'Burger', isActive: true, deletedAt: null }),
@@ -128,6 +141,82 @@ describe('RoutesService', () => {
         service.createRoute({ tenantId: 't1', branchId: 'b1', menuItemId: 'mi-1', stationId: 's-1', routeType: 'INVALID', actorUserId: 'u1' }),
       ).rejects.toThrow('PREPARE or ASSEMBLE');
     });
+
+    it('rejects PREPARE route on expo station at config time', async () => {
+      const prisma = mockPrisma({
+        validStation: { id: 's-expo', name: 'Expo', code: 'EXPO', isActive: true, isExpo: true },
+      });
+      service = new RoutesService(prisma);
+
+      await expect(
+        service.createRoute({ tenantId: 't1', branchId: 'b1', menuItemId: 'mi-1', stationId: 's-expo', routeType: 'PREPARE', actorUserId: 'u1' }),
+      ).rejects.toThrow('only accepts ASSEMBLE routes');
+    });
+
+    it('rejects ASSEMBLE route on normal station at config time', async () => {
+      const prisma = mockPrisma({
+        validStation: { id: 's-1', name: 'Grill', code: 'GRILL', isActive: true, isExpo: false },
+      });
+      service = new RoutesService(prisma);
+
+      await expect(
+        service.createRoute({ tenantId: 't1', branchId: 'b1', menuItemId: 'mi-1', stationId: 's-1', routeType: 'ASSEMBLE', actorUserId: 'u1' }),
+      ).rejects.toThrow('only accepts PREPARE routes');
+    });
+
+    it('allows ASSEMBLE route on expo station', async () => {
+      const prisma = mockPrisma({
+        validStation: { id: 's-expo', name: 'Expo', code: 'EXPO', isActive: true, isExpo: true },
+      });
+      prisma.menuItemStation.findUnique.mockResolvedValue(null);
+      prisma.menuItemStation.create.mockResolvedValue({
+        menuItemId: 'mi-1', stationId: 's-expo', routeType: 'ASSEMBLE', isRequired: true, sortOrder: 0, createdAt: new Date(),
+        station: { id: 's-expo', name: 'Expo', code: 'EXPO', kitchenId: 'k-1', isExpo: true },
+        menuItem: { id: 'mi-1', name: 'Burger' },
+      });
+      service = new RoutesService(prisma);
+
+      const result = await service.createRoute({
+        tenantId: 't1', branchId: 'b1', menuItemId: 'mi-1', stationId: 's-expo', routeType: 'ASSEMBLE', actorUserId: 'u1',
+      });
+
+      expect(result.assigned).toBe(true);
+    });
+
+    it('allows PREPARE route on normal station (default)', async () => {
+      const prisma = mockPrisma();
+      prisma.menuItemStation.findUnique.mockResolvedValue(null);
+      prisma.menuItemStation.create.mockResolvedValue({
+        menuItemId: 'mi-1', stationId: 's-1', routeType: 'PREPARE', isRequired: true, sortOrder: 0, createdAt: new Date(),
+        station: { id: 's-1', name: 'Grill', code: 'GRILL', kitchenId: 'k-1', isExpo: false },
+        menuItem: { id: 'mi-1', name: 'Burger' },
+      });
+      service = new RoutesService(prisma);
+
+      const result = await service.createRoute({
+        tenantId: 't1', branchId: 'b1', menuItemId: 'mi-1', stationId: 's-1', actorUserId: 'u1',
+      });
+
+      expect(result.assigned).toBe(true);
+    });
+
+    it('rejects when no required PREPARE route exists after creation', async () => {
+      const prisma = mockPrisma({
+        validStation: { id: 's-expo', name: 'Expo', code: 'EXPO', isActive: true, isExpo: true },
+        requiredPrepare: null,
+      });
+      prisma.menuItemStation.findUnique.mockResolvedValue(null);
+      prisma.menuItemStation.create.mockResolvedValue({
+        menuItemId: 'mi-1', stationId: 's-expo', routeType: 'ASSEMBLE', isRequired: true, sortOrder: 0, createdAt: new Date(),
+        station: { id: 's-expo', name: 'Expo', code: 'EXPO', kitchenId: 'k-1', isExpo: true },
+        menuItem: { id: 'mi-1', name: 'Burger' },
+      });
+      service = new RoutesService(prisma);
+
+      await expect(
+        service.createRoute({ tenantId: 't1', branchId: 'b1', menuItemId: 'mi-1', stationId: 's-expo', routeType: 'ASSEMBLE', actorUserId: 'u1' }),
+      ).rejects.toThrow('at least one required PREPARE route');
+    });
   });
 
   describe('replaceRoutes', () => {
@@ -160,6 +249,58 @@ describe('RoutesService', () => {
       await expect(
         service.replaceRoutes({ tenantId: 't1', branchId: 'b1', menuItemId: 'missing', routes: [], actorUserId: 'u1' }),
       ).rejects.toThrow('not found');
+    });
+
+    it('rejects PREPARE on expo station during replace', async () => {
+      const prisma = mockPrisma({
+        validStations: [{ id: 's-expo', name: 'Expo', isExpo: true }],
+      });
+      service = new RoutesService(prisma);
+
+      await expect(
+        service.replaceRoutes({
+          tenantId: 't1', branchId: 'b1', menuItemId: 'mi-1',
+          routes: [{ stationId: 's-expo', routeType: 'PREPARE' }],
+          actorUserId: 'u1',
+        }),
+      ).rejects.toThrow('only accepts ASSEMBLE routes');
+    });
+
+    it('rejects ASSEMBLE on normal station during replace', async () => {
+      const prisma = mockPrisma({
+        validStations: [{ id: 's-1', name: 'Grill', isExpo: false }],
+      });
+      service = new RoutesService(prisma);
+
+      await expect(
+        service.replaceRoutes({
+          tenantId: 't1', branchId: 'b1', menuItemId: 'mi-1',
+          routes: [{ stationId: 's-1', routeType: 'ASSEMBLE' }],
+          actorUserId: 'u1',
+        }),
+      ).rejects.toThrow('only accepts PREPARE routes');
+    });
+
+    it('rejects when result leaves no required PREPARE route', async () => {
+      const prisma = mockPrisma({
+        validStations: [{ id: 's-expo', name: 'Expo', isExpo: true }],
+        requiredPrepare: null,
+      });
+      prisma.menuItemStation.deleteMany.mockResolvedValue({ count: 1 });
+      prisma.menuItemStation.create.mockResolvedValue({
+        menuItemId: 'mi-1', stationId: 's-expo', routeType: 'ASSEMBLE', isRequired: true, sortOrder: 0, createdAt: new Date(),
+        station: { id: 's-expo', name: 'Expo', code: 'EXPO', kitchenId: 'k-1', isExpo: true },
+        menuItem: { id: 'mi-1', name: 'Burger' },
+      });
+      service = new RoutesService(prisma);
+
+      await expect(
+        service.replaceRoutes({
+          tenantId: 't1', branchId: 'b1', menuItemId: 'mi-1',
+          routes: [{ stationId: 's-expo', routeType: 'ASSEMBLE' }],
+          actorUserId: 'u1',
+        }),
+      ).rejects.toThrow('at least one required PREPARE route');
     });
   });
 

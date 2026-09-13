@@ -7,6 +7,15 @@ function mockPrisma(overrides: Record<string, any> = {}) {
     kitchenTicket: {
       findMany: vi.fn().mockResolvedValue(overrides.tickets ?? []),
     },
+    kitchenTicketLine: {
+      findMany: vi.fn().mockResolvedValue(
+        overrides.ticketLines ??
+        // Default: all lines are required
+        (overrides.tickets ?? []).flatMap((t: any) => [
+          { ticketId: t.id, isRequired: true, status: t.status },
+        ]),
+      ),
+    },
     order: {
       findFirst: vi.fn().mockResolvedValue(overrides.order ?? null),
       update: vi.fn().mockResolvedValue({}),
@@ -86,8 +95,8 @@ describe('FulfillmentStatusService', () => {
     it('PARTIALLY_READY when one PREPARATION ticket READY, other PREPARATION still IN_PROGRESS', async () => {
       const prisma = mockPrisma({
         tickets: [
-          { status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
-          { status: 'IN_PROGRESS', readyAt: null, ticketType: 'PREPARATION' },
+          { id: 't1', status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
+          { id: 't2', status: 'IN_PROGRESS', readyAt: null, ticketType: 'PREPARATION' },
         ],
       });
       const service = new FulfillmentStatusService(prisma);
@@ -104,8 +113,8 @@ describe('FulfillmentStatusService', () => {
     it('READY_FOR_EXPO when all PREPARATION tickets READY but EXPO ticket still QUEUED', async () => {
       const prisma = mockPrisma({
         tickets: [
-          { status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
-          { status: 'QUEUED', readyAt: null, ticketType: 'EXPO' },
+          { id: 't1', status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
+          { id: 't2', status: 'QUEUED', readyAt: null, ticketType: 'EXPO' },
         ],
       });
       const service = new FulfillmentStatusService(prisma);
@@ -123,8 +132,8 @@ describe('FulfillmentStatusService', () => {
     it('READY_FOR_EXPO when all PREPARATION tickets COMPLETED but EXPO ticket IN_PROGRESS', async () => {
       const prisma = mockPrisma({
         tickets: [
-          { status: 'COMPLETED', readyAt: new Date(), ticketType: 'PREPARATION' },
-          { status: 'IN_PROGRESS', readyAt: null, ticketType: 'EXPO' },
+          { id: 't1', status: 'COMPLETED', readyAt: new Date(), ticketType: 'PREPARATION' },
+          { id: 't2', status: 'IN_PROGRESS', readyAt: null, ticketType: 'EXPO' },
         ],
       });
       const service = new FulfillmentStatusService(prisma);
@@ -141,8 +150,8 @@ describe('FulfillmentStatusService', () => {
     it('READY_FOR_SERVICE when all PREPARATION and EXPO tickets READY', async () => {
       const prisma = mockPrisma({
         tickets: [
-          { status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
-          { status: 'READY', readyAt: new Date(), ticketType: 'EXPO' },
+          { id: 't1', status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
+          { id: 't2', status: 'READY', readyAt: new Date(), ticketType: 'EXPO' },
         ],
       });
       const service = new FulfillmentStatusService(prisma);
@@ -159,7 +168,7 @@ describe('FulfillmentStatusService', () => {
     it('READY_FOR_SERVICE when PREPARATION READY and no EXPO tickets exist', async () => {
       const prisma = mockPrisma({
         tickets: [
-          { status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
+          { id: 't1', status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
         ],
       });
       const service = new FulfillmentStatusService(prisma);
@@ -176,8 +185,8 @@ describe('FulfillmentStatusService', () => {
     it('PREPARING when PREPARATION ticket IN_PROGRESS and EXPO ticket QUEUED', async () => {
       const prisma = mockPrisma({
         tickets: [
-          { status: 'IN_PROGRESS', readyAt: null, ticketType: 'PREPARATION' },
-          { status: 'QUEUED', readyAt: null, ticketType: 'EXPO' },
+          { id: 't1', status: 'IN_PROGRESS', readyAt: null, ticketType: 'PREPARATION' },
+          { id: 't2', status: 'QUEUED', readyAt: null, ticketType: 'EXPO' },
         ],
       });
       const service = new FulfillmentStatusService(prisma);
@@ -196,9 +205,9 @@ describe('FulfillmentStatusService', () => {
       const earlier = new Date(now.getTime() - 1000);
       const prisma = mockPrisma({
         tickets: [
-          { status: 'READY', readyAt: earlier, ticketType: 'PREPARATION' },
-          { status: 'READY', readyAt: now, ticketType: 'PREPARATION' },
-          { status: 'QUEUED', readyAt: null, ticketType: 'EXPO' },
+          { id: 't1', status: 'READY', readyAt: earlier, ticketType: 'PREPARATION' },
+          { id: 't2', status: 'READY', readyAt: now, ticketType: 'PREPARATION' },
+          { id: 't3', status: 'QUEUED', readyAt: null, ticketType: 'EXPO' },
         ],
       });
       const service = new FulfillmentStatusService(prisma);
@@ -212,6 +221,90 @@ describe('FulfillmentStatusService', () => {
       expect(result.fulfillmentStatus).toBe(FulfillmentStatus.READY_FOR_EXPO);
       expect(result.readyAt).toEqual(now);
     });
+
+    it('CANCELLED when all tickets cancelled (including expo)', async () => {
+      const prisma = mockPrisma({
+        tickets: [
+          { id: 't1', status: 'CANCELLED', readyAt: null, ticketType: 'PREPARATION' },
+          { id: 't2', status: 'CANCELLED', readyAt: null, ticketType: 'EXPO' },
+        ],
+      });
+      const service = new FulfillmentStatusService(prisma);
+
+      const result = await service.deriveFulfillmentStatus({
+        tenantId: 't1',
+        branchId: 'b1',
+        orderId: 'order-1',
+      });
+
+      expect(result.fulfillmentStatus).toBe(FulfillmentStatus.CANCELLED);
+    });
+
+    it('P0 FIX: cancelled prep tickets do NOT produce READY_FOR_EXPO', async () => {
+      const prisma = mockPrisma({
+        tickets: [
+          { id: 't1', status: 'CANCELLED', readyAt: null, ticketType: 'PREPARATION' },
+          { id: 't2', status: 'QUEUED', readyAt: null, ticketType: 'EXPO' },
+        ],
+      });
+      const service = new FulfillmentStatusService(prisma);
+
+      const result = await service.deriveFulfillmentStatus({
+        tenantId: 't1',
+        branchId: 'b1',
+        orderId: 'order-1',
+      });
+
+      // Should NOT be READY_FOR_EXPO — all prep tickets are cancelled, not ready
+      expect(result.fulfillmentStatus).not.toBe(FulfillmentStatus.READY_FOR_EXPO);
+      expect(result.fulfillmentStatus).not.toBe(FulfillmentStatus.READY_FOR_SERVICE);
+    });
+
+    it('optional prep tickets do not block readiness', async () => {
+      const prisma = mockPrisma({
+        tickets: [
+          { id: 't1', status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
+          { id: 't2', status: 'QUEUED', readyAt: null, ticketType: 'PREPARATION' },
+        ],
+        ticketLines: [
+          { ticketId: 't1', isRequired: true, status: 'READY' },
+          { ticketId: 't2', isRequired: false, status: 'QUEUED' },
+        ],
+      });
+      const service = new FulfillmentStatusService(prisma);
+
+      const result = await service.deriveFulfillmentStatus({
+        tenantId: 't1',
+        branchId: 'b1',
+        orderId: 'order-1',
+      });
+
+      // Only t1 is required and it's READY → prep is done → READY_FOR_SERVICE (no expo)
+      expect(result.fulfillmentStatus).toBe(FulfillmentStatus.READY_FOR_SERVICE);
+    });
+
+    it('optional expo ticket does not block readiness', async () => {
+      const prisma = mockPrisma({
+        tickets: [
+          { id: 't1', status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
+          { id: 't2', status: 'QUEUED', readyAt: null, ticketType: 'EXPO' },
+        ],
+        ticketLines: [
+          { ticketId: 't1', isRequired: true, status: 'READY' },
+          { ticketId: 't2', isRequired: false, status: 'QUEUED' },
+        ],
+      });
+      const service = new FulfillmentStatusService(prisma);
+
+      const result = await service.deriveFulfillmentStatus({
+        tenantId: 't1',
+        branchId: 'b1',
+        orderId: 'order-1',
+      });
+
+      // t1 required and READY, t2 optional → expo not blocking → READY_FOR_SERVICE
+      expect(result.fulfillmentStatus).toBe(FulfillmentStatus.READY_FOR_SERVICE);
+    });
   });
 
   describe('applyFulfillmentStatus', () => {
@@ -219,8 +312,8 @@ describe('FulfillmentStatusService', () => {
       const prisma = mockPrisma({
         order: { id: 'order-1', fulfillmentStatus: FulfillmentStatus.QUEUED },
         tickets: [
-          { status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
-          { status: 'READY', readyAt: new Date(), ticketType: 'EXPO' },
+          { id: 't1', status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
+          { id: 't2', status: 'READY', readyAt: new Date(), ticketType: 'EXPO' },
         ],
       });
       const service = new FulfillmentStatusService(prisma);
@@ -239,8 +332,8 @@ describe('FulfillmentStatusService', () => {
       const prisma = mockPrisma({
         order: { id: 'order-1', fulfillmentStatus: FulfillmentStatus.READY_FOR_SERVICE },
         tickets: [
-          { status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
-          { status: 'READY', readyAt: new Date(), ticketType: 'EXPO' },
+          { id: 't1', status: 'READY', readyAt: new Date(), ticketType: 'PREPARATION' },
+          { id: 't2', status: 'READY', readyAt: new Date(), ticketType: 'EXPO' },
         ],
       });
       const service = new FulfillmentStatusService(prisma);

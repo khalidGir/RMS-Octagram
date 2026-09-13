@@ -238,9 +238,8 @@ export class KitchenRoutingService {
       // P0: Ticket type determined by station type (enforced above: each station has one route type)
       const ticketType = station.isExpo ? 'EXPO' : 'PREPARATION';
 
-      // Use the kitchen's collection label as the default
-      const kitchen = station.kitchen;
-      const collectionLabelSnapshot = kitchen?.collectionLabel ?? null;
+      // Use station's collectionLabelOverride if set, else kitchen's collection label
+      const collectionLabelSnapshot = station.collectionLabelOverride ?? station.kitchen?.collectionLabel ?? null;
 
       groups.push({
         stationId,

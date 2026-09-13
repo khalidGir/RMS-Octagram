@@ -66,6 +66,20 @@ export class RoutesService {
       throw new ConflictException('routeType must be PREPARE or ASSEMBLE');
     }
 
+    // P0: Reject route-type/station-type mismatch at configuration time
+    if (station.isExpo && routeType !== 'ASSEMBLE') {
+      throw new ConflictException({
+        code: 'INVALID_ROUTE_STATION_ASSIGNMENT',
+        message: `Expo station "${station.name}" only accepts ASSEMBLE routes, got ${routeType}`,
+      });
+    }
+    if (!station.isExpo && routeType !== 'PREPARE') {
+      throw new ConflictException({
+        code: 'INVALID_ROUTE_STATION_ASSIGNMENT',
+        message: `Normal station "${station.name}" only accepts PREPARE routes, got ${routeType}`,
+      });
+    }
+
     // Check for duplicate
     const existing = await this.prisma.menuItemStation.findUnique({
       where: {
@@ -117,6 +131,9 @@ export class RoutesService {
       return r;
     });
 
+    // P0: After creation, verify at least one required PREPARE route exists for this menu item
+    await this.assertRequiredPrepareRouteExists(tenantId, branchId, menuItemId);
+
     return { assigned: true, idempotent: false, route: this.serializeRoute(route) };
   }
 
@@ -140,14 +157,38 @@ export class RoutesService {
     });
     if (!menuItem) throw new NotFoundException('Menu item not found');
 
-    // Validate all stations
+    // Validate all stations and check route-type/station-type consistency
     const stationIds = routes.map((r) => r.stationId);
     const validStations = await this.prisma.kitchenStation.findMany({
       where: { id: { in: stationIds }, tenantId, branchId, isActive: true },
-      select: { id: true },
+      select: { id: true, name: true, isExpo: true },
     });
     if (validStations.length !== stationIds.length) {
       throw new NotFoundException('One or more stations not found or inactive');
+    }
+
+    const stationMap = new Map(validStations.map((s) => [s.id, s]));
+
+    // Validate each route's type against its station
+    for (const route of routes) {
+      const rt = route.routeType ?? 'PREPARE';
+      const station = stationMap.get(route.stationId)!;
+
+      if (rt !== 'PREPARE' && rt !== 'ASSEMBLE') {
+        throw new ConflictException('routeType must be PREPARE or ASSEMBLE');
+      }
+      if (station.isExpo && rt !== 'ASSEMBLE') {
+        throw new ConflictException({
+          code: 'INVALID_ROUTE_STATION_ASSIGNMENT',
+          message: `Expo station "${station.name}" only accepts ASSEMBLE routes, got ${rt}`,
+        });
+      }
+      if (!station.isExpo && rt !== 'PREPARE') {
+        throw new ConflictException({
+          code: 'INVALID_ROUTE_STATION_ASSIGNMENT',
+          message: `Normal station "${station.name}" only accepts PREPARE routes, got ${rt}`,
+        });
+      }
     }
 
     // Atomic replace: delete old routes, create new ones
@@ -196,6 +237,9 @@ export class RoutesService {
 
       return created;
     });
+
+    // P0: After replacement, verify at least one required PREPARE route exists
+    await this.assertRequiredPrepareRouteExists(tenantId, branchId, menuItemId);
 
     return { replaced: true, routes: result.map((r) => this.serializeRoute(r)) };
   }
@@ -248,6 +292,34 @@ export class RoutesService {
     });
 
     return { deleted: true };
+  }
+
+  /**
+   * Assert that a menu item has at least one required PREPARE route on a normal station.
+   * Throws if not — prevents saving configurations that would block customer orders.
+   */
+  private async assertRequiredPrepareRouteExists(
+    tenantId: string,
+    branchId: string,
+    menuItemId: string,
+  ): Promise<void> {
+    const requiredPrepare = await this.prisma.menuItemStation.findFirst({
+      where: {
+        tenantId,
+        branchId,
+        menuItemId,
+        routeType: 'PREPARE',
+        isRequired: true,
+        station: { isActive: true },
+      },
+    });
+
+    if (!requiredPrepare) {
+      throw new ConflictException({
+        code: 'REQUIRED_PREPARE_ROUTE_MISSING',
+        message: `Menu item must have at least one required PREPARE route on an active normal station`,
+      });
+    }
   }
 
   private serializeRoute(route: any) {
