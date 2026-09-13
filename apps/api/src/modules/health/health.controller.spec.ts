@@ -4,6 +4,16 @@ import { HealthController } from './health.controller';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ConfigService } from '@nestjs/config';
 
+// Mock ioredis to prevent actual Redis connections during tests
+vi.mock('ioredis', () => {
+  const MockRedis = vi.fn().mockImplementation(() => ({
+    connect: vi.fn().mockResolvedValue(undefined),
+    ping: vi.fn().mockResolvedValue('PONG'),
+    quit: vi.fn().mockResolvedValue(undefined),
+  }));
+  return { default: MockRedis };
+});
+
 describe('HealthController', () => {
   let controller: HealthController;
   let prisma: PrismaService;

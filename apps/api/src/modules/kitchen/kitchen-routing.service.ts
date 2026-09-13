@@ -18,6 +18,7 @@ export interface RoutedLine {
   orderLineId: string;
   quantity: number;
   routeType: string;
+  isRequired: boolean;
   menuItemId: string | null;
   itemNameSnapshot: string | null;
   variantNameSnapshot: string | null;
@@ -74,7 +75,7 @@ export class KitchenRoutingService {
 
     // Fetch all active stations for this branch (for snapshots)
     const stations = await this.prisma.kitchenStation.findMany({
-      where: { branchId, isActive: true },
+      where: { tenantId, branchId, isActive: true },
       include: { kitchen: { select: { id: true, name: true, collectionLabel: true } } },
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
     });
@@ -87,17 +88,27 @@ export class KitchenRoutingService {
     // Track which orderLineIds have routes at each station
     const stationLineIds = new Map<string, Set<string>>();
 
+    // Track per-line routeType at each station: lineId -> stationId -> Set<routeType>
+    const lineRouteTypes = new Map<string, Map<string, Set<string>>>();
+
+    // Track per-line isRequired at each station: lineId -> stationId -> isRequired
+    const lineIsRequired = new Map<string, Map<string, boolean>>();
+
     // Track lines that need routing validation
     const unrouteableLines: string[] = [];
+
+    // Track lines that have no PREPARE route
+    const noPrepareRouteLines: string[] = [];
 
     for (const line of order.lines) {
       if (!line.menuItemId) continue;
 
       const assignments = await this.prisma.menuItemStation.findMany({
         where: {
+          tenantId,
           branchId,
           menuItemId: line.menuItemId,
-          station: { isActive: true },
+          station: { isActive: true, kitchen: { isActive: true } },
         },
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       });
@@ -105,6 +116,12 @@ export class KitchenRoutingService {
       if (assignments.length === 0) {
         unrouteableLines.push(line.id);
         continue;
+      }
+
+      // P0-5: At least one active PREPARE route is required
+      const hasPrepare = assignments.some((a) => a.routeType === 'PREPARE');
+      if (!hasPrepare) {
+        noPrepareRouteLines.push(line.id);
       }
 
       for (const assignment of assignments) {
@@ -129,6 +146,18 @@ export class KitchenRoutingService {
         const lineIds = stationLineIds.get(assignment.stationId) ?? new Set();
         lineIds.add(line.id);
         stationLineIds.set(assignment.stationId, lineIds);
+
+        // P0-6: Track per-line routeType (supports multiple routes per line/station)
+        const stationTypes = lineRouteTypes.get(line.id) ?? new Map<string, Set<string>>();
+        const types = stationTypes.get(assignment.stationId) ?? new Set<string>();
+        types.add(assignment.routeType);
+        stationTypes.set(assignment.stationId, types);
+        lineRouteTypes.set(line.id, stationTypes);
+
+        // Track isRequired per line/station
+        const stationReq = lineIsRequired.get(line.id) ?? new Map<string, boolean>();
+        stationReq.set(assignment.stationId, assignment.isRequired);
+        lineIsRequired.set(line.id, stationReq);
       }
     }
 
@@ -137,6 +166,14 @@ export class KitchenRoutingService {
         code: KITCHEN_ROUTING_ERRORS.MENU_ITEM_ROUTE_MISSING,
         message: `${unrouteableLines.length} item(s) have no active kitchen route`,
         orderLineIds: unrouteableLines,
+      });
+    }
+
+    if (noPrepareRouteLines.length > 0) {
+      throw new BadRequestException({
+        code: KITCHEN_ROUTING_ERRORS.MENU_ITEM_ROUTE_MISSING,
+        message: `${noPrepareRouteLines.length} item(s) have no active PREPARE route (assembly-only items require at least one preparation station)`,
+        orderLineIds: noPrepareRouteLines,
       });
     }
 
@@ -156,26 +193,27 @@ export class KitchenRoutingService {
         const lineIds = stationLineIds.get(stationId);
         if (!lineIds?.has(line.id)) continue;
 
-        // Each routed line carries the full quantity — the ticket represents
-        // this line's presence at this station. For multi-route items (e.g.,
-        // PREPARE + ASSEMBLE on the same station), only one ticket line is
-        // created per order line per station.
-        const routeType = routes[0]?.routeType ?? 'PREPARE';
-        ticketLines.push({
-          orderLineId: line.id,
-          quantity: line.quantity,
-          routeType,
-          menuItemId: line.menuItemId,
-          itemNameSnapshot: line.itemNameSnapshot,
-          variantNameSnapshot: line.variantNameSnapshot,
-          notesSnapshot: line.notes,
-        });
+        // P0-6: Create a ticket line for each route type this line has at this station
+        const routeTypes = lineRouteTypes.get(line.id)?.get(stationId) ?? new Set(['PREPARE']);
+        const isRequired = lineIsRequired.get(line.id)?.get(stationId) ?? true;
+
+        for (const routeType of routeTypes) {
+          ticketLines.push({
+            orderLineId: line.id,
+            quantity: line.quantity,
+            routeType,
+            isRequired,
+            menuItemId: line.menuItemId,
+            itemNameSnapshot: line.itemNameSnapshot,
+            variantNameSnapshot: line.variantNameSnapshot,
+            notesSnapshot: line.notes,
+          });
+        }
       }
 
-      // Determine ticket type: if any route on this station is ASSEMBLE,
-      // this station is doing assembly work
-      const hasAssemble = routes.some((r) => r.routeType === 'ASSEMBLE');
-      const ticketType = hasAssemble ? 'EXPO' : 'PREPARATION';
+      // P0-6: Only classify as EXPO if ALL routes on this station are ASSEMBLE
+      const allAssemble = routes.every((r) => r.routeType === 'ASSEMBLE');
+      const ticketType = allAssemble ? 'EXPO' : 'PREPARATION';
 
       // Use the kitchen's collection label as the default
       const kitchen = stations.find((s: StationWithKitchen) => s.id === stationId)?.kitchen;
@@ -210,13 +248,14 @@ export class KitchenRoutingService {
     branchId: string;
     menuItemId: string;
   }): Promise<RouteSnapshot[]> {
-    const { branchId, menuItemId } = params;
+    const { tenantId, branchId, menuItemId } = params;
 
     const assignments = await this.prisma.menuItemStation.findMany({
       where: {
+        tenantId,
         branchId,
         menuItemId,
-        station: { isActive: true },
+        station: { isActive: true, kitchen: { isActive: true } },
       },
       include: {
         station: {

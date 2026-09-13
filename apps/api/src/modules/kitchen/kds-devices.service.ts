@@ -8,8 +8,8 @@ export class KdsDevicesService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
 
-  async listDevices(params: { tenantId: string; branchId: string }) {
-    const { tenantId, branchId } = params;
+  async listDevices(params: { tenantId: string; branchId: string; userRole?: string }) {
+    const { tenantId, branchId, userRole } = params;
 
     const devices = await this.prisma.kdsDevice.findMany({
       where: { tenantId, branchId, isActive: true },
@@ -22,12 +22,14 @@ export class KdsDevicesService {
       },
     });
 
+    const isAdmin = userRole === 'OWNER' || userRole === 'MANAGER';
+
     return devices.map((d) => ({
       id: d.id,
       name: d.name,
       isActive: d.isActive,
       lastSeenAt: d.lastSeenAt,
-      createdByUserId: d.createdByUserId,
+      ...(isAdmin ? { createdByUserId: d.createdByUserId } : {}),
       createdAt: d.createdAt,
       stationAssignments: d.stations.map((s) => ({
         stationId: s.stationId,
@@ -185,8 +187,8 @@ export class KdsDevicesService {
     });
     if (!station) throw new NotFoundException('Kitchen station not found or inactive');
 
-    const existing = await this.prisma.kdsDeviceStation.findUnique({
-      where: { deviceId_stationId: { deviceId, stationId } },
+    const existing = await this.prisma.kdsDeviceStation.findFirst({
+      where: { deviceId, stationId, tenantId, branchId },
     });
     if (existing) {
       return { assigned: true, idempotent: true };
@@ -228,8 +230,8 @@ export class KdsDevicesService {
   }) {
     const { tenantId, branchId, deviceId, stationId, actorUserId } = params;
 
-    const existing = await this.prisma.kdsDeviceStation.findUnique({
-      where: { deviceId_stationId: { deviceId, stationId } },
+    const existing = await this.prisma.kdsDeviceStation.findFirst({
+      where: { deviceId, stationId, tenantId, branchId },
     });
     if (!existing) throw new NotFoundException('Station assignment not found');
 
@@ -254,10 +256,55 @@ export class KdsDevicesService {
     return { removed: true };
   }
 
-  async updateHeartbeat(params: { deviceId: string }) {
+  async updateHeartbeat(params: { tenantId: string; branchId: string; deviceId: string }) {
+    const { tenantId, branchId, deviceId } = params;
+
+    const device = await this.prisma.kdsDevice.findFirst({
+      where: { id: deviceId, tenantId, branchId, isActive: true },
+    });
+    if (!device) throw new NotFoundException('KDS device not found or inactive');
+
     await this.prisma.kdsDevice.update({
-      where: { id: params.deviceId },
+      where: { id: deviceId },
       data: { lastSeenAt: new Date() },
     });
+  }
+
+  async rotateToken(params: {
+    tenantId: string;
+    branchId: string;
+    deviceId: string;
+    actorUserId: string;
+  }) {
+    const { tenantId, branchId, deviceId, actorUserId } = params;
+
+    const existing = await this.prisma.kdsDevice.findFirst({
+      where: { id: deviceId, tenantId, branchId },
+    });
+    if (!existing) throw new NotFoundException('KDS device not found');
+
+    const deviceToken = randomBytes(32).toString('hex');
+    const deviceTokenHash = createHash('sha256').update(deviceToken).digest('hex');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.kdsDevice.update({
+        where: { id: deviceId },
+        data: { deviceTokenHash },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId,
+          branchId,
+          action: 'KDS_DEVICE_TOKEN_ROTATE',
+          entityType: 'KdsDevice',
+          entityId: deviceId,
+          beforeJson: { deviceTokenHash: existing.deviceTokenHash },
+        },
+      });
+    });
+
+    return { deviceToken };
   }
 }

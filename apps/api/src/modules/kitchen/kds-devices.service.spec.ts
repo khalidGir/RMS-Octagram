@@ -15,6 +15,7 @@ function mockPrisma(overrides: Record<string, any> = {}) {
     },
     kdsDeviceStation: {
       findUnique: vi.fn().mockResolvedValue(hasKey('existingAssignment') ? overrides.existingAssignment : null),
+      findFirst: vi.fn().mockResolvedValue(hasKey('existingAssignment') ? overrides.existingAssignment : null),
       create: vi.fn().mockResolvedValue({}),
       delete: vi.fn().mockResolvedValue({}),
     },

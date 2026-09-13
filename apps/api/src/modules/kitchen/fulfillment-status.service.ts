@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PrismaService } from '../prisma/prisma.service';
 import { FulfillmentStatus } from '@rms/contracts';
+import type { Prisma } from '@rms/database';
 
 export interface FulfillmentStatusResult {
   fulfillmentStatus: FulfillmentStatus;
@@ -33,11 +34,13 @@ export class FulfillmentStatusService {
     tenantId: string;
     branchId: string;
     orderId: string;
+    tx?: Prisma.TransactionClient;
   }): Promise<FulfillmentStatusResult> {
-    const { orderId } = params;
+    const { tenantId, branchId, orderId, tx } = params;
+    const client = tx ?? this.prisma;
 
-    const tickets = await this.prisma.kitchenTicket.findMany({
-      where: { orderId },
+    const tickets = await client.kitchenTicket.findMany({
+      where: { orderId, tenantId, branchId },
       select: { status: true, readyAt: true },
     });
 
@@ -152,7 +155,7 @@ export class FulfillmentStatusService {
       return { updated: false, status: derived.fulfillmentStatus };
     }
 
-    await this.prisma.$transaction(async (tx: any) => {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.order.update({
         where: { id: orderId },
         data: { fulfillmentStatus: derived.fulfillmentStatus },

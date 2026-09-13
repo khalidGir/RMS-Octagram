@@ -105,7 +105,7 @@ export class KitchenTicketsService {
               ticketId: ticket.id,
               orderLineId: tl.orderLineId,
               routeType: tl.routeType,
-              isRequired: true,
+              isRequired: tl.isRequired,
               quantity: tl.quantity,
               itemNameSnapshot: tl.itemNameSnapshot,
               variantNameSnapshot: tl.variantNameSnapshot,
@@ -355,6 +355,32 @@ export class KitchenTicketsService {
         throw new ConflictException('Version conflict');
       }
 
+      // Update ticket-line states to match new ticket status
+      if (nextStatus === 'IN_PROGRESS') {
+        const lines = await tx.kitchenTicketLine.findMany({
+          where: { ticketId, status: 'QUEUED' },
+          select: { id: true, quantity: true },
+        });
+        for (const line of lines) {
+          await tx.kitchenTicketLine.updateMany({
+            where: { id: line.id },
+            data: { status: 'IN_PROGRESS', quantityPrepared: line.quantity },
+          });
+        }
+      } else if (nextStatus === 'READY') {
+        const now = new Date();
+        const lines = await tx.kitchenTicketLine.findMany({
+          where: { ticketId, status: { notIn: ['CANCELLED'] } },
+          select: { id: true, quantity: true },
+        });
+        for (const line of lines) {
+          await tx.kitchenTicketLine.updateMany({
+            where: { id: line.id },
+            data: { status: 'READY', readyAt: now, quantityReady: line.quantity },
+          });
+        }
+      }
+
       const latestTicket = await tx.kitchenTicket.findUnique({ where: { id: ticketId } });
 
       await tx.kitchenTicketHistory.create({
@@ -398,6 +424,48 @@ export class KitchenTicketsService {
           },
         },
       });
+
+      // Recompute order fulfillment after ticket progression
+      const orderBefore = await tx.order.findFirst({
+        where: { id: ticket.orderId },
+        select: { fulfillmentStatus: true },
+      });
+      const fulfillment = await this.fulfillmentStatusService.deriveFulfillmentStatus({
+        tenantId,
+        branchId,
+        orderId: ticket.orderId,
+        tx,
+      });
+
+      const prevStatus = orderBefore?.fulfillmentStatus ?? null;
+      if (prevStatus !== fulfillment.fulfillmentStatus) {
+        await tx.order.updateMany({
+          where: { id: ticket.orderId },
+          data: {
+            fulfillmentStatus: fulfillment.fulfillmentStatus,
+            ...(fulfillment.fulfillmentStatus !== FulfillmentStatus.READY_FOR_SERVICE
+              ? { readyForServiceAt: null }
+              : fulfillment.readyAt
+                ? { readyForServiceAt: fulfillment.readyAt }
+                : {}),
+          },
+        });
+
+        await tx.outboxEvent.create({
+          data: {
+            tenantId,
+            branchId,
+            aggregateType: 'Order',
+            aggregateId: ticket.orderId,
+            eventType: 'order.fulfillment.status_changed',
+            payload: {
+              orderId: ticket.orderId,
+              fromStatus: prevStatus,
+              toStatus: fulfillment.fulfillmentStatus,
+            },
+          },
+        });
+      }
 
       return latestTicket;
     });
@@ -453,6 +521,12 @@ export class KitchenTicketsService {
         throw new ConflictException('Version conflict');
       }
 
+      // Recall: revert ticket-line states from READY back to IN_PROGRESS
+      await tx.kitchenTicketLine.updateMany({
+        where: { ticketId, status: 'READY' },
+        data: { status: 'IN_PROGRESS', readyAt: null, quantityReady: 0 },
+      });
+
       const latestTicket = await tx.kitchenTicket.findUnique({ where: { id: ticketId } });
 
       await tx.kitchenTicketHistory.create({
@@ -495,6 +569,46 @@ export class KitchenTicketsService {
           },
         },
       });
+
+      // Recompute order fulfillment after recall (READY → IN_PROGRESS)
+      const orderBefore = await tx.order.findFirst({
+        where: { id: ticket.orderId },
+        select: { fulfillmentStatus: true },
+      });
+      const fulfillment = await this.fulfillmentStatusService.deriveFulfillmentStatus({
+        tenantId,
+        branchId,
+        orderId: ticket.orderId,
+        tx,
+      });
+
+      const prevStatus = orderBefore?.fulfillmentStatus ?? null;
+      if (prevStatus !== fulfillment.fulfillmentStatus) {
+        await tx.order.updateMany({
+          where: { id: ticket.orderId },
+          data: {
+            fulfillmentStatus: fulfillment.fulfillmentStatus,
+            ...(fulfillment.fulfillmentStatus !== FulfillmentStatus.READY_FOR_SERVICE
+              ? { readyForServiceAt: null }
+              : {}),
+          },
+        });
+
+        await tx.outboxEvent.create({
+          data: {
+            tenantId,
+            branchId,
+            aggregateType: 'Order',
+            aggregateId: ticket.orderId,
+            eventType: 'order.fulfillment.status_changed',
+            payload: {
+              orderId: ticket.orderId,
+              fromStatus: prevStatus,
+              toStatus: fulfillment.fulfillmentStatus,
+            },
+          },
+        });
+      }
 
       return latestTicket;
     });
@@ -590,42 +704,29 @@ export class KitchenTicketsService {
         },
       });
 
-      // Check if all tickets for this order are completed
-      const pendingCount = await tx.kitchenTicket.count({
-        where: {
-          orderId: ticket.orderId,
-          status: { notIn: ['COMPLETED', 'CANCELLED'] },
-        },
+      // Always recompute fulfillment (not only when all tickets are done)
+      const orderBefore = await tx.order.findFirst({
+        where: { id: ticket.orderId },
+        select: { fulfillmentStatus: true },
+      });
+      const fulfillment = await this.fulfillmentStatusService.deriveFulfillmentStatus({
+        tenantId,
+        branchId,
+        orderId: ticket.orderId,
+        tx,
       });
 
-      if (pendingCount === 0) {
-        // All tickets done → derive and apply fulfillment status
-        const fulfillment = await this.fulfillmentStatusService.deriveFulfillmentStatus({
-          tenantId,
-          branchId,
-          orderId: ticket.orderId,
-        });
-
+      const prevStatus = orderBefore?.fulfillmentStatus ?? null;
+      if (prevStatus !== fulfillment.fulfillmentStatus) {
         await tx.order.updateMany({
           where: { id: ticket.orderId },
-          data: { fulfillmentStatus: fulfillment.fulfillmentStatus },
-        });
-
-        if (fulfillment.fulfillmentStatus === FulfillmentStatus.READY_FOR_SERVICE && fulfillment.readyAt) {
-          await tx.order.updateMany({
-            where: { id: ticket.orderId },
-            data: { readyForServiceAt: fulfillment.readyAt },
-          });
-        }
-
-        await tx.orderStatusHistory.create({
           data: {
-            tenantId,
-            branchId,
-            orderId: ticket.orderId,
-            fromStatus: 'IN_PROGRESS',
-            toStatus: fulfillment.fulfillmentStatus,
-            actorUserId,
+            fulfillmentStatus: fulfillment.fulfillmentStatus,
+            ...(fulfillment.fulfillmentStatus !== FulfillmentStatus.READY_FOR_SERVICE
+              ? { readyForServiceAt: null }
+              : fulfillment.readyAt
+                ? { readyForServiceAt: fulfillment.readyAt }
+                : {}),
           },
         });
 
@@ -638,6 +739,7 @@ export class KitchenTicketsService {
             eventType: 'order.fulfillment.status_changed',
             payload: {
               orderId: ticket.orderId,
+              fromStatus: prevStatus,
               toStatus: fulfillment.fulfillmentStatus,
             },
           },
@@ -697,6 +799,13 @@ export class KitchenTicketsService {
         throw new ConflictException('Version conflict');
       }
 
+      // Cancel all ticket lines
+      const now = new Date();
+      await tx.kitchenTicketLine.updateMany({
+        where: { ticketId, status: { notIn: ['CANCELLED'] } },
+        data: { status: 'CANCELLED', cancelledAt: now, cancelReason: reason ?? null },
+      });
+
       const latestTicket = await tx.kitchenTicket.findUnique({ where: { id: ticketId } });
 
       await tx.kitchenTicketHistory.create({
@@ -723,6 +832,62 @@ export class KitchenTicketsService {
           afterJson: { status: 'CANCELLED', reason },
         },
       });
+
+      await tx.outboxEvent.create({
+        data: {
+          tenantId,
+          branchId,
+          aggregateType: 'KitchenTicket',
+          aggregateId: ticketId,
+          eventType: 'ticket.cancelled',
+          payload: {
+            ticketId,
+            orderId: ticket.orderId,
+            stationId: ticket.stationId,
+            reason,
+          },
+        },
+      });
+
+      // Recompute order fulfillment after cancellation
+      const orderBefore = await tx.order.findFirst({
+        where: { id: ticket.orderId },
+        select: { fulfillmentStatus: true },
+      });
+      const fulfillment = await this.fulfillmentStatusService.deriveFulfillmentStatus({
+        tenantId,
+        branchId,
+        orderId: ticket.orderId,
+        tx,
+      });
+
+      const prevStatus = orderBefore?.fulfillmentStatus ?? null;
+      if (prevStatus !== fulfillment.fulfillmentStatus) {
+        await tx.order.updateMany({
+          where: { id: ticket.orderId },
+          data: {
+            fulfillmentStatus: fulfillment.fulfillmentStatus,
+            ...(fulfillment.fulfillmentStatus !== FulfillmentStatus.READY_FOR_SERVICE
+              ? { readyForServiceAt: null }
+              : {}),
+          },
+        });
+
+        await tx.outboxEvent.create({
+          data: {
+            tenantId,
+            branchId,
+            aggregateType: 'Order',
+            aggregateId: ticket.orderId,
+            eventType: 'order.fulfillment.status_changed',
+            payload: {
+              orderId: ticket.orderId,
+              fromStatus: prevStatus,
+              toStatus: fulfillment.fulfillmentStatus,
+            },
+          },
+        });
+      }
 
       return latestTicket;
     });

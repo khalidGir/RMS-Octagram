@@ -143,11 +143,14 @@ describe('KitchenRoutingService', () => {
       expect(groups[0].routes).toHaveLength(2);
       expect(groups[0].routes.map((r) => r.routeType)).toContain('PREPARE');
       expect(groups[0].routes.map((r) => r.routeType)).toContain('ASSEMBLE');
-      // ASSEMBLE route makes this an EXPO ticket type
-      expect(groups[0].ticketType).toBe('EXPO');
-      // Only one ticket line per order line per station (not duplicated)
-      expect(groups[0].ticketLines).toHaveLength(1);
+      // ASSEMBLE route present but not all routes are ASSEMBLE → PREPARATION
+      expect(groups[0].ticketType).toBe('PREPARATION');
+      // One ticket line per route type per order line (PREPARE + ASSEMBLE = 2)
+      expect(groups[0].ticketLines).toHaveLength(2);
       expect(groups[0].ticketLines[0].quantity).toBe(3);
+      expect(groups[0].ticketLines[1].quantity).toBe(3);
+      expect(groups[0].ticketLines.map((l) => l.routeType)).toContain('PREPARE');
+      expect(groups[0].ticketLines.map((l) => l.routeType)).toContain('ASSEMBLE');
     });
 
     it('returns empty array when order has no lines with menuItemId', async () => {

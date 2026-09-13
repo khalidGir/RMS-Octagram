@@ -13,6 +13,8 @@ function createMockPrisma() {
     },
     kitchenTicketLine: {
       create: vi.fn(),
+      updateMany: vi.fn(),
+      findMany: vi.fn(),
     },
     kitchenTicketHistory: {
       create: vi.fn(),
@@ -101,8 +103,8 @@ describe('KitchenTicketsService', () => {
           collectionLabelSnapshot: null,
           routes: [{ stationId: 's1', stationName: 'Grill', routeType: 'PREPARE' }],
           ticketLines: [
-            { orderLineId: 'l1', quantity: 2, routeType: 'PREPARE', menuItemId: 'mi1', itemNameSnapshot: null, variantNameSnapshot: null, notesSnapshot: null },
-            { orderLineId: 'l2', quantity: 1, routeType: 'PREPARE', menuItemId: 'mi2', itemNameSnapshot: null, variantNameSnapshot: null, notesSnapshot: null },
+            { orderLineId: 'l1', quantity: 2, routeType: 'PREPARE', isRequired: true, menuItemId: 'mi1', itemNameSnapshot: null, variantNameSnapshot: null, notesSnapshot: null },
+            { orderLineId: 'l2', quantity: 1, routeType: 'PREPARE', isRequired: true, menuItemId: 'mi2', itemNameSnapshot: null, variantNameSnapshot: null, notesSnapshot: null },
           ],
         },
       ]);
@@ -139,16 +141,27 @@ describe('KitchenTicketsService', () => {
       });
       const tx = createMockPrisma();
       tx.kitchenTicket.updateMany.mockResolvedValue({ count: 1 });
+      tx.kitchenTicketLine.findMany.mockResolvedValue([
+        { id: 'line1', quantity: 2 },
+      ]);
       tx.kitchenTicket.findUnique.mockResolvedValue({
         id: 't1', status: 'IN_PROGRESS', version: 2,
       });
       prisma.$transaction.mockImplementation(async (fn: any) => fn(tx));
+
+      const fulfillMock = service['fulfillmentStatusService'] as any;
+      fulfillMock.deriveFulfillmentStatus.mockResolvedValue({
+        fulfillmentStatus: 'PREPARING',
+        readyAt: null,
+        servedAt: null,
+      });
 
       const result = await service.bumpTicket({
         tenantId: 't1', branchId: 'b1', ticketId: 't1', actorUserId: 'u1', expectedVersion: 1,
       });
 
       expect(result.status).toBe('IN_PROGRESS');
+      expect(tx.kitchenTicketLine.updateMany).toHaveBeenCalled();
     });
 
     it('should throw on version conflict', async () => {
@@ -183,10 +196,20 @@ describe('KitchenTicketsService', () => {
       });
       const tx = createMockPrisma();
       tx.kitchenTicket.updateMany.mockResolvedValue({ count: 1 });
+      tx.kitchenTicketLine.findMany.mockResolvedValue([
+        { id: 'line1', quantity: 2 },
+      ]);
       tx.kitchenTicket.findUnique.mockResolvedValue({
         id: 't1', status: 'IN_PROGRESS', version: 4,
       });
       prisma.$transaction.mockImplementation(async (fn: any) => fn(tx));
+
+      const fulfillMock = service['fulfillmentStatusService'] as any;
+      fulfillMock.deriveFulfillmentStatus.mockResolvedValue({
+        fulfillmentStatus: 'PREPARING',
+        readyAt: null,
+        servedAt: null,
+      });
 
       const result = await service.recallTicket({
         tenantId: 't1', branchId: 'b1', ticketId: 't1', actorUserId: 'u1',
@@ -194,6 +217,7 @@ describe('KitchenTicketsService', () => {
       });
 
       expect(result.status).toBe('IN_PROGRESS');
+      expect(tx.kitchenTicketLine.updateMany).toHaveBeenCalled();
     });
 
     it('should throw if not READY', async () => {
@@ -236,11 +260,10 @@ describe('KitchenTicketsService', () => {
 
       expect(result.status).toBe('COMPLETED');
       expect(tx.order.updateMany).toHaveBeenCalled();
-      expect(tx.orderStatusHistory.create).toHaveBeenCalled();
       expect(tx.outboxEvent.create).toHaveBeenCalled();
     });
 
-    it('should not apply fulfillment status if other tickets pending', async () => {
+    it('should always recompute fulfillment status even with other tickets pending', async () => {
       prisma.kitchenTicket.findFirst.mockResolvedValue({
         id: 't1', status: 'READY', version: 2, orderId: 'o1', stationId: 's1',
       });
@@ -252,11 +275,19 @@ describe('KitchenTicketsService', () => {
       tx.kitchenTicket.count.mockResolvedValue(1); // Another ticket still pending
       prisma.$transaction.mockImplementation(async (fn: any) => fn(tx));
 
+      const fulfillMock = service['fulfillmentStatusService'] as any;
+      fulfillMock.deriveFulfillmentStatus.mockResolvedValue({
+        fulfillmentStatus: 'PARTIALLY_READY',
+        readyAt: null,
+        servedAt: null,
+      });
+
       await service.completeTicket({
         tenantId: 't1', branchId: 'b1', ticketId: 't1', actorUserId: 'u1', expectedVersion: 2,
       });
 
-      expect(tx.order.updateMany).not.toHaveBeenCalled();
+      expect(tx.order.updateMany).toHaveBeenCalled();
+      expect(fulfillMock.deriveFulfillmentStatus).toHaveBeenCalled();
     });
   });
 
@@ -272,12 +303,20 @@ describe('KitchenTicketsService', () => {
       });
       prisma.$transaction.mockImplementation(async (fn: any) => fn(tx));
 
+      const fulfillMock = service['fulfillmentStatusService'] as any;
+      fulfillMock.deriveFulfillmentStatus.mockResolvedValue({
+        fulfillmentStatus: 'CANCELLED',
+        readyAt: null,
+        servedAt: null,
+      });
+
       const result = await service.cancelTicket({
         tenantId: 't1', branchId: 'b1', ticketId: 't1', actorUserId: 'u1',
         reason: 'customer left', expectedVersion: 1,
       });
 
       expect(result.status).toBe('CANCELLED');
+      expect(tx.kitchenTicketLine.updateMany).toHaveBeenCalled();
     });
 
     it('should throw on invalid cancel transition', async () => {
