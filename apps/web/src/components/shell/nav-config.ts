@@ -4,6 +4,7 @@ import type { Route } from 'next';
 import {
   LayoutDashboard, ShoppingCart, ClipboardList, CreditCard, ChefHat, UtensilsCrossed,
   Grid3x3, Wallet, Utensils, Package, BarChart3, Users, Settings, Shield, ToggleLeft,
+  Coffee, Eye,
 } from 'lucide-react';
 
 export type NavItem = {
@@ -19,6 +20,8 @@ export const navItems: NavItem[] = [
   { label: 'Point of sale', icon: ShoppingCart, href: '/pos', roles: ['OWNER', 'MANAGER', 'CASHIER'], mobileOrder: 1 },
   { label: 'Orders', icon: ClipboardList, href: '/orders', roles: ['OWNER', 'MANAGER', 'CASHIER'], mobileOrder: 2 },
   { label: 'Kitchen display', icon: ChefHat, href: '/kitchen', roles: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'], mobileOrder: 1 },
+  { label: 'Kitchen config', icon: Coffee, href: '/kitchen/config' as Route, roles: ['OWNER', 'MANAGER'] },
+  { label: 'Expo', icon: Eye, href: '/expo' as Route, roles: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'] },
   { label: 'Waiter workspace', icon: UtensilsCrossed, href: '/waiter', roles: ['WAITER'], mobileOrder: 1 },
   { label: 'Payment review', icon: CreditCard, href: '/payments', roles: ['OWNER'], mobileOrder: 3 },
   { label: 'Tables & QR', icon: Grid3x3, href: '/tables', roles: ['OWNER', 'MANAGER'] },

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useKdsTickets, type KdsTicket, type KdsStation } from '@/lib/use-kds-tickets';
+import { useKitchens } from '@/lib/use-kitchen-config';
 import { useOnlineStatus } from '@/hooks';
 
 function elapsedMinutes(iso: string): number {
@@ -15,6 +16,18 @@ function formatElapsed(iso: string | null): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return `${h}h ${m}m`;
+}
+
+function slaProgress(startedAt: string | null, targetMinutes: number): number {
+  if (!startedAt) return 0;
+  const elapsed = elapsedMinutes(startedAt);
+  return Math.min(100, Math.round((elapsed / targetMinutes) * 100));
+}
+
+function slaColor(progress: number): string {
+  if (progress >= 100) return 'bg-red-500';
+  if (progress >= 75) return 'bg-amber-500';
+  return 'bg-emerald-500';
 }
 
 function ticketAgeClass(ticket: KdsTicket): string {
@@ -71,6 +84,8 @@ function TicketCard({ ticket, onBump, onRecall, onComplete, onCancel }: TicketCa
   const canCancel = ticket.status === 'QUEUED' || ticket.status === 'IN_PROGRESS';
   const ageClass = ticketAgeClass(ticket);
 
+  const progress = slaProgress(ticket.startedAt, 15);
+
   return (
     <div className={`rounded-xl border-2 overflow-hidden shadow-sm ${ageClass}`}>
       <div className={`flex items-center justify-between px-4 py-3 ${ticket.status === 'READY' ? 'bg-emerald-600 text-white' : ticket.status === 'QUEUED' ? 'bg-dark-muted text-white' : 'bg-blue-600 text-white'}`}>
@@ -78,6 +93,9 @@ function TicketCard({ ticket, onBump, onRecall, onComplete, onCancel }: TicketCa
           <span className="text-lg font-black">#{ticket.ticketNumber}</span>
           {ticket.orderNumber && (
             <span className="text-xs font-bold opacity-80">Order {ticket.orderNumber}</span>
+          )}
+          {ticket.tableId && (
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-black">Table</span>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -88,10 +106,16 @@ function TicketCard({ ticket, onBump, onRecall, onComplete, onCancel }: TicketCa
         </div>
       </div>
 
+      {ticket.status === 'IN_PROGRESS' && (
+        <div className="h-1 w-full bg-white/30">
+          <div className={`h-full transition-all duration-500 ${slaColor(progress)}`} style={{ width: `${progress}%` }} />
+        </div>
+      )}
+
       <div className="px-4 py-3">
         <div className="flex items-center gap-2 mb-2">
-          {ticket.tableId && (
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-black">Table</span>
+          {ticket.stationName && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-black">{ticket.stationName}</span>
           )}
           {ticket.customerName && (
             <span className="text-xs font-bold text-ink-muted">{ticket.customerName}</span>
@@ -241,7 +265,10 @@ const LANE_CONFIGS = [
 export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
   const isOnline = useOnlineStatus();
 
+  const [selectedKitchenId, setSelectedKitchenId] = useState<string | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
+
+  const { data: kitchens = [] } = useKitchens();
 
   const {
     tickets,
@@ -266,6 +293,11 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
     return map;
   }, [stations]);
 
+  const filteredStations = useMemo(() => {
+    if (!selectedKitchenId) return stations;
+    return stations;
+  }, [stations, selectedKitchenId]);
+
   const activeStation = selectedStationId ? stationMap.get(selectedStationId) : null;
 
   const ticketsByStatus = useMemo(() => {
@@ -281,6 +313,12 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
     }
     return grouped;
   }, [tickets]);
+
+  const totalByStatus = useMemo(() => ({
+    QUEUED: ticketsByStatus.QUEUED.length,
+    IN_PROGRESS: ticketsByStatus.IN_PROGRESS.length,
+    READY: ticketsByStatus.READY.length,
+  }), [ticketsByStatus]);
 
   const handleBump = async (id: string, version: number) => {
     try { await bumpTicket(id, version); } catch { /* handled in hook */ }
@@ -305,6 +343,13 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
           {activeStation && (
             <span className="rounded-full bg-brand px-3 py-1 text-xs font-black text-white">{activeStation.name}</span>
           )}
+          <div className="flex gap-1.5 ml-2">
+            {LANE_CONFIGS.map((lane) => (
+              <span key={lane.status} className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-black text-ink-muted">
+                {totalByStatus[lane.status]} {lane.label}
+              </span>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => refetch()} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-black hover:bg-muted transition-colors">
@@ -316,21 +361,41 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
         </div>
       </div>
 
-      {stations.length > 0 && (
-        <div className="flex gap-2 px-4 py-3 border-b border-line bg-white/40 overflow-x-auto">
+      <div className="flex gap-2 px-4 py-3 border-b border-line bg-white/40 overflow-x-auto">
+        <button
+          onClick={() => { setSelectedKitchenId(null); setSelectedStationId(null); }}
+          aria-pressed={selectedKitchenId === null && selectedStationId === null}
+          className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-black transition-colors ${selectedKitchenId === null && selectedStationId === null ? 'bg-dark text-white' : 'bg-white border border-line hover:bg-muted'}`}
+        >
+          All kitchens
+        </button>
+        {kitchens.map((kitchen) => (
+          <button
+            key={kitchen.id}
+            onClick={() => { setSelectedKitchenId(kitchen.id); setSelectedStationId(null); }}
+            aria-pressed={selectedKitchenId === kitchen.id}
+            className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-black transition-colors ${selectedKitchenId === kitchen.id ? 'bg-dark text-white' : 'bg-white border border-line hover:bg-muted'}`}
+          >
+            {kitchen.name}
+          </button>
+        ))}
+      </div>
+
+      {selectedKitchenId && filteredStations.length > 0 && (
+        <div className="flex gap-2 px-4 py-2 border-b border-line bg-white/40 overflow-x-auto">
           <button
             onClick={() => setSelectedStationId(null)}
             aria-pressed={selectedStationId === null}
-            className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-black transition-colors ${selectedStationId === null ? 'bg-dark text-white' : 'bg-white border border-line hover:bg-muted'}`}
+            className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] font-black transition-colors ${selectedStationId === null ? 'bg-brand text-white' : 'bg-white border border-line hover:bg-muted'}`}
           >
             All stations
           </button>
-          {stations.map((station) => (
+          {filteredStations.map((station) => (
             <button
               key={station.id}
               onClick={() => setSelectedStationId(station.id)}
               aria-pressed={selectedStationId === station.id}
-              className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-black transition-colors ${selectedStationId === station.id ? 'bg-dark text-white' : 'bg-white border border-line hover:bg-muted'}`}
+              className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] font-black transition-colors ${selectedStationId === station.id ? 'bg-brand text-white' : 'bg-white border border-line hover:bg-muted'}`}
             >
               {station.name}
             </button>

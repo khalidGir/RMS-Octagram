@@ -7,6 +7,7 @@ import { apiRequest } from '@/lib/api-client';
 import { formatEtbMinor } from '@/lib/money';
 import { StatusChip } from '@/components/ui/status-chip';
 import { Banner } from '@/components/ui/banner';
+import { FulfillmentTimeline } from '@/components/order-fulfillment-timeline';
 
 type OrderStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'IN_PROGRESS' | 'READY' | 'COMPLETED' | 'CANCELLED' | 'VOIDED';
 
@@ -272,6 +273,9 @@ export function OrderDetail({ orderId }: { orderId: string }) {
               </div>
             </div>
           )}
+
+          {/* Fulfillment timeline */}
+          <FulfillmentTimeline orderId={orderId} />
         </div>
       </div>
     </div>
