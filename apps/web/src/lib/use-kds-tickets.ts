@@ -147,6 +147,7 @@ export function useKdsTickets({
     stationId: stationId ?? undefined,
     onTicketCreated: handleSocketTicketCreated,
     onTicketUpdated: handleSocketTicketUpdated,
+    onOperationalChange: handleSocketConnect,
     onConnect: handleSocketConnect,
   });
 

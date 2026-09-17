@@ -55,8 +55,10 @@ describe('KDS transport recovery', () => {
     renderHook(() => useKdsSocket({ ...options, onOperationalChange }));
     act(() => fake.events['fulfillment:changed']({ orderId: 'order-1' }));
     act(() => fake.events['expo:released']({ orderId: 'order-1' }));
+    act(() => fake.events['ticket:invalidated']({ orderId: 'order-1', ticketId: 'ticket-1', version: 3 }));
     expect(onOperationalChange).toHaveBeenCalledWith('fulfillment:changed', { orderId: 'order-1' });
     expect(onOperationalChange).toHaveBeenCalledWith('expo:released', { orderId: 'order-1' });
+    expect(onOperationalChange).toHaveBeenCalledWith('ticket:invalidated', { orderId: 'order-1', ticketId: 'ticket-1', version: 3 });
   });
 
   it('disconnects the old context and both listener sets when credentials disappear', () => {

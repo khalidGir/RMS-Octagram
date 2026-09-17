@@ -107,7 +107,7 @@ export function useKdsSocket({
     socket.on('order:confirmed', (data: Record<string, unknown>) => {
       callbacksRef.current.onOrderConfirmed?.(data);
     });
-    for (const event of ['fulfillment:changed', 'expo:released', 'expo:updated', 'order:assignment_changed', 'service:notification']) {
+    for (const event of ['ticket:invalidated', 'fulfillment:changed', 'expo:released', 'expo:updated', 'order:assignment_changed', 'service:notification']) {
       socket.on(event, (data: Record<string, unknown>) => callbacksRef.current.onOperationalChange?.(event, data));
     }
 

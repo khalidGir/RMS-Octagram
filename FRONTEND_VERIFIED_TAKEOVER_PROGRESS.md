@@ -26,3 +26,10 @@ Related cash permission evidence: Cash-shift page/navigation regression suites p
 ## Nest room-denial event follow-up
 
 Socket client also listens for Nest's `exception` event, marks live status as error, and surfaces its message. Updated socket hook suite: **4/4 passed**, targeted lint passed. Actual server transport/authorization journeys remain unverified.
+
+## Durable ticket invalidation contract
+
+- Added `ticket:invalidated` to operational socket events and connected the KDS queue's operational callback to authoritative HTTP refetch. Existing `ticket:updated` remains a full-projection contract; minimal outbox invalidations must never be merged as full tickets.
+- Updated socket/reconciliation hook suites **6/6 passed**. Frontend typecheck and targeted lint completed successfully (3827). This is mocked hook evidence, not a live browser/Signed Socket.IO delivery gate.
+- Backend counterpart committed as `2bf05d7`: registered fulfillment lifecycle invalidation handlers validate tenant/branch/order/ticket scope and send IDs/current versions without forwarding financial/proof payloads. Strengthened backend real-DB HTTP-to-outbox/gateway-call suite **31/31 passed**. Transport delivery, active-room revocation, browser reconciliation, full UI/device/theme gates and staging remain open.
+- Earlier remaining-work notes are historical: notification HTTP reads now exist with role/scope/feature guards and database tests; secure socket joins/token expiry are hardened. Durable notification creation/recovery and actual live transport still require verification.
