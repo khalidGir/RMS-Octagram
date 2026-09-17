@@ -18,6 +18,7 @@ export interface SocketData {
   tenantContext?: TenantContext;
   kdsEffective?: boolean;
   authenticatedAt?: Date;
+  tokenExpiresAt?: Date;
 }
 
 /**
@@ -109,11 +110,14 @@ export class WsJwtAdapter extends IoAdapter {
     }
 
     // 1. Verify JWT signature and expiration (same as JwtStrategy)
-    let payload: JwtPayload;
+    let payload: JwtPayload & { exp?: number };
     try {
       const secret = this.configService.get<string>('JWT_ACCESS_SECRET');
       if (!secret) throw new Error('JWT_ACCESS_SECRET not configured');
-      payload = await this.jwtService.verifyAsync<JwtPayload>(token, { secret });
+      payload = await this.jwtService.verifyAsync<JwtPayload & { exp?: number }>(token, { secret });
+      if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) {
+        throw new Error('Access token must expire');
+      }
     } catch {
       throw new Error('Invalid or expired token');
     }
@@ -197,6 +201,13 @@ export class WsJwtAdapter extends IoAdapter {
 
     socket.data.tenantContext = ctx;
     socket.data.authenticatedAt = new Date();
+    const expiresAt = payload.exp! * 1000;
+    const remaining = expiresAt - Date.now();
+    if (remaining <= 0) throw new Error('Invalid or expired token');
+    socket.data.tokenExpiresAt = new Date(expiresAt);
+    const expiryTimer = setTimeout(() => socket.disconnect(true), remaining);
+    expiryTimer.unref();
+    socket.once('disconnect', () => clearTimeout(expiryTimer));
 
     this.logger.debug(
       `Socket authenticated: user=${user.id} tenant=${ctx.tenantId ?? 'none'} role=${ctx.tenantRole ?? 'none'} kds=${socket.data.kdsEffective ?? 'unknown'}`,
