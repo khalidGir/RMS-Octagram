@@ -1,0 +1,1 @@
+import { OwnerPaymentReview } from '@/components/owner-payment-review'; import { StaffShell } from '@/components/staff-shell'; export default function Page(){return <StaffShell><OwnerPaymentReview/></StaffShell>}

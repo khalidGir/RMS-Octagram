@@ -1,0 +1,10 @@
+import { LegalPage, LegalSection } from '@/components/legal-site';
+
+export const metadata = { title: 'Cookie Policy' };
+export default function CookiesPage(){return <LegalPage eyebrow="Effective 31 August 2026" title="Cookie Policy" summary="What RestaurantMS stores in the browser and why those technologies are needed.">
+  <LegalSection title="1. Current approach"><p>RestaurantMS currently uses browser storage primarily for essential product operation. The service does not require advertising cookies. If non-essential analytics or marketing technologies are introduced, this notice and the consent controls will be updated before they are activated where consent is required.</p></LegalSection>
+  <LegalSection title="2. Essential technologies"><p>Essential storage may preserve authentication and refresh-session state, tenant and branch context, locale and appearance preferences, service-worker caches for PWA reliability, security controls, and short-lived interface state. Disabling these technologies can prevent sign-in, branch selection, offline behavior, or other core functions.</p></LegalSection>
+  <LegalSection title="3. Local storage and service workers"><p>Some preferences are stored using local or session storage rather than traditional cookies. The installable web app also uses a service worker and cache storage to retain approved application-shell resources and provide a clear offline experience. Cached resources are versioned and replaced when the application updates.</p></LegalSection>
+  <LegalSection title="4. Managing storage"><p>Browser settings can display or remove cookies, site data, local storage, and PWA caches. Removing essential data may sign the user out and reset saved preferences. Restaurant-managed devices should follow the restaurant’s security and retention policies.</p></LegalSection>
+  <LegalSection title="5. Changes and contact"><p>This policy will be updated if analytics, embedded media, customer-support tools, or other non-essential technologies are added. Formal privacy contact details must be published before commercial launch.</p></LegalSection>
+</LegalPage>}
