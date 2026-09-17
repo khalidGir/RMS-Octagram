@@ -1,4 +1,4 @@
-export type OrderStatus = 'PENDING_VERIFICATION' | 'CONFIRMED' | 'IN_PROGRESS' | 'READY';
+export type OrderStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'IN_PROGRESS' | 'READY' | 'COMPLETED' | 'CANCELLED' | 'VOIDED';
 
 export interface BranchSummary { id: string; name: string; location: string; }
 export interface DashboardMetric { label: string; value: string; detail: string; direction: 'up' | 'neutral' | 'attention'; }
@@ -6,8 +6,8 @@ export interface RecentOrder { id: string; number: string; customer: string; typ
 export interface PopularItem { id: string; name: string; category: string; sold: number; revenueMinor: number; color: string; }
 export interface DashboardData { restaurantName: string; branches: BranchSummary[]; activeBranchId: string; metrics: DashboardMetric[]; recentOrders: RecentOrder[]; popularItems: PopularItem[]; }
 
-export interface MenuCategory { id: string; name: string; }
-export interface MenuItem { id: string; name: string; description: string; categoryId: string; priceMinor: number; available: boolean; badge?: string; initials: string; tone: string; }
+export interface MenuCategory { id: string; name: string; description?: string; sortOrder: number; isActive: boolean; }
+export interface MenuItem { id: string; name: string; description: string; categoryId: string; isActive: boolean; badge?: string; initials: string; tone: string; }
 export interface CartLine { item: MenuItem; quantity: number; note?: string; }
 export interface MenuData { categories: MenuCategory[]; items: MenuItem[]; }
 

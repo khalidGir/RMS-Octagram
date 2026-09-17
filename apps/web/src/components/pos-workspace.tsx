@@ -8,7 +8,7 @@ import { useOnlineStatus } from '@/hooks';
 
 interface ModifierOption { id: string; name: string; priceDeltaMinor: string; }
 interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number | null; options: ModifierOption[]; }
-interface Variant { id: string; name: string; priceMinor: string; isDefault: boolean; sku?: string | null; }
+interface Variant { id: string; name: string; basePriceMinor: string; isDefault: boolean; sku?: string | null; }
 interface Item { id: string; name: string; description: string | null; variants: Variant[]; modifierGroups: ModifierGroup[]; }
 interface Menu { categories: Array<{ id: string; name: string; items: Item[] }>; }
 interface Table { id: string; label: string; isActive: boolean; }
@@ -116,7 +116,7 @@ export function PosWorkspace() {
   );
 
   const cartSubtotal = cart.reduce((sum, line) => {
-    const variantPrice = BigInt(line.variant.priceMinor);
+    const variantPrice = BigInt(line.variant.basePriceMinor);
     const modDelta = Object.values(line.selectedModifiers)
       .flat()
       .reduce((acc, optId) => {
@@ -377,7 +377,7 @@ export function PosWorkspace() {
                     </p>
                   )}
                   <p className="mt-3 font-black text-brand">
-                    {variant ? formatEtbMinor(variant.priceMinor) : 'Unavailable'}
+                    {variant ? formatEtbMinor(variant.basePriceMinor) : 'Unavailable'}
                   </p>
                 </button>
               );
@@ -406,7 +406,7 @@ export function PosWorkspace() {
                     const opt = line.item.modifierGroups.flatMap((g) => g.options).find((o) => o.id === optId);
                     return acc + (opt ? BigInt(opt.priceDeltaMinor) : 0n);
                   }, 0n);
-                const unitTotal = BigInt(line.variant.priceMinor) + modTotal;
+                const unitTotal = BigInt(line.variant.basePriceMinor) + modTotal;
                 return (
                   <li key={line.lineKey} className="py-3">
                     <div className="flex justify-between gap-2">
@@ -591,7 +591,7 @@ function VariantSelector({
               className="flex w-full items-center justify-between rounded-xl border border-line p-4 text-left hover:bg-orange-50"
             >
               <span className="font-bold">{variant.name}</span>
-              <span className="font-black text-brand">{formatEtbMinor(variant.priceMinor)}</span>
+              <span className="font-black text-brand">{formatEtbMinor(variant.basePriceMinor)}</span>
             </button>
           ))}
         </div>
@@ -706,7 +706,7 @@ function ModifierSelector({
       const opt = item.modifierGroups.flatMap((g) => g.options).find((o) => o.id === optId);
       return acc + (opt ? BigInt(opt.priceDeltaMinor) : 0n);
     }, 0n);
-  const unitTotal = BigInt(selectedVariant.priceMinor) + modifierDelta;
+  const unitTotal = BigInt(selectedVariant.basePriceMinor) + modifierDelta;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40" role="dialog" aria-modal="true" aria-label={`Customize ${item.name}`}>
@@ -726,7 +726,7 @@ function ModifierSelector({
                     selectedVariant.id === v.id ? 'bg-dark text-white' : 'border border-line bg-white'
                   }`}
                 >
-                  {v.name} — {formatEtbMinor(v.priceMinor)}
+                  {v.name} — {formatEtbMinor(v.basePriceMinor)}
                 </button>
               ))}
             </div>

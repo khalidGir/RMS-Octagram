@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
 
-interface ApiVariant { id: string; name: string; priceMinor: string; isDefault: boolean }
+interface ApiVariant { id: string; name: string; basePriceMinor: string; isDefault: boolean }
 interface ApiModifierOption { id: string; name: string; priceDeltaMinor: string }
 interface ApiModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number | null; options: ApiModifierOption[] }
 interface ApiMenuItem { id: string; name: string; description: string | null; variants: ApiVariant[]; modifierGroups: ApiModifierGroup[] }
@@ -16,7 +16,7 @@ interface CartLine {
   itemId: string;
   variantId: string;
   name: string;
-  priceMinor: string;
+  basePriceMinor: string;
   quantity: number;
   modifierOptionIds?: string[];
   notes?: string;
@@ -56,7 +56,7 @@ export function CustomerMenu() {
 
   const count = cart.reduce((sum, x) => sum + x.quantity, 0);
   const subtotal = useMemo(
-    () => cart.reduce((sum, x) => sum + BigInt(x.priceMinor) * BigInt(x.quantity), 0n),
+    () => cart.reduce((sum, x) => sum + BigInt(x.basePriceMinor) * BigInt(x.quantity), 0n),
     [cart],
   );
 
@@ -67,7 +67,7 @@ export function CustomerMenu() {
     setCart(v => {
       const existing = v.find(line => line.variantId === variant.id);
       if (existing) return v.map(line => line.variantId === variant.id ? { ...line, quantity: line.quantity + 1 } : line);
-      return [...v, { itemId: item.id, variantId: variant.id, name: item.name, priceMinor: variant.priceMinor, quantity: 1 }];
+      return [...v, { itemId: item.id, variantId: variant.id, name: item.name, basePriceMinor: variant.basePriceMinor, quantity: 1 }];
     });
   }
 
@@ -137,7 +137,7 @@ export function CustomerMenu() {
                     <h3 className="font-black">{item.name}</h3>
                     <p className="mt-1 text-xs leading-5 text-ink-muted">{item.description}</p>
                     <div className="mt-auto flex items-center justify-between">
-                      <b className="text-brand">{variant ? formatEtbMinor(variant.priceMinor) : 'Unavailable'}</b>
+                      <b className="text-brand">{variant ? formatEtbMinor(variant.basePriceMinor) : 'Unavailable'}</b>
                       <button disabled={!variant || needsOptions} onClick={() => add(item)} aria-label={`Add ${item.name}`} className="grid size-10 place-items-center rounded-xl bg-muted text-xl font-black text-brand disabled:bg-stone-200 disabled:text-stone-400">{variant && !needsOptions ? '+' : '...'}</button>
                     </div>
                   </div>
@@ -167,7 +167,7 @@ function CartSidebar({ cart, subtotal, change, onContinue }: { cart: CartLine[];
     <div className="border-b border-line p-5"><h2 className="text-xl font-black">Your order</h2></div>
     <div className="p-5">{cart.length === 0 ? <p className="py-10 text-center text-sm font-bold text-ink-muted">Add something delicious.</p>
       : <div className="space-y-4">{cart.map(line => <div key={line.variantId}>
-        <div className="flex justify-between text-sm"><b>{line.name}</b><b dir="ltr">{formatEtbMinor(BigInt(line.priceMinor) * BigInt(line.quantity))}</b></div>
+        <div className="flex justify-between text-sm"><b>{line.name}</b><b dir="ltr">{formatEtbMinor(BigInt(line.basePriceMinor) * BigInt(line.quantity))}</b></div>
         <div className="mt-2 flex justify-end"><div className="flex items-center rounded-lg border border-line">
           <button onClick={() => change(line.variantId, -1)} className="grid size-8 place-items-center">−</button>
           <span className="w-7 text-center text-xs font-black">{line.quantity}</span>

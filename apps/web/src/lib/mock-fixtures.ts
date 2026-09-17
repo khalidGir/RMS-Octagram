@@ -11,8 +11,8 @@ import type {
   RouteType,
   ServiceMode,
   ExpoMode,
-  NotificationType,
-  NotificationStatus,
+  ServiceNotificationType,
+  ServiceNotificationStatus,
 } from './fulfillment-types';
 import { OrderType } from '@rms/contracts';
 
@@ -118,8 +118,8 @@ const mockServiceBoard: ServiceBoardOrder[] = [
     readyAge: 120, createdAt: now, version: 3,
     notifications: [
       { id: 'n-1', tenantId: 't1', branchId: 'b1', orderId: 'o-1', ticketId: 't-2',
-        assignedUserId: 'u-waiter-1', type: 'STATION_READY' as NotificationType,
-        collectionLabelSnapshot: 'Bar counter', status: 'UNREAD' as NotificationStatus,
+        assignedUserId: 'u-waiter-1', type: 'STATION_READY' as ServiceNotificationType,
+        collectionLabelSnapshot: 'Bar counter', status: 'UNREAD' as ServiceNotificationStatus,
         createdAt: now, acknowledgedAt: null, resolvedAt: null },
     ],
   },

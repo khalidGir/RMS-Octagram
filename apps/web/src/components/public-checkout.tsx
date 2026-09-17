@@ -13,7 +13,7 @@ interface StoredCart {
     availableOrderTypes?: string[];
     availablePaymentMethods: string[];
   };
-  lines: Array<{ variantId: string; name: string; priceMinor: string; quantity: number }>;
+  lines: Array<{ variantId: string; name: string; basePriceMinor: string; quantity: number }>;
   quotedSubtotal: string;
 }
 
@@ -45,7 +45,7 @@ export function PublicCheckout({ expectedEntry }: { expectedEntry: StoredCart['e
     } catch { setCart(null); }
   }, [expectedEntry.kind]);
 
-  const subtotal = useMemo(() => cart?.lines.reduce((sum, line) => sum + BigInt(line.priceMinor) * BigInt(line.quantity), 0n) ?? 0n, [cart]);
+  const subtotal = useMemo(() => cart?.lines.reduce((sum, line) => sum + BigInt(line.basePriceMinor) * BigInt(line.quantity), 0n) ?? 0n, [cart]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -89,5 +89,5 @@ export function PublicCheckout({ expectedEntry }: { expectedEntry: StoredCart['e
     {pickup && <div className="mt-6 grid gap-4"><label className="text-sm font-bold">Name<input required value={customerName} onChange={(e) => setCustomerName(e.target.value)} maxLength={200} className="mt-2 min-h-12 w-full rounded-xl border border-line px-3" /></label><label className="text-sm font-bold">Phone number<input required value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} maxLength={20} className="mt-2 min-h-12 w-full rounded-xl border border-line px-3" /></label><label className="text-sm font-bold">Pickup time<input required type="datetime-local" value={pickupAt} onChange={(e) => setPickupAt(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-line px-3" /></label></div>}
     <fieldset className="mt-6"><legend className="font-black">Payment method</legend><div className="mt-3 space-y-3">{(['CASH','BANK_TRANSFER','TELEBIRR'] as const).filter((method) => methods.includes(method)).map((method) => <label key={method} className={`flex min-h-14 items-center rounded-xl border px-4 font-bold ${paymentMethod === method ? 'border-brand bg-orange-50' : 'border-line'}`}><input type="radio" name="payment" checked={paymentMethod === method} onChange={() => setPaymentMethod(method)} className="me-3" />{method === 'CASH' ? 'Cash · cashier confirmation required' : method === 'TELEBIRR' ? 'Telebirr · owner verification required' : 'Bank transfer · owner verification required'}</label>)}</div></fieldset>
     <label className="mt-5 block text-sm font-bold">Order notes<textarea value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} className="mt-2 min-h-24 w-full rounded-xl border border-line p-3" /></label><button disabled={submitting || methods.length === 0} className="mt-5 min-h-14 w-full rounded-xl bg-brand px-5 font-black text-white disabled:opacity-50">{submitting ? 'Submitting securely…' : 'Place order'}</button></section>
-    <aside className="h-fit rounded-2xl border border-line bg-white p-5 shadow-card"><h2 className="text-xl font-black">Your order</h2>{cart.lines.map((line) => <div key={line.variantId} className="mt-4 flex justify-between border-b border-line pb-4 text-sm"><span><b>{line.quantity} × {line.name}</b></span><b>{formatEtbMinor(BigInt(line.priceMinor) * BigInt(line.quantity))}</b></div>)}<div className="mt-4 flex justify-between"><span>Subtotal (before VAT)</span><b>{formatEtbMinor(subtotal)}</b></div><p className="mt-3 text-xs text-ink-muted">VAT and total payable are calculated and confirmed by the server before submission.</p></aside></form></main>;
+    <aside className="h-fit rounded-2xl border border-line bg-white p-5 shadow-card"><h2 className="text-xl font-black">Your order</h2>{cart.lines.map((line) => <div key={line.variantId} className="mt-4 flex justify-between border-b border-line pb-4 text-sm"><span><b>{line.quantity} × {line.name}</b></span><b>{formatEtbMinor(BigInt(line.basePriceMinor) * BigInt(line.quantity))}</b></div>)}<div className="mt-4 flex justify-between"><span>Subtotal (before VAT)</span><b>{formatEtbMinor(subtotal)}</b></div><p className="mt-3 text-xs text-ink-muted">VAT and total payable are calculated and confirmed by the server before submission.</p></aside></form></main>;
 }

@@ -9,7 +9,7 @@ interface PublicMenuItem {
   id: string;
   name: string;
   description: string | null;
-  variants: Array<{ id: string; name: string; priceMinor: string; isDefault: boolean }>;
+  variants: Array<{ id: string; name: string; basePriceMinor: string; isDefault: boolean }>;
   modifierGroups: Array<{ id: string; name: string; isRequired: boolean; minSelections: number }>;
 }
 
@@ -38,7 +38,7 @@ interface CartLine {
   itemId: string;
   variantId: string;
   name: string;
-  priceMinor: string;
+  basePriceMinor: string;
   quantity: number;
 }
 
@@ -67,7 +67,7 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
 
   const category = query.data?.menu.categories.find((item) => item.id === categoryId) ?? query.data?.menu.categories[0];
   const count = cart.reduce((total, line) => total + line.quantity, 0);
-  const subtotal = useMemo(() => cart.reduce((total, line) => total + BigInt(line.priceMinor) * BigInt(line.quantity), 0n), [cart]);
+  const subtotal = useMemo(() => cart.reduce((total, line) => total + BigInt(line.basePriceMinor) * BigInt(line.quantity), 0n), [cart]);
 
   function add(item: PublicMenuItem) {
     const variant = item.variants.find((candidate) => candidate.isDefault) ?? item.variants[0];
@@ -75,7 +75,7 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
     setCart((current) => {
       const existing = current.find((line) => line.variantId === variant.id);
       if (existing) return current.map((line) => line.variantId === variant.id ? { ...line, quantity: line.quantity + 1 } : line);
-      return [...current, { itemId: item.id, variantId: variant.id, name: item.name, priceMinor: variant.priceMinor, quantity: 1 }];
+      return [...current, { itemId: item.id, variantId: variant.id, name: item.name, basePriceMinor: variant.basePriceMinor, quantity: 1 }];
     });
   }
 
@@ -124,7 +124,7 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
             {category.items.map((item) => {
               const variant = item.variants.find((candidate) => candidate.isDefault) ?? item.variants[0];
               const needsOptions = item.modifierGroups.some((group) => group.isRequired || group.minSelections > 0);
-              return <article key={item.id} className="flex min-h-44 flex-col rounded-2xl border border-line bg-white p-5 shadow-card"><h3 className="text-lg font-black">{item.name}</h3><p className="mt-2 flex-1 text-sm leading-6 text-ink-muted">{item.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="font-black text-brand">{variant ? formatEtbMinor(variant.priceMinor) : 'Unavailable'}</span><button disabled={!variant || needsOptions} onClick={() => add(item)} className="min-h-11 rounded-xl bg-dark px-4 text-sm font-black text-white disabled:bg-stone-300">{needsOptions ? 'Choose options' : 'Add'}</button></div></article>;
+              return <article key={item.id} className="flex min-h-44 flex-col rounded-2xl border border-line bg-white p-5 shadow-card"><h3 className="text-lg font-black">{item.name}</h3><p className="mt-2 flex-1 text-sm leading-6 text-ink-muted">{item.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="font-black text-brand">{variant ? formatEtbMinor(variant.basePriceMinor) : 'Unavailable'}</span><button disabled={!variant || needsOptions} onClick={() => add(item)} className="min-h-11 rounded-xl bg-dark px-4 text-sm font-black text-white disabled:bg-stone-300">{needsOptions ? 'Choose options' : 'Add'}</button></div></article>;
             })}
           </section> : <PublicState title="No items available" detail="Please check again later." />}
         </div>

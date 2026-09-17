@@ -5,12 +5,12 @@ import type {
   RouteType,
   ServiceMode,
   ExpoMode,
-  NotificationType,
-  NotificationStatus,
+  ServiceNotificationType,
+  ServiceNotificationStatus,
   OrderType,
 } from '@rms/contracts';
 
-export type { FulfillmentStatus, TicketType, TicketStatus, RouteType, ServiceMode, ExpoMode, NotificationType, NotificationStatus };
+export type { FulfillmentStatus, TicketType, TicketStatus, RouteType, ServiceMode, ExpoMode, ServiceNotificationType, ServiceNotificationStatus };
 
 export interface Kitchen {
   id: string;
@@ -194,9 +194,9 @@ export interface ServiceNotification {
   orderId: string;
   ticketId: string | null;
   assignedUserId: string | null;
-  type: NotificationType;
+  type: ServiceNotificationType;
   collectionLabelSnapshot: string | null;
-  status: NotificationStatus;
+  status: ServiceNotificationStatus;
   createdAt: string;
   acknowledgedAt: string | null;
   resolvedAt: string | null;
