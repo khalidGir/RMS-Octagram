@@ -115,6 +115,10 @@ export function useKdsSocket({
       setStatus('error');
       callbacksRef.current.onError?.(new Error(data?.message ?? 'Unknown socket error'));
     });
+    socket.on('exception', (data: { message?: string }) => {
+      setStatus('error');
+      callbacksRef.current.onError?.(new Error(data?.message ?? 'Live update access denied'));
+    });
     socket.io.on('reconnect_attempt', () => setStatus('connecting'));
     socket.io.on('reconnect_failed', () => {
       setStatus('error');

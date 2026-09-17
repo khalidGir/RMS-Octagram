@@ -45,6 +45,9 @@ describe('KDS transport recovery', () => {
     expect(onError).toHaveBeenCalledWith(expect.any(Error));
     act(() => fake.events.error({ message: 'Branch access denied' }));
     expect(onError).toHaveBeenLastCalledWith(new Error('Branch access denied'));
+    act(() => fake.events.exception({ message: 'Forbidden resource' }));
+    expect(result.current.status).toBe('error');
+    expect(onError).toHaveBeenLastCalledWith(new Error('Forbidden resource'));
   });
 
   it('forwards committed fulfillment and Expo invalidations to the reconciler', () => {

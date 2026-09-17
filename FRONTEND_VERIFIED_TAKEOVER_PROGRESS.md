@@ -22,3 +22,7 @@ The persistent goal is the complete integrated RMS MVP and staging preparation. 
 - Tenant/profile/branch context unification, idempotency action lifetimes, authorization states, offline mutation guards, all role workflows, theme/localization/a11y/device tests, full quality gates, and staging remain incomplete.
 
 Related cash permission evidence: Cash-shift page/navigation regression suites passed 12 tests. Financial backend authorization is independent and mandatory.
+
+## Nest room-denial event follow-up
+
+Socket client also listens for Nest's `exception` event, marks live status as error, and surfaces its message. Updated socket hook suite: **4/4 passed**, targeted lint passed. Actual server transport/authorization journeys remain unverified.
