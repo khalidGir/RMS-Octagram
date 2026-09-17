@@ -3,13 +3,18 @@ import { type CanActivate, type ExecutionContext, Injectable, ForbiddenException
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { TenantRole } from '@rms/contracts';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
 import { BRANCH_SCOPED_KEY, type TenantContext } from './types';
 
 @Injectable()
 export class BranchScopeGuard implements CanActivate {
-  constructor(@Inject(Reflector) private reflector: Reflector) {}
+  constructor(
+    @Inject(Reflector) private reflector: Reflector,
+    @Inject(PrismaService) private prisma: PrismaService,
+  ) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const isBranchScoped = this.reflector.getAllAndOverride<boolean>(BRANCH_SCOPED_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -41,8 +46,15 @@ export class BranchScopeGuard implements CanActivate {
       throw new ForbiddenException('Branch ID required');
     }
 
-    // Owner sees all branches in tenant
+    // Owner sees all branches in tenant, but branch must belong to the same tenant
     if (ctx.tenantRole === TenantRole.OWNER) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: branchId, tenantId: ctx.tenantId, isActive: true },
+        select: { tenantId: true },
+      });
+      if (!branch || branch.tenantId !== ctx.tenantId) {
+        throw new ForbiddenException('Branch does not belong to this tenant');
+      }
       return true;
     }
 

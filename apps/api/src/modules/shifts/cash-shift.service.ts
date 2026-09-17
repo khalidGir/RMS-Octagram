@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { PrismaClient } from '@prisma/client';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -215,6 +215,7 @@ export class CashShiftService {
     varianceReason?: string;
     expectedVersion: number;
     actorUserId: string;
+    callerRole?: string;
   }): Promise<{ shift: CashShiftSummary; report: ShiftReportSnapshotData }> {
     const { tenantId, branchId, shiftId, countedCashMinor, varianceReason, expectedVersion, actorUserId } = params;
 
@@ -236,6 +237,10 @@ export class CashShiftService {
       }
 
       const shift = shifts[0];
+
+      if (shift.cashierUserId !== actorUserId && params.callerRole !== 'OWNER') {
+        throw new ForbiddenException('You can only close your own cash shift');
+      }
 
       if (shift.status === 'CLOSED') {
         throw new ConflictException('Shift is already closed');
@@ -415,6 +420,7 @@ export class CashShiftService {
     tenantId: string;
     branchId: string;
     cashShiftId: string;
+    cashierUserId?: string;
   }): Promise<ShiftReportSnapshotData> {
     const { tenantId, branchId, cashShiftId } = params;
 
@@ -422,7 +428,8 @@ export class CashShiftService {
       where: { cashShiftId },
     });
 
-    if (!report || report.tenantId !== tenantId || report.branchId !== branchId) {
+    if (!report || report.tenantId !== tenantId || report.branchId !== branchId ||
+        (params.cashierUserId && report.openedByUserId !== params.cashierUserId)) {
       throw new NotFoundException('Shift report not found');
     }
 

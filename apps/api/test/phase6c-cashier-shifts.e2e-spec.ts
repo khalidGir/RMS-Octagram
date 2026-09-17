@@ -270,12 +270,12 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
 
   it('3f. projection cross-branch isolation', async () => {
     const branch2 = await prisma.branch.create({ data: { tenantId, name: 'Branch Proj', slug: `phase6c-proj-${ts}`, isActive: true } });
-    const open = await openShift(app, cashierToken, tenantId, branch2.id, '7000');
+    const open = await openShift(app, ownerToken, tenantId, branch2.id, '7000');
     expect(open.status).toBe(201);
-    const res = await getCurrentShift(app, cashierToken, tenantId, branch2.id);
+    const res = await getCurrentShift(app, ownerToken, tenantId, branch2.id);
     expect(res.body.data.approvedCashMinor).toBe('0');
     expect(res.body.data.expectedCashMinor).toBe('7000');
-    await closeShift(app, cashierToken, tenantId, branch2.id, open.body.data.id, '7000', 1);
+    await closeShift(app, ownerToken, tenantId, branch2.id, open.body.data.id, '7000', 1);
   });
 
   it('3g. projection cross-tenant isolation', async () => {
@@ -297,13 +297,13 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
   it('3h. projection large money above MAX_SAFE_INTEGER', async () => {
     const branch3 = await prisma.branch.create({ data: { tenantId, name: 'Branch Large', slug: `phase6c-lg-${ts}`, isActive: true } });
     const large = '9007199254740993';
-    const open = await openShift(app, cashierToken, tenantId, branch3.id, large);
+    const open = await openShift(app, ownerToken, tenantId, branch3.id, large);
     expect(open.status).toBe(201);
-    const res = await getCurrentShift(app, cashierToken, tenantId, branch3.id);
+    const res = await getCurrentShift(app, ownerToken, tenantId, branch3.id);
     expect(res.body.data.openingCashMinor).toBe(large);
     expect(res.body.data.expectedCashMinor).toBe(large);
     expect(res.body.data.approvedCashMinor).toBe('0');
-    await closeShift(app, cashierToken, tenantId, branch3.id, open.body.data.id, large, 1);
+    await closeShift(app, ownerToken, tenantId, branch3.id, open.body.data.id, large, 1);
   });
 
   it('4. owner can open and close a shift', async () => {
@@ -316,12 +316,12 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
     expect(close.body.report).toBeDefined();
   });
 
-  it('5. manager can open and close a shift', async () => {
+  it('5. manager cannot open a cash shift or confirm cash', async () => {
     const open = await openShift(app, managerToken, tenantId, branchId, '15000');
-    expect(open.status).toBe(201);
-    const close = await closeShift(app, managerToken, tenantId, branchId, open.body.data.id, '15000', 1);
-    expect(close.status).toBe(200);
-    expect(close.body.shift.status).toBe('CLOSED');
+    expect(open.status).toBe(403);
+    const { paymentId } = await createCashPayment(app, ownerToken, tenantId, branchId, variantId);
+    expect((await confirmCash(app, managerToken, tenantId, branchId, paymentId)).status).toBe(403);
+    expect((await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } })).status).toBe('PENDING');
   });
 
   it('6. cash confirmation fails without active shift', async () => {
@@ -415,13 +415,12 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
     await closeShift(app, cashierToken, tenantId, branchId, open.body.data.id, '3000', 1);
   });
 
-  it('15. cross-branch shift not visible', async () => {
+  it('15. unassigned-branch shift operations are denied', async () => {
     const branch2 = await prisma.branch.create({ data: { tenantId, name: 'Branch 2', slug: `phase6c-b2-${ts}`, isActive: true } });
     const open = await openShift(app, cashierToken, tenantId, branch2.id, '0');
-    expect(open.status).toBe(201);
-    const current1 = await getCurrentShift(app, cashierToken, tenantId, branchId);
-    expect(current1.body.data).toBeNull();
-    await closeShift(app, cashierToken, tenantId, branch2.id, open.body.data.id, '0', 1);
+    expect(open.status).toBe(403);
+    expect((await getCurrentShift(app, cashierToken, tenantId, branch2.id)).status).toBe(403);
+    expect(await prisma.cashShift.count({ where: { tenantId, branchId: branch2.id } })).toBe(0);
   });
 
   it('16. cross-tenant shift not accessible', async () => {
@@ -432,8 +431,7 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
       .get(`/api/v1/branches/${branch2t.id}/shifts/reports`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-tenant-id', tenantId);
-    expect(res.status).toBe(200);
-    expect(res.body.data.length).toBe(0);
+    expect(res.status).toBe(403);
   });
 
   it('17. two different cashiers can each have one open shift', async () => {
@@ -455,6 +453,25 @@ describe('Phase 6C — Cashier Shifts (e2e)', () => {
   // ═══════════════════════════════════════════════════════════════
 
   describe('P0 Financial Contract — Money as strings', () => {
+    it('cashiers cannot close or read another cashier shift; Owner can close it', async () => {
+      const open = await openShift(app, cashier2Token, tenantId, branchId, '2000');
+      expect(open.status).toBe(201);
+      const shiftId = open.body.data.id;
+      expect((await closeShift(app, cashierToken, tenantId, branchId, shiftId, '2000', 1)).status).toBe(403);
+      const untouched = await prisma.cashShift.findUniqueOrThrow({ where: { id: shiftId } });
+      expect(untouched.status).toBe('OPEN');
+      expect(untouched.version).toBe(1);
+      const close = await closeShift(app, ownerToken, tenantId, branchId, shiftId, '2000', 1);
+      expect(close.status).toBe(200);
+      const reportRequest = (token: string) => request(app.getHttpServer())
+        .get(`/api/v1/branches/${branchId}/shifts/${shiftId}/report`)
+        .set('Authorization', `Bearer ${token}`)
+        .set('x-tenant-id', tenantId);
+      expect((await reportRequest(cashierToken)).status).toBe(404);
+      expect((await reportRequest(cashier2Token)).status).toBe(200);
+      expect((await reportRequest(ownerToken)).status).toBe(200);
+    });
+
     it('19. rejects decimal input for openingCashMinor', async () => {
       const res = await openShift(app, cashierToken, tenantId, branchId, '100.50');
       expect(res.status).toBe(400);

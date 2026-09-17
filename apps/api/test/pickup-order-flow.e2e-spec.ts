@@ -159,8 +159,11 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       data: { tenantId, branchId, menuItemId: item.id, isAvailable: true },
     });
 
+    const kitchen = await prisma.kitchen.create({
+      data: { tenantId, branchId, name: 'Main Kitchen', isActive: true, collectionLabel: 'Counter' },
+    });
     const station = await prisma.kitchenStation.create({
-      data: { tenantId, branchId, name: 'Grill', displayOrder: 0 },
+      data: { tenantId, branchId, kitchenId: kitchen.id, name: 'Grill', displayOrder: 0 },
     });
     stationId = station.id;
 
@@ -494,7 +497,13 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       });
       expect(orderOutbox.length).toBeGreaterThanOrEqual(1);
 
-      await outboxProcessor.poll(true);
+      for (let i = 0; i < 10; i++) {
+        await outboxProcessor.poll(true);
+        const check = await prisma.outboxEvent.findFirst({
+          where: { tenantId, aggregateId: cashOrderId, eventType: 'order.confirmed' },
+        });
+        if (check?.publishedAt) break;
+      }
 
       const publishedEvent = await prisma.outboxEvent.findFirst({
         where: { tenantId, aggregateId: cashOrderId, eventType: 'order.confirmed' },
@@ -606,7 +615,13 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
       });
       expect(orderOutbox.length).toBeGreaterThanOrEqual(1);
 
-      await outboxProcessor.poll(true);
+      for (let i = 0; i < 10; i++) {
+        await outboxProcessor.poll(true);
+        const check = await prisma.outboxEvent.findFirst({
+          where: { tenantId, aggregateId: orderId, eventType: 'order.confirmed' },
+        });
+        if (check?.publishedAt) break;
+      }
 
       const publishedEvent = await prisma.outboxEvent.findFirst({
         where: { tenantId, aggregateId: orderId, eventType: 'order.confirmed' },
@@ -647,7 +662,13 @@ describe('Pickup Order Flow — End-to-End (e2e)', () => {
         .set('x-tenant-id', tenantId);
       expect(confirmRes.status).toBe(200);
 
-      await outboxProcessor.poll(true);
+      for (let i = 0; i < 10; i++) {
+        await outboxProcessor.poll(true);
+        const check = await prisma.outboxEvent.findFirst({
+          where: { tenantId, aggregateId: kdsOrderId, eventType: 'order.confirmed' },
+        });
+        if (check?.publishedAt) break;
+      }
 
       const publishedEvent = await prisma.outboxEvent.findFirst({
         where: { tenantId, aggregateId: kdsOrderId, eventType: 'order.confirmed' },

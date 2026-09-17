@@ -8,9 +8,17 @@ import { FeatureResolver } from '../features/feature-resolver.service';
 import { FeatureKey } from '@rms/contracts';
 import type { JwtPayload } from '../auth/auth.service';
 import type { TenantContext } from '../auth/types';
-import type { Server, Socket } from 'socket.io';
+import type { IncomingMessage } from 'node:http';
+import { isAllowedOrigin } from '../auth/allowed-origin';
+import { KDS_ROOM_ROLES } from './ws-auth.guard';
 
-export interface AuthenticatedSocket extends Socket {
+const REVALIDATION_MS = 10_000;
+const REVALIDATION_DEADLINE_MS = 3_000;
+
+type AdapterServer = ReturnType<IoAdapter['create']>;
+type AdapterSocket = Parameters<Parameters<AdapterServer['use']>[0]>[0];
+
+export interface AuthenticatedSocket extends AdapterSocket {
   data: SocketData & Record<string, unknown>;
 }
 
@@ -53,37 +61,29 @@ export class WsJwtAdapter extends IoAdapter {
     this.initialized = true;
   }
 
-  createIOServer(port: number, options?: Record<string, unknown>): Server {
+  create(port: number, options?: Parameters<IoAdapter['create']>[1]): ReturnType<IoAdapter['create']> {
     this.initServices();
 
     const corsOrigin = this.configService.get<string>('API_CORS_ORIGIN', 'http://localhost:3000');
     const allowedOrigins = corsOrigin.split(',').map((o) => o.trim());
 
-    const server = super.createIOServer(port, {
+    // Nest calls create again for the gateway namespace, often reusing a root
+    // server. Root server.use middleware does NOT protect a named namespace.
+    // Attach authentication to the actual returned server/namespace each time.
+    const server = super.create(port, {
       ...options,
       cors: {
         origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-          if (!origin) {
-            callback(null, true);
-            return;
-          }
-          const allowed = allowedOrigins.some((o) => {
-            try {
-              const allowedUrl = new URL(o);
-              const originUrl = new URL(origin);
-              return originUrl.hostname === allowedUrl.hostname ||
-                originUrl.hostname.endsWith('.' + allowedUrl.hostname);
-            } catch {
-              return origin === o;
-            }
-          });
-          callback(null, allowed);
+          callback(null, isAllowedOrigin(origin, allowedOrigins));
         },
         credentials: true,
       },
-      namespace: '/kds',
+      // CORS alone does not reject browser WebSocket upgrades.
+      allowRequest: (request: IncomingMessage, callback: (error: string | null, allowed: boolean) => void) => {
+        callback(null, isAllowedOrigin(request.headers.origin, allowedOrigins));
+      },
       connectTimeout: 10000,
-    });
+    } as NonNullable<Parameters<IoAdapter['create']>[1]>);
 
     server.use(async (socket: AuthenticatedSocket, next: (err?: Error) => void) => {
       try {
@@ -207,11 +207,92 @@ export class WsJwtAdapter extends IoAdapter {
     socket.data.tokenExpiresAt = new Date(expiresAt);
     const expiryTimer = setTimeout(() => socket.disconnect(true), remaining);
     expiryTimer.unref();
-    socket.once('disconnect', () => clearTimeout(expiryTimer));
+    let revalidating = false;
+    let accessDeadline: ReturnType<typeof setTimeout> | undefined;
+    const accessTimer = setInterval(() => {
+      if (revalidating) return;
+      revalidating = true;
+      void Promise.race([
+        this.revalidateSubscriptions(socket),
+        new Promise<never>((_resolve, reject) => {
+          accessDeadline = setTimeout(() => reject(new Error('Socket authorization deadline exceeded')), REVALIDATION_DEADLINE_MS);
+          accessDeadline.unref();
+        }),
+      ]).catch(() => {
+        // Cannot establish current authorization during a database failure.
+        socket.disconnect(true);
+      }).finally(() => {
+        if (accessDeadline) clearTimeout(accessDeadline);
+        revalidating = false;
+      });
+    }, REVALIDATION_MS);
+    accessTimer.unref();
+    socket.once('disconnect', () => {
+      clearTimeout(expiryTimer);
+      clearInterval(accessTimer);
+      if (accessDeadline) clearTimeout(accessDeadline);
+    });
 
     this.logger.debug(
       `Socket authenticated: user=${user.id} tenant=${ctx.tenantId ?? 'none'} role=${ctx.tenantRole ?? 'none'} kds=${socket.data.kdsEffective ?? 'unknown'}`,
     );
+  }
+
+  private async revalidateSubscriptions(socket: AuthenticatedSocket) {
+    const ctx = socket.data.tenantContext;
+    if (!ctx?.userId) { socket.disconnect(true); return; }
+    const user = await this.prisma.user.findUnique({
+      where: { id: ctx.userId }, select: { status: true },
+    });
+    if (user?.status !== 'ACTIVE') { socket.disconnect(true); return; }
+    if (!ctx.tenantId) return;
+    const membership = await this.prisma.tenantMembership.findFirst({
+      where: { tenantId: ctx.tenantId, userId: ctx.userId, status: 'ACTIVE',
+        tenant: { status: 'ACTIVE' }, user: { status: 'ACTIVE' } },
+      select: { role: true, branchAssignments: {
+        where: { tenantId: ctx.tenantId, branch: { tenantId: ctx.tenantId, isActive: true } },
+        select: { branchId: true },
+      } },
+    });
+    if (!membership) { socket.disconnect(true); return; }
+    ctx.tenantRole = membership.role as TenantContext['tenantRole'];
+    ctx.branchIds = membership.branchAssignments.map((assignment) => assignment.branchId);
+    const handlers: Record<string, string> = {
+      branch: 'handleJoinBranch', station: 'handleJoinStation', expo: 'handleJoinExpo',
+      service: 'handleJoinService', waiter: 'handleJoinWaiter',
+    };
+    const branchAccess = new Map<string, boolean>();
+    let removed = false;
+    for (const room of [...socket.rooms]) {
+      if (room === socket.id) continue;
+      const [kind, branchId, detail, ...extra] = room.split(':');
+      const handler = handlers[kind];
+      let allowed = Boolean(handler && branchId && extra.length === 0
+        && KDS_ROOM_ROLES[handler]?.includes(membership.role));
+      if (allowed && !branchAccess.has(branchId)) {
+        const branch = await this.prisma.branch.findFirst({
+          where: { id: branchId, tenantId: ctx.tenantId, isActive: true }, select: { id: true },
+        });
+        const assigned = membership.role === 'OWNER' || ctx.branchIds.includes(branchId);
+        const feature = branch && assigned
+          ? await this.featureResolver.resolve(ctx.tenantId, FeatureKey.KDS, branchId) : null;
+        branchAccess.set(branchId, Boolean(branch && assigned && feature?.effective));
+      }
+      allowed = allowed && branchAccess.get(branchId) === true;
+      if (allowed && kind === 'station') {
+        const station = detail ? await this.prisma.kitchenStation.findFirst({
+          where: { id: detail, tenantId: ctx.tenantId, branchId, isActive: true,
+            kitchen: { tenantId: ctx.tenantId, branchId, isActive: true } }, select: { id: true },
+        }) : null;
+        allowed = Boolean(station);
+      } else if (allowed && kind === 'waiter') {
+        allowed = Boolean(detail && (detail === ctx.userId || ['OWNER', 'MANAGER'].includes(membership.role)));
+      } else if (allowed && detail) {
+        allowed = false;
+      }
+      if (!allowed) { await socket.leave(room); removed = true; }
+    }
+    if (removed) socket.emit('exception', { message: 'Live access changed; select a permitted branch or reconnect' });
   }
 
   private extractToken(socket: AuthenticatedSocket): string | undefined {

@@ -186,7 +186,7 @@ export class PaymentsController {
 
   @Post('payments/:paymentId/confirm-cash')
   @HttpCode(HttpStatus.OK)
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
+  @Roles(TenantRole.OWNER, TenantRole.CASHIER)
   @ApiOperation({ summary: 'Confirm cash payment and approve order' })
   async confirmCashPayment(
     @Req() req: Request,

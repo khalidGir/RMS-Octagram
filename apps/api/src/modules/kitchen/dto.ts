@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsBoolean, Min, Max, Length, IsIn } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsString, IsNotEmpty, IsOptional, IsInt, IsBoolean, IsArray, ArrayNotEmpty, ArrayUnique, Min, Max, Length, IsIn } from 'class-validator';
 
 // ─── Kitchen Stations ──────────────────────
 
@@ -63,6 +64,7 @@ export class TicketQueryDto {
 
   @ApiPropertyOptional({ description: 'Max results (default 50, max 100)', default: 50 })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
@@ -261,6 +263,130 @@ export class UpsertFulfillmentPolicyDto {
   @IsOptional()
   @IsBoolean()
   autoCompleteKitchenTicketOnCollected?: boolean;
+}
+
+// ─── Expo Workflow ─────────────────────
+
+export class ExpoOrdersQueryDto {
+  @ApiPropertyOptional({ description: 'Filter by updated-after timestamp' })
+  @IsOptional()
+  @IsString()
+  updatedAfter?: string;
+
+  @ApiPropertyOptional({ description: 'Max results', default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ description: 'Pagination cursor' })
+  @IsOptional()
+  @IsString()
+  after?: string;
+}
+
+export class CollectOrderDto {
+  @ApiProperty({ description: 'Expected order version for optimistic concurrency' })
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class ReleaseExpoDto {
+  @ApiProperty({ description: 'Expected order version for optimistic concurrency' })
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class RecallExpoDto {
+  @ApiProperty({ description: 'Reason for recalling from expo' })
+  @IsString()
+  @IsNotEmpty()
+  @Length(1, 500)
+  reason!: string;
+
+  @ApiProperty({ description: 'Expected order version for optimistic concurrency' })
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+// ─── Waiter Fulfillment ───────────────
+
+export class AssignWaiterDto {
+  @ApiProperty({ description: 'User ID of the waiter to assign' })
+  @IsString()
+  @IsNotEmpty()
+  waiterUserId!: string;
+}
+
+export class ClaimOrderDto {
+  @ApiPropertyOptional({ description: 'Idempotency key for retryable claims' })
+  @IsOptional()
+  @IsString()
+  idempotencyKey?: string;
+}
+
+export class ServeOrderDto {
+  @ApiProperty({ description: 'Expected order version for optimistic concurrency' })
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+
+  @ApiPropertyOptional({ description: 'Optional reason for serve' })
+  @IsOptional()
+  @IsString()
+  @Length(1, 500)
+  reason?: string;
+}
+
+export class ServeLinesDto {
+  @ApiProperty({ description: 'Ticket line IDs to mark as served', type: [String] })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @IsNotEmpty({ each: true })
+  lineIds!: string[];
+
+  @ApiProperty({ description: 'Expected order version for optimistic concurrency' })
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class ServiceBoardQueryDto {
+  @ApiPropertyOptional({ description: 'Scope: mine, unassigned, or all', default: 'mine', enum: ['mine', 'unassigned', 'all'] })
+  @IsOptional()
+  @IsString()
+  @IsIn(['mine', 'unassigned', 'all'], { message: 'scope must be mine, unassigned, or all' })
+  scope?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by fulfillment status' })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by updated-after timestamp' })
+  @IsOptional()
+  @IsString()
+  updatedAfter?: string;
+
+  @ApiPropertyOptional({ description: 'Max results (default 50, max 100)', default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ description: 'Pagination cursor (order ID)' })
+  @IsOptional()
+  @IsString()
+  after?: string;
 }
 
 // ─── KDS Device Management ─────────────

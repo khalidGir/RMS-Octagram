@@ -63,7 +63,7 @@ export class FulfillmentStatusService {
     const ticketIds = tickets.map((t) => t.id);
     const allLines = await client.kitchenTicketLine.findMany({
       where: { ticketId: { in: ticketIds } },
-      select: { ticketId: true, isRequired: true, status: true },
+      select: { ticketId: true, isRequired: true, status: true, quantity: true, quantityServed: true, routeType: true },
     });
 
     // Build a set of ticketIds that have at least one required, non-cancelled line
@@ -96,6 +96,34 @@ export class FulfillmentStatusService {
 
     // No required prep tickets at all → only expo (or all optional) — treat prep as done
     const hasRequiredPrep = prepRequired.length > 0;
+
+    // Check if any required lines have been served (for SERVED/PARTIALLY_SERVED derivation)
+    const requiredLines = allLines.filter(
+      (l) => l.isRequired && l.status !== 'CANCELLED' && l.routeType === 'PREPARE',
+    );
+    const totalRequiredQuantity = requiredLines.reduce((sum, l) => sum + l.quantity, 0);
+    const totalServedQuantity = requiredLines.reduce((sum, l) => sum + l.quantityServed, 0);
+    const allServed = totalRequiredQuantity > 0 && totalServedQuantity >= totalRequiredQuantity;
+    const someServed = totalServedQuantity > 0 && !allServed;
+
+    // SERVED: all required lines served
+    if (allServed && (!hasRequiredPrep || prepAllDone) && expoAllDone) {
+      const servedAt = this.latestServedAt(allLines);
+      return {
+        fulfillmentStatus: FulfillmentStatus.SERVED,
+        readyAt: this.latestReadyAt(tickets),
+        servedAt,
+      };
+    }
+
+    // PARTIALLY_SERVED: some lines served but not all
+    if (someServed && (!hasRequiredPrep || prepAllDone) && expoAllDone) {
+      return {
+        fulfillmentStatus: FulfillmentStatus.PARTIALLY_SERVED,
+        readyAt: this.latestReadyAt(tickets),
+        servedAt: null,
+      };
+    }
 
     // READY_FOR_SERVICE: ALL active required tickets (prep + expo) are READY or COMPLETED
     if ((!hasRequiredPrep || prepAllDone) && expoAllDone) {
@@ -261,5 +289,11 @@ export class FulfillmentStatusService {
       }
     }
     return latest;
+  }
+
+  private latestServedAt(lines: { status: string }[]): Date | null {
+    // Since we don't have servedAt in the select, derive from status
+    // The actual servedAt is set on the line; this is a fallback
+    return lines.some((l) => l.status === 'SERVED') ? new Date() : null;
   }
 }

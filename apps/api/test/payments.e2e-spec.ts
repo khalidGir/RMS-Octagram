@@ -792,7 +792,7 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
 
     it('staff cannot access payment detail from another tenant', async () => {
       const res = await request(app.getHttpServer()).get(`/api/v1/branches/${branchId}/payments/${paymentId}`).set('Authorization', `Bearer ${otherToken}`).set('x-tenant-id', otherTenantId);
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(403);
     });
   });
 
@@ -813,14 +813,16 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       variantId = variant.id;
       await prisma.branchMenuItem.create({ data: { branchId, menuItemId: item.id, tenantId, isAvailable: true } });
 
-      // Create kitchen station
-      const stationRes = await request(app.getHttpServer())
-        .post(`/api/v1/branches/${branchId}/kitchen-stations`)
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .set('x-tenant-id', tenantId)
-        .send({ name: 'Grill', displayOrder: 0 });
-      expect(stationRes.status).toBe(201);
-      stationId = stationRes.body.data.id;
+      // Create kitchen and station (station must belong to a kitchen for routing)
+      const kitchen = await prisma.kitchen.create({
+        data: { tenantId, branchId, name: 'Main Kitchen', isActive: true, collectionLabel: 'Counter' },
+      });
+
+      // Create kitchen station directly with kitchenId (API doesn't expose kitchenId param)
+      const station = await prisma.kitchenStation.create({
+        data: { tenantId, branchId, kitchenId: kitchen.id, name: 'Grill', displayOrder: 0, isExpo: false },
+      });
+      stationId = station.id;
 
       // Assign menu item to station
       const assignRes = await request(app.getHttpServer())
@@ -946,7 +948,14 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
     });
 
     it('kitchen tickets were created for the confirmed order', async () => {
-      await outboxProcessor.poll(true);
+      // Poll multiple times to drain all pending events (batch size is 10)
+      for (let i = 0; i < 10; i++) {
+        await outboxProcessor.poll(true);
+        const check = await prisma.outboxEvent.findFirst({
+          where: { tenantId, aggregateId: orderId, eventType: 'order.confirmed' },
+        });
+        if (check?.publishedAt) break;
+      }
 
       const publishedEvent = await prisma.outboxEvent.findFirst({
         where: { tenantId, aggregateId: orderId, eventType: 'order.confirmed' },
@@ -1019,13 +1028,13 @@ describe('Phase 4A — Manual Transfer Payment Flow (e2e)', () => {
       expect(res.body.data.status).toBe('COMPLETED');
     });
 
-    it('order becomes READY when all tickets completed', async () => {
+    it('order fulfillment becomes READY_FOR_SERVICE when all tickets completed', async () => {
       const res = await request(app.getHttpServer())
         .get(`/api/v1/orders/${orderId}`)
         .set('Authorization', `Bearer ${ownerToken}`)
         .set('x-tenant-id', tenantId);
       expect(res.status).toBe(200);
-      expect(res.body.data.status).toBe('READY');
+      expect(res.body.data.fulfillmentStatus).toBe('READY_FOR_SERVICE');
     });
 
     it('reject payment with reason', async () => {

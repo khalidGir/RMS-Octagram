@@ -5,6 +5,14 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FeatureResolver } from '../features/feature-resolver.service';
 import { FeatureKey } from '@rms/contracts';
 
+export const KDS_ROOM_ROLES: Record<string, string[]> = {
+  handleJoinBranch: ['OWNER', 'MANAGER', 'CASHIER', 'KITCHEN_STAFF', 'WAITER'],
+  handleJoinStation: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'],
+  handleJoinExpo: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'],
+  handleJoinService: ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'],
+  handleJoinWaiter: ['OWNER', 'MANAGER', 'WAITER'],
+};
+
 /**
  * WebSocket guard that authorizes room joins.
  * Must be used AFTER WsJwtAdapter has authenticated the socket.
@@ -57,14 +65,7 @@ export class WsAuthGuard implements CanActivate {
       } },
     });
     if (!membership) return false;
-    const roomRoles: Record<string, string[]> = {
-      handleJoinBranch: ['OWNER', 'MANAGER', 'CASHIER', 'KITCHEN_STAFF', 'WAITER'],
-      handleJoinStation: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'],
-      handleJoinExpo: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'],
-      handleJoinService: ['OWNER', 'MANAGER', 'CASHIER', 'WAITER'],
-      handleJoinWaiter: ['OWNER', 'MANAGER', 'WAITER'],
-    };
-    if (!roomRoles[context.getHandler().name]?.includes(membership.role)) return false;
+    if (!KDS_ROOM_ROLES[context.getHandler().name]?.includes(membership.role)) return false;
     const branch = await this.prisma.branch.findFirst({
       where: { id: branchId, tenantId: ctx.tenantId, isActive: true }, select: { id: true },
     });

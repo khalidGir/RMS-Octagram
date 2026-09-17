@@ -1,7 +1,15 @@
 import { PrismaClient } from '@prisma/client';
+import { FeatureKey } from '@rms/contracts';
+import { createHash } from 'node:crypto';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
+
+// Stable IDs are namespaced to the demo tenant; reruns never duplicate fixtures.
+function demoId(key: string): string {
+  const hex = createHash('sha256').update(`rms-demo-coffee-house:${key}`).digest('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 
 async function main() {
   // Safety check: refuse to run against production
@@ -186,8 +194,21 @@ async function main() {
   console.log(`Manager: ${manager.email} (manager123) — assigned to both branches`);
 
   // 9. Feature defaults
-  const features = ['KDS', 'HOLD_RELEASE', 'RESERVATIONS', 'PROMOS', 'INVENTORY', 'EXPENSES', 'ADVANCE_ORDERS'];
+  // Gateway remains disabled: there is no integrated provider in the MVP.
+  // Preserve existing operator choices; only create missing catalog settings.
+  const features = Object.values(FeatureKey);
   for (const key of features) {
+    const enabled = key !== FeatureKey.PAYMENT_GATEWAY;
+    await prisma.tenantEntitlement.upsert({
+      where: { tenantId_featureKey: { tenantId: tenant.id, featureKey: key } },
+      update: {},
+      create: {
+        tenantId: tenant.id,
+        featureKey: key,
+        status: enabled ? 'ENABLED' : 'DISABLED',
+        updatedByUserId: superAdmin.id,
+      },
+    });
     const existing = await prisma.featureSetting.findFirst({
       where: { tenantId: tenant.id, branchId: null, featureKey: key },
     });
@@ -197,14 +218,12 @@ async function main() {
           tenantId: tenant.id,
           branchId: null,
           featureKey: key,
-          enabled: true,
+          enabled,
           updatedByUserId: owner.id,
         },
       });
     }
   }
-
-  console.log('Seed complete.');
 
   // ─── Multi-Kitchen Seed (Phase MK-1) ─────────────────────
 
@@ -286,8 +305,10 @@ async function main() {
   console.log(`Kitchens: ${mainKitchen.name}, ${barKitchen.name}, ${bakeryKitchen.name}`);
 
   // 12. Stations
-  const grillStation = await prisma.kitchenStation.create({
-    data: {
+  const grillStation = await prisma.kitchenStation.upsert({
+    where: { branchId_code: { branchId: branchMain.id, code: 'GRILL' } },
+    update: {},
+    create: {
       tenantId: tenant.id,
       branchId: branchMain.id,
       kitchenId: mainKitchen.id,
@@ -298,8 +319,10 @@ async function main() {
     },
   });
 
-  const hotLineStation = await prisma.kitchenStation.create({
-    data: {
+  const hotLineStation = await prisma.kitchenStation.upsert({
+    where: { branchId_code: { branchId: branchMain.id, code: 'HOT' } },
+    update: {},
+    create: {
       tenantId: tenant.id,
       branchId: branchMain.id,
       kitchenId: mainKitchen.id,
@@ -310,8 +333,10 @@ async function main() {
     },
   });
 
-  const drinksStation = await prisma.kitchenStation.create({
-    data: {
+  const drinksStation = await prisma.kitchenStation.upsert({
+    where: { branchId_code: { branchId: branchMain.id, code: 'DRINKS' } },
+    update: {},
+    create: {
       tenantId: tenant.id,
       branchId: branchMain.id,
       kitchenId: barKitchen.id,
@@ -322,8 +347,10 @@ async function main() {
     },
   });
 
-  const dessertStation = await prisma.kitchenStation.create({
-    data: {
+  const dessertStation = await prisma.kitchenStation.upsert({
+    where: { branchId_code: { branchId: branchMain.id, code: 'DESSERT' } },
+    update: {},
+    create: {
       tenantId: tenant.id,
       branchId: branchMain.id,
       kitchenId: bakeryKitchen.id,
@@ -337,7 +364,7 @@ async function main() {
   console.log(`Stations: ${grillStation.name}, ${hotLineStation.name}, ${drinksStation.name}, ${dessertStation.name}`);
 
   // 13. Kitchens for Downtown Branch (every branch needs at least one)
-  await prisma.kitchen.upsert({
+  const downtownKitchen = await prisma.kitchen.upsert({
     where: { branchId_name: { branchId: branchDowntown.id, name: 'Main Kitchen' } },
     update: {},
     create: {
@@ -378,6 +405,68 @@ async function main() {
   });
 
   console.log('Fulfillment policy created for all branches');
+
+  // 15. Branch-complete menus and PREPARE routes for realistic local orders.
+  const downtownStation = await prisma.kitchenStation.upsert({
+    where: { branchId_code: { branchId: branchDowntown.id, code: 'HOT' } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      branchId: branchDowntown.id,
+      kitchenId: downtownKitchen.id,
+      name: 'Hot Line',
+      code: 'HOT',
+      defaultPrepMinutes: 12,
+    },
+  });
+  const menu = [
+    { key: 'tibs', name: 'Special Tibs', category: 'Main dishes', price: 40000n, station: grillStation },
+    { key: 'shiro', name: 'Shiro Wot', category: 'Main dishes', price: 29000n, station: hotLineStation },
+    { key: 'beyaynetu', name: 'Beyaynetu', category: 'Main dishes', price: 35000n, station: hotLineStation },
+    { key: 'firfir', name: 'Special Firfir', category: 'Breakfast', price: 26000n, station: hotLineStation },
+    { key: 'buna', name: 'Buna Ceremony', category: 'Drinks', price: 15000n, station: drinksStation },
+    { key: 'baklava', name: 'House Baklava', category: 'Desserts', price: 12000n, station: dessertStation },
+  ];
+  for (const dish of menu) {
+    const categoryId = demoId(`category:${dish.category}`);
+    await prisma.menuCategory.upsert({
+      where: { id: categoryId },
+      update: {},
+      create: { id: categoryId, tenantId: tenant.id, name: dish.category },
+    });
+    const itemId = demoId(`item:${dish.key}`);
+    await prisma.menuItem.upsert({
+      where: { id: itemId },
+      update: {},
+      create: { id: itemId, tenantId: tenant.id, categoryId, name: dish.name, sku: `DEMO-${dish.key.toUpperCase()}` },
+    });
+    await prisma.menuItemVariant.upsert({
+      where: { id: demoId(`variant:${dish.key}`) },
+      update: {},
+      create: {
+        id: demoId(`variant:${dish.key}`), tenantId: tenant.id, menuItemId: itemId,
+        name: 'Regular', basePriceMinor: dish.price, currency: 'ETB', isDefault: true,
+      },
+    });
+    for (const [branch, station] of [[branchMain, dish.station], [branchDowntown, downtownStation]] as const) {
+      await prisma.branchMenuItem.upsert({
+        where: { branchId_menuItemId: { branchId: branch.id, menuItemId: itemId } },
+        update: {},
+        create: { tenantId: tenant.id, branchId: branch.id, menuItemId: itemId, isAvailable: true },
+      });
+      await prisma.menuItemStation.upsert({
+        where: { branchId_menuItemId_stationId_routeType: {
+          branchId: branch.id, menuItemId: itemId, stationId: station.id, routeType: 'PREPARE',
+        } },
+        update: {},
+        create: {
+          tenantId: tenant.id, branchId: branch.id, menuItemId: itemId,
+          stationId: station.id, routeType: 'PREPARE', isRequired: true,
+        },
+      });
+    }
+  }
+  console.log('Menus: 6 items with ETB variants and required preparation routes in both branches.');
   console.log('Multi-kitchen seed complete.');
 }
 

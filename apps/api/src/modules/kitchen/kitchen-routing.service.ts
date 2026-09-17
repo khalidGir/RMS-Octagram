@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PrismaService } from '../prisma/prisma.service';
 import { KITCHEN_ROUTING_ERRORS } from '@rms/contracts';
@@ -36,7 +36,7 @@ export interface StationRouteGroup {
 
 @Injectable()
 export class KitchenRoutingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   /**
    * Resolve all order lines to their station routes.

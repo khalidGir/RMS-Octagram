@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import { validateEnv } from '@rms/config';
 import { AppThrottlerGuard } from './modules/rate-limit/app-throttler.guard';
 import { WsJwtAdapter } from './modules/kitchen/ws-jwt.adapter';
+import { isAllowedOrigin } from './modules/auth/allowed-origin';
 
 async function bootstrap() {
   validateEnv(process.env);
@@ -56,16 +57,7 @@ async function bootstrap() {
         return;
       }
 
-      const allowed = allowedOrigins.some((o) => {
-        try {
-          const allowedUrl = new URL(o);
-          const originUrl = new URL(origin);
-          return originUrl.hostname === allowedUrl.hostname ||
-            originUrl.hostname.endsWith('.' + allowedUrl.hostname);
-        } catch {
-          return origin === o;
-        }
-      });
+      const allowed = isAllowedOrigin(origin, allowedOrigins);
 
       if (allowed) {
         callback(null, true);

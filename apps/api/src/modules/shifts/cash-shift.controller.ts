@@ -3,7 +3,8 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { IsString, IsInt, Min, MaxLength, IsOptional, MinLength, registerDecorator } from 'class-validator';
 import type { ValidationOptions } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Roles } from '../auth/types';
+import { BranchScoped, Roles } from '../auth/types';
+import { BranchScopeGuard } from '../auth/branch-scope.guard';
 import type { TenantContext } from '../auth/types';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { TenantRole } from '@rms/contracts';
@@ -72,13 +73,14 @@ class CloseShiftDto {
 
 @ApiTags('Cash Shifts')
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, BranchScopeGuard)
+@BranchScoped()
 export class CashShiftController {
   constructor(@Inject(CashShiftService) private readonly shiftService: CashShiftService) {}
 
   @Post('branches/:branchId/shifts/open')
   @HttpCode(HttpStatus.CREATED)
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
+  @Roles(TenantRole.OWNER, TenantRole.CASHIER)
   @ApiOperation({ summary: 'Open a new cash shift' })
   async openShift(
     @Req() req: Request,
@@ -103,7 +105,7 @@ export class CashShiftController {
   }
 
   @Get('branches/:branchId/shifts/current')
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
+  @Roles(TenantRole.OWNER, TenantRole.CASHIER)
   @ApiOperation({ summary: 'Get current active shift for authenticated cashier' })
   async getCurrentShift(
     @Req() req: Request,
@@ -120,7 +122,7 @@ export class CashShiftController {
 
   @Post('branches/:branchId/shifts/:shiftId/close')
   @HttpCode(HttpStatus.OK)
-  @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER)
+  @Roles(TenantRole.OWNER, TenantRole.CASHIER)
   @ApiOperation({ summary: 'Close a cash shift (creates immutable report)' })
   async closeShift(
     @Req() req: Request,
@@ -142,6 +144,7 @@ export class CashShiftController {
       varianceReason: dto.varianceReason,
       expectedVersion: dto.expectedVersion,
       actorUserId: ctx.userId,
+      callerRole: ctx.tenantRole,
     });
     return result;
   }
@@ -159,6 +162,7 @@ export class CashShiftController {
       tenantId: ctx.tenantId!,
       branchId,
       cashShiftId: shiftId,
+      cashierUserId: ctx.tenantRole === TenantRole.CASHIER ? ctx.userId : undefined,
     });
     return { data: report };
   }

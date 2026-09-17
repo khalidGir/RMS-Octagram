@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Req, UseGuards, HttpCode, HttpStatus, Inject } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -14,7 +14,7 @@ import { RegisterKdsDeviceDto, UpdateKdsDeviceDto, AssignStationToDeviceDto } fr
 @UseGuards(JwtAuthGuard, RolesGuard, BranchScopeGuard)
 @Controller('branches/:branchId/kds-devices')
 export class KdsDevicesController {
-  constructor(private readonly devicesService: KdsDevicesService) {}
+  constructor(@Inject(KdsDevicesService) private readonly devicesService: KdsDevicesService) {}
 
   @Get()
   @BranchScoped()
