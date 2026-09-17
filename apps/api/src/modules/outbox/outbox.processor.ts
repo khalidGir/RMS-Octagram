@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { KitchenTicketsService } from '../kitchen/kitchen-tickets.service';
@@ -14,6 +14,11 @@ const DRAIN_TIMEOUT_MS = 30_000;
 const INSTANCE_ID = randomBytes(8).toString('hex');
 
 type EventHandler = (event: OutboxEventRecord) => Promise<void>;
+
+export interface OutboxScope {
+  tenantId: string;
+  branchIds?: string[];
+}
 
 // Raw query result type — includes new fields not yet in Prisma client
 interface OutboxEventRecord {
@@ -108,28 +113,28 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
     if (!force && this.draining) return;
 
     try {
-      // Atomic claim with FOR UPDATE SKIP LOCKED
+      // Select and claim in one statement: a standalone SELECT would release
+      // its row locks before a subsequent UPDATE and allow duplicate claims.
       const events = await this.prisma.$queryRaw<OutboxEventRecord[]>`
-        SELECT *
-        FROM "OutboxEvent"
-        WHERE "publishedAt" IS NULL
-          AND "attemptCount" < ${MAX_ATTEMPTS}
-          AND ("status" IS NULL OR "status" = 'PENDING' OR "status" = 'RETRY')
-          AND ("nextRetryAt" IS NULL OR "nextRetryAt" <= NOW())
-        ORDER BY "occurredAt" ASC
-        LIMIT ${BATCH_SIZE}
-        FOR UPDATE SKIP LOCKED
+        WITH candidates AS (
+          SELECT "id"
+          FROM "OutboxEvent"
+          WHERE "publishedAt" IS NULL
+            AND "attemptCount" < ${MAX_ATTEMPTS}
+            AND ("status" IS NULL OR "status" = 'PENDING' OR "status" = 'RETRY')
+            AND ("nextRetryAt" IS NULL OR "nextRetryAt" <= NOW())
+          ORDER BY "occurredAt" ASC, "id" ASC
+          LIMIT ${BATCH_SIZE}
+          FOR UPDATE SKIP LOCKED
+        )
+        UPDATE "OutboxEvent" AS event
+        SET "status" = 'PROCESSING', "lockedBy" = ${INSTANCE_ID}, "lockedAt" = NOW()
+        FROM candidates
+        WHERE event."id" = candidates."id"
+        RETURNING event.*
       `;
 
       if (events.length === 0) return;
-
-      // Mark events as claimed
-      const eventIds = events.map((e) => e.id);
-      await this.prisma.$executeRaw`
-        UPDATE "OutboxEvent"
-        SET "status" = 'PROCESSING', "lockedBy" = ${INSTANCE_ID}, "lockedAt" = NOW()
-        WHERE "id" = ANY(${eventIds}::text[])
-      `;
 
       // Process each event
       for (const event of events) {
@@ -274,10 +279,12 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
   /**
    * Get outbox statistics for admin inspection.
    */
-  async getStats(): Promise<Record<string, number>> {
+  async getStats(scope: OutboxScope): Promise<Record<string, number>> {
     const stats = await this.prisma.$queryRaw<Array<{ status: string; count: bigint }>>`
       SELECT COALESCE("status", 'PENDING') as "status", COUNT(*) as "count"
       FROM "OutboxEvent"
+      WHERE "tenantId" = ${scope.tenantId}
+        AND (${scope.branchIds === undefined} OR "branchId" = ANY(${scope.branchIds ?? []}::text[]))
       GROUP BY "status"
     `;
 
@@ -291,10 +298,12 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
   /**
    * Get dead-letter events for admin inspection.
    */
-  async getDeadLetterEvents(limit = 50): Promise<unknown[]> {
+  async getDeadLetterEvents(scope: OutboxScope, limit = 50): Promise<unknown[]> {
     return this.prisma.$queryRaw`
       SELECT * FROM "OutboxEvent"
       WHERE "status" = 'DEAD_LETTER'
+        AND "tenantId" = ${scope.tenantId}
+        AND (${scope.branchIds === undefined} OR "branchId" = ANY(${scope.branchIds ?? []}::text[]))
       ORDER BY "occurredAt" DESC
       LIMIT ${limit}
     `;
@@ -303,50 +312,37 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
   /**
    * Manually retry a dead-letter event (admin action).
    */
-  async retryDeadLetter(eventId: string, actorUserId: string): Promise<void> {
-    const events = await this.prisma.$queryRaw<Array<{ id: string; tenantId: string | null; branchId: string | null; status: string; eventType: string; attemptCount: number; lastError: string | null }>>`
-      SELECT "id", "tenantId", "branchId", "status", "eventType", "attemptCount", "lastError"
-      FROM "OutboxEvent"
-      WHERE "id" = ${eventId}
-      LIMIT 1
-    `;
-
-    const event = events[0];
-    if (!event) {
-      throw new Error(`Event ${eventId} not found`);
-    }
-
-    if (event.status !== 'DEAD_LETTER') {
-      throw new Error(`Event ${eventId} is not in DEAD_LETTER state (current: ${event.status})`);
-    }
-
-    await this.prisma.$executeRaw`
-      UPDATE "OutboxEvent"
-      SET "status" = 'RETRY',
-          "attemptCount" = 0,
-          "lastError" = NULL,
-          "nextRetryAt" = NULL,
-          "lockedBy" = NULL,
-          "lockedAt" = NULL
-      WHERE "id" = ${eventId}
-    `;
-
-    await this.prisma.auditLog.create({
-      data: {
-        actorUserId,
-        tenantId: event.tenantId,
-        branchId: event.branchId,
-        action: 'OUTBOX_RETRY',
-        entityType: 'OutboxEvent',
-        entityId: eventId,
-        afterJson: {
-          eventType: event.eventType,
-          attemptCount: event.attemptCount,
-          lastError: event.lastError,
+  async retryDeadLetter(scope: OutboxScope, eventId: string, actorUserId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const where = {
+        id: eventId, tenantId: scope.tenantId,
+        ...(scope.branchIds === undefined ? {} : { branchId: { in: scope.branchIds } }),
+      };
+      const event = await tx.outboxEvent.findFirst({ where });
+      if (!event) throw new NotFoundException('Outbox event not found');
+      if (event.status !== 'DEAD_LETTER') throw new ConflictException('Event is not in DEAD_LETTER state');
+      const result = await tx.outboxEvent.updateMany({
+        where: { ...where, status: 'DEAD_LETTER' },
+        data: { status: 'RETRY', attemptCount: 0, lastError: null, nextRetryAt: null, lockedBy: null, lockedAt: null },
+      });
+      if (result.count !== 1) throw new ConflictException('Event was already retried');
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId: event.tenantId,
+          branchId: event.branchId,
+          action: 'OUTBOX_RETRY',
+          entityType: 'OutboxEvent',
+          entityId: eventId,
+          afterJson: {
+            eventType: event.eventType,
+            attemptCount: event.attemptCount,
+            lastError: event.lastError,
+          },
         },
-      },
+      });
     });
 
-    this.logger.log(`Event ${eventId} (${event.eventType}) queued for retry by ${actorUserId}`);
+    this.logger.log(`Event ${eventId} queued for retry by ${actorUserId}`);
   }
 }

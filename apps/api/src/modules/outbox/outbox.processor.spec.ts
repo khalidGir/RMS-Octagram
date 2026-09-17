@@ -40,7 +40,11 @@ describe('OutboxProcessor', () => {
     prisma = createMockPrisma();
     kitchenTickets = createMockKitchenTickets();
     featureResolver = createMockFeatureResolver();
-    processor = new OutboxProcessor(prisma as any, kitchenTickets as any, featureResolver as any);
+    processor = new OutboxProcessor(
+      prisma as unknown as ConstructorParameters<typeof OutboxProcessor>[0],
+      kitchenTickets as unknown as ConstructorParameters<typeof OutboxProcessor>[1],
+      featureResolver as unknown as ConstructorParameters<typeof OutboxProcessor>[2],
+    );
   });
 
   afterEach(() => {
@@ -124,7 +128,7 @@ describe('OutboxProcessor', () => {
 
     await processor.poll();
 
-    // Should have called $executeRaw for claiming and for failure update
+    // Claim is part of $queryRaw; the failure update must remain unpublished.
     expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 
@@ -215,6 +219,19 @@ describe('OutboxProcessor', () => {
     await processor.poll();
 
     expect(kitchenTickets.createTicketsForOrder).not.toHaveBeenCalled();
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('selects and claims work in one SQL statement rather than a separate update', async () => {
+    await processor.poll();
+    const [sql] = prisma.$queryRaw.mock.calls[0];
+    const statement = (sql as TemplateStringsArray).join('?');
+    expect(statement).toContain('WITH candidates AS');
+    expect(statement).toContain('FOR UPDATE SKIP LOCKED');
+    expect(statement).toContain('UPDATE "OutboxEvent" AS event');
+    expect(statement).toContain('RETURNING event.*');
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
   });
 
   it('skips kitchen ticket creation when KDS is disabled', async () => {
