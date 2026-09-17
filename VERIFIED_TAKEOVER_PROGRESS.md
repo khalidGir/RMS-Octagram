@@ -84,3 +84,12 @@ No deployment, full-browser acceptance, complete quality gate, or production rea
 - Real DB diagnostic test verifies foreign-tenant/unassigned-branch denial, scoped counts/lists, and concurrent retry: exactly one success, one conflict, one audit. **2/2 integration tests passed**.
 - Outbox processor/controller units: **13/13 passed**. Targeted outbox/test lint and API typecheck passed. Latest API build is running and has not yet been counted as successful.
 - Required delivery handlers and lease recovery are still absent. This work proves claim/scoping behavior, not complete event transport, full HTTP route security, or production readiness.
+
+### Lease recovery follow-up
+
+- The preceding API build completed successfully. Lease recovery is no longer absent: PROCESSING events with a lease older than 120 seconds (or missing lease time) can be reclaimed atomically, incrementing their recovery count. Exhausted stale claims become DEAD_LETTER.
+- Every batch receives a fresh random claim token. Publish, retry, unknown-type, and dead-letter writes require matching PROCESSING ownership, preventing a stale handler from overwriting a newer claim.
+- In-flight handlers renew leases every 20 seconds; timers are cleared on completion. Shutdown now races its actual drain against a 30-second deadline and exposes the lifecycle promise to Nest.
+- Private-schema PostgreSQL suite: **4/4 passed**, including expired/live/exhausted leases and an old handler finishing after another connection reclaimed the event. Domain side-effect deduplication is a separate requirement; fencing acknowledgments does not provide exactly-once effects.
+- Outbox units: **14/14 passed**, including heartbeat ownership and bounded shutdown under a held handler using fake time. Targeted lint, API typecheck, latest API build, and diff whitespace checks passed.
+- Required event delivery handlers, malformed payload validation, real-time browser reconciliation, and complete lifecycle regression remain open. No production-readiness or full MVP claim.

@@ -226,12 +226,39 @@ describe('OutboxProcessor', () => {
     await processor.poll();
     const [sql] = prisma.$queryRaw.mock.calls[0];
     const statement = (sql as TemplateStringsArray).join('?');
-    expect(statement).toContain('WITH candidates AS');
+    expect(statement).toContain('candidates AS');
     expect(statement).toContain('FOR UPDATE SKIP LOCKED');
     expect(statement).toContain('UPDATE "OutboxEvent" AS event');
     expect(statement).toContain('RETURNING event.*');
     expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
     expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('renews a held claim and bounds shutdown even when its handler is stuck', async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const barrier = new Promise<void>((resolve) => { release = resolve; });
+    kitchenTickets.createTicketsForOrder.mockImplementation(() => barrier);
+    prisma.$queryRaw.mockResolvedValueOnce([{
+      id: 'held-event', tenantId: 't1', branchId: 'b1', eventType: 'order.confirmed',
+      payload: { orderId: 'held-order' }, attemptCount: 0, lockedBy: 'held-claim',
+    }]);
+    const work = processor.poll();
+    try {
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(kitchenTickets.createTicketsForOrder).toHaveBeenCalledTimes(1);
+      const [sql, ...values] = prisma.$executeRaw.mock.calls[0];
+      expect((sql as TemplateStringsArray).join('?')).toContain('SET "lockedAt" = NOW()');
+      expect(values).toEqual(['held-event', 'held-claim']);
+      const stop = processor.stop();
+      await vi.advanceTimersByTimeAsync(30_000);
+      await stop;
+      expect(prisma.$executeRaw.mock.calls.some(([query]) => (query as TemplateStringsArray).join('?').includes("'PUBLISHED'"))).toBe(false);
+    } finally {
+      release();
+      await work;
+      vi.useRealTimers();
+    }
   });
 
   it('skips kitchen ticket creation when KDS is disabled', async () => {

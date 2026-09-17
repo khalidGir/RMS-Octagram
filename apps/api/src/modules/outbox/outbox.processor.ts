@@ -12,6 +12,8 @@ const BATCH_SIZE = 10;
 const MAX_ATTEMPTS = 5;
 const DRAIN_TIMEOUT_MS = 30_000;
 const INSTANCE_ID = randomBytes(8).toString('hex');
+const LEASE_SECONDS = 120;
+const HEARTBEAT_MS = 20_000;
 
 type EventHandler = (event: OutboxEventRecord) => Promise<void>;
 
@@ -47,7 +49,7 @@ interface OutboxEventRecord {
  * - Exponential retry with maximum attempts
  * - Dead-letter state with diagnostic metadata
  * - Recovery after worker/process termination
- * - Idempotent handlers (each handler checks ProcessedEvent before processing)
+ * - At-least-once delivery; domain handlers must deduplicate their effects
  * - Unknown event types are NEVER silently marked published
  * - Admin-only inspection endpoints for debugging
  */
@@ -77,7 +79,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleDestroy() {
-    this.stop();
+    return this.stop();
   }
 
   start() {
@@ -96,10 +98,18 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
       this.pollTimer = null;
     }
 
-    // Wait for active work to complete (with timeout)
-    const deadline = Date.now() + DRAIN_TIMEOUT_MS;
-    while (this.activeWork.length > 0 && Date.now() < deadline) {
-      await Promise.race(this.activeWork);
+    // A deadline checked before an unbounded await is not a timeout. Race the
+    // actual drain against a timer so a stuck handler cannot block shutdown.
+    if (this.activeWork.length > 0) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          Promise.allSettled([...this.activeWork]),
+          new Promise<void>((resolve) => { timer = setTimeout(resolve, DRAIN_TIMEOUT_MS); }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
     }
 
     if (this.activeWork.length > 0) {
@@ -113,22 +123,33 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
     if (!force && this.draining) return;
 
     try {
+      const claimId = `${INSTANCE_ID}:${randomBytes(8).toString('hex')}`;
       // Select and claim in one statement: a standalone SELECT would release
       // its row locks before a subsequent UPDATE and allow duplicate claims.
       const events = await this.prisma.$queryRaw<OutboxEventRecord[]>`
-        WITH candidates AS (
+        WITH expired_exhausted AS (
+          UPDATE "OutboxEvent"
+          SET "status" = 'DEAD_LETTER', "lastError" = 'Processing lease expired after maximum recovery attempts',
+              "lockedBy" = NULL, "lockedAt" = NULL
+          WHERE "publishedAt" IS NULL AND "status" = 'PROCESSING'
+            AND "attemptCount" >= ${MAX_ATTEMPTS}
+            AND ("lockedAt" IS NULL OR "lockedAt" < NOW() - ${LEASE_SECONDS} * INTERVAL '1 second')
+          RETURNING "id"
+        ), candidates AS (
           SELECT "id"
           FROM "OutboxEvent"
           WHERE "publishedAt" IS NULL
             AND "attemptCount" < ${MAX_ATTEMPTS}
-            AND ("status" IS NULL OR "status" = 'PENDING' OR "status" = 'RETRY')
+            AND ("status" IS NULL OR "status" = 'PENDING' OR "status" = 'RETRY'
+              OR ("status" = 'PROCESSING' AND ("lockedAt" IS NULL OR "lockedAt" < NOW() - ${LEASE_SECONDS} * INTERVAL '1 second')))
             AND ("nextRetryAt" IS NULL OR "nextRetryAt" <= NOW())
           ORDER BY "occurredAt" ASC, "id" ASC
           LIMIT ${BATCH_SIZE}
           FOR UPDATE SKIP LOCKED
         )
         UPDATE "OutboxEvent" AS event
-        SET "status" = 'PROCESSING', "lockedBy" = ${INSTANCE_ID}, "lockedAt" = NOW()
+        SET "attemptCount" = event."attemptCount" + CASE WHEN event."status" = 'PROCESSING' THEN 1 ELSE 0 END,
+            "status" = 'PROCESSING', "lockedBy" = ${claimId}, "lockedAt" = NOW()
         FROM candidates
         WHERE event."id" = candidates."id"
         RETURNING event.*
@@ -155,6 +176,23 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   private async processEvent(event: OutboxEventRecord) {
+    // The random claim token fences all completion/retry writes. A processor
+    // that resumes after another consumer recovers its lease cannot overwrite it.
+    const heartbeat = setInterval(() => {
+      void this.prisma.$executeRaw`
+        UPDATE "OutboxEvent" SET "lockedAt" = NOW()
+        WHERE "id" = ${event.id} AND "status" = 'PROCESSING' AND "lockedBy" = ${event.lockedBy}
+      `.catch((error: unknown) => this.logger.error(`Outbox heartbeat failed for ${event.id}: ${String(error)}`));
+    }, HEARTBEAT_MS);
+    heartbeat.unref();
+    try {
+      await this.processClaimedEvent(event);
+    } finally {
+      clearInterval(heartbeat);
+    }
+  }
+
+  private async processClaimedEvent(event: OutboxEventRecord) {
     const handler = this.handlers.get(event.eventType);
 
     if (!handler) {
@@ -168,7 +206,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
             "lastError" = ${`Unhandled event type: ${event.eventType}`},
             "lockedBy" = NULL,
             "lockedAt" = NULL
-        WHERE "id" = ${event.id}
+        WHERE "id" = ${event.id} AND "status" = 'PROCESSING' AND "lockedBy" = ${event.lockedBy}
       `;
       return;
     }
@@ -190,7 +228,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
               "status" = 'PUBLISHED',
               "lockedBy" = NULL,
               "lockedAt" = NULL
-          WHERE "id" = ${event.id}
+          WHERE "id" = ${event.id} AND "status" = 'PROCESSING' AND "lockedBy" = ${event.lockedBy}
         `;
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -208,7 +246,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
                 "status" = 'DEAD_LETTER',
                 "lockedBy" = NULL,
                 "lockedAt" = NULL
-            WHERE "id" = ${event.id}
+            WHERE "id" = ${event.id} AND "status" = 'PROCESSING' AND "lockedBy" = ${event.lockedBy}
           `;
         } else {
           // Exponential backoff: 2^attemptCount seconds
@@ -226,7 +264,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
                 "lockedBy" = NULL,
                 "lockedAt" = NULL,
                 "nextRetryAt" = ${nextRetryAt}
-            WHERE "id" = ${event.id}
+            WHERE "id" = ${event.id} AND "status" = 'PROCESSING' AND "lockedBy" = ${event.lockedBy}
           `;
         }
       }
