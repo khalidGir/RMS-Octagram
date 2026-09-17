@@ -119,6 +119,10 @@ export class KdsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server?.to(`branch:${branchId}`).emit('ticket:created', ticket);
   }
 
+  broadcastTicketInvalidated(branchId: string, stationId: string, data: Record<string, unknown>) {
+    this.server?.to(`branch:${branchId}`).to(`station:${branchId}:${stationId}`).emit('ticket:invalidated', data);
+  }
+
   /**
    * Broadcast a ticket status change to branch and station rooms.
    */
@@ -136,5 +140,111 @@ export class KdsGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   broadcastOrderConfirmed(branchId: string, order: Record<string, unknown>) {
     this.server?.to(`branch:${branchId}`).emit('order:confirmed', order);
+  }
+
+  /**
+   * Broadcast a service notification to a specific waiter's room.
+   */
+  broadcastServiceNotification(branchId: string, userId: string, notification: Record<string, unknown>) {
+    this.server?.to(`waiter:${branchId}:${userId}`).emit('service:notification', notification);
+  }
+
+  /**
+   * Broadcast to the expo room for a branch.
+   */
+  broadcastToExpo(branchId: string, event: string, data: Record<string, unknown>) {
+    this.server?.to(`branch:${branchId}`).emit(event, data);
+    this.server?.to(`expo:${branchId}`).emit(event, data);
+  }
+
+  /**
+   * Broadcast to the service board room for a branch.
+   */
+  broadcastToServiceBoard(branchId: string, event: string, data: Record<string, unknown>) {
+    this.server?.to(`service:${branchId}`).emit(event, data);
+  }
+
+  /**
+   * Broadcast a fulfillment status change to all relevant rooms.
+   */
+  broadcastFulfillmentChanged(branchId: string, data: Record<string, unknown>) {
+    this.server?.to(`branch:${branchId}`).emit('fulfillment:changed', data);
+    this.server?.to(`service:${branchId}`).emit('fulfillment:changed', data);
+  }
+
+  // ─── Client-side room joins ─────────────
+
+  /**
+   * Client joins the expo room for a branch.
+   */
+  @SubscribeMessage('join:expo')
+  handleJoinExpo(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { branchId: string },
+  ) {
+    const ctx = client.data.tenantContext!;
+    const { branchId } = data;
+
+    if (!branchId) {
+      return { event: 'error', data: { message: 'branchId is required' } };
+    }
+
+    const room = `expo:${branchId}`;
+    void client.join(room);
+    this.logger.debug(
+      `Client ${client.id} (user=${ctx.userId}) joined expo room ${room}`,
+    );
+    return { event: 'joined', data: { room, branchId } };
+  }
+
+  /**
+   * Client joins the service board room for a branch.
+   */
+  @SubscribeMessage('join:service')
+  handleJoinService(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { branchId: string },
+  ) {
+    const ctx = client.data.tenantContext!;
+    const { branchId } = data;
+
+    if (!branchId) {
+      return { event: 'error', data: { message: 'branchId is required' } };
+    }
+
+    const room = `service:${branchId}`;
+    void client.join(room);
+    this.logger.debug(
+      `Client ${client.id} (user=${ctx.userId}) joined service room ${room}`,
+    );
+    return { event: 'joined', data: { room, branchId } };
+  }
+
+  /**
+   * Client joins a waiter-specific room for personal notifications.
+   */
+  @SubscribeMessage('join:waiter')
+  handleJoinWaiter(
+    @ConnectedSocket() client: AuthenticatedSocket,
+    @MessageBody() data: { branchId: string; userId: string },
+  ) {
+    const ctx = client.data.tenantContext!;
+    const { branchId, userId } = data;
+
+    if (!branchId || !userId) {
+      return { event: 'error', data: { message: 'branchId and userId are required' } };
+    }
+
+    // Verify the requesting user matches the userId (or is manager/owner)
+    if (ctx.userId !== userId && ctx.tenantRole !== 'OWNER' && ctx.tenantRole !== 'MANAGER') {
+      return { event: 'error', data: { message: 'Cannot join another user\'s room' } };
+    }
+
+    const room = `waiter:${branchId}:${userId}`;
+    void client.join(room);
+    this.logger.debug(
+      `Client ${client.id} (user=${ctx.userId}) joined waiter room ${room}`,
+    );
+    return { event: 'joined', data: { room, branchId, userId } };
   }
 }

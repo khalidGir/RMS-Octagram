@@ -118,3 +118,52 @@ No deployment, full-browser acceptance, complete quality gate, or production rea
 - Frontend Nest `exception` handling follow-up: **4/4 socket hook tests passed**, targeted lint passed. This is mocked transport evidence, not an actual server denial journey.
 - Added GET `/branches/:branchId/service-notifications`, protected by JWT, tenant role, branch scope, and KDS feature guards. Owner/Manager read scoped branch history; Waiter reads only authenticated recipient notifications. Client query identities cannot override the recipient filter.
 - New notification-controller mapping unit/lint command is active at 37246. Full HTTP role/tenant/branch/entitlement denial and read-recipient integration tests are still required. New module wiring has not yet had a fresh API build.
+
+### Notification HTTP verification follow-up
+
+- Notification mapping unit suite **3/3 passed**, targeted lint passed. Fresh API typecheck and build (91403) completed successfully with controller/module wiring.
+- Added real HTTP tests to the full Expo/waiter suite: Owner/Manager history reads, Waiter authenticated recipient isolation despite spoofed query recipient, anonymous/forbidden-role/cross-tenant/cross-branch denials, and branch feature disable.
+- First expanded gate: **28/29 passed, one failed**. Feature denial returned expected 403; test incorrectly assumed a nested error envelope. Current Nest response has top-level `code`; assertion corrected to that actual contract. Error-envelope standardization remains a separate full-stack requirement.
+- Full 29-test rerun has been started; inspect its actual terminal result before claiming pass. Existing fixture cleanup still swallows errors and clears all unpublished events in this isolated DB at setup; scope-safe strict fixture cleanup remains required and is not treated as solved.
+- Missing durable event handlers are still evidenced by lifecycle logs. Passing HTTP reads do not close reliable notification creation/delivery or WebSocket requirements.
+
+### Strict lifecycle fixture cleanup
+
+- Corrected HTTP assertion rerun: **29/29 passed**, exit 0 (68818). This result still used inherited permissive cleanup.
+- Removed the global unpublished-outbox deletion at setup and now await processor shutdown. Cleanup uses explicit fresh tenant IDs and exact fixture user emails, deletes notifications before referenced tickets, handles cash shifts and auth sessions, and runs in a transaction without swallowing errors. It asserts fixture tenants/users are gone.
+- First strict rerun: **29/29 workflow assertions passed but suite failed** on BranchOrderCounter foreign key during cleanup (27151). Transaction rolled back; no false green claim. Added scoped BranchOrderCounter cleanup. Corrected full suite is running at 94057; result remains unverified.
+- Durable event handlers, full signed-token Socket.IO and live browser journeys, complete MVP gates, and staging remain open.
+
+### Cleanup proof and notification atomicity follow-up
+
+- Corrected strict fixture suite **29/29 passed**, exit 0 (29659), including transaction cleanup and explicit zero remaining fixture tenant/user assertions. Run used `--hookTimeout 120000` after previous terminal run 94057 failed setup's 30-second timeout with zero workflow assertions executed. No test was intentionally skipped.
+- Notification creation now holds a PostgreSQL transaction-scoped dedupe-key advisory lock, then writes the notification and its audit record in the same transaction. Concurrent creators serialize; audit failure propagates for rollback. Unit suite **11/11 passed**; lint command 53336 remains active, and real-DB concurrency proof is newly added but not yet executed to completion.
+- New 30-test full suite includes five simultaneous notification creates, asserting one notification ID, one stored notification, and one audit record. Inspect its terminal output before counting this concurrency behavior as verified. No full MVP or staging completion claim.
+
+- Full follow-up suite **30/30 passed**, exit 0 (96061), including the real PostgreSQL concurrent dedupe/audit assertions and strict fixture cleanup. Advisory-lock query casts PostgreSQL's void result to text for Prisma deserialization. Earlier notification lint completed with 0 errors/4 warnings; removed serializer `any`, unused suppression/import, and test constructor `any`. Latest typecheck/lint for these typing changes is active at 61685. Rollback is unit-tested but still needs explicit real-database fault injection; event creation remains post-order-transaction in some callers and requires durable recovery integration.
+
+### Notification rollback and reference scope verification
+
+- Typecheck/targeted lint command 61685 completed with exit 0 after serializer typing cleanup.
+- Added a real database rollback/retry test: nonexistent audit actor causes AuditLog FK failure after notification insertion; zero notification must persist, and valid-actor retry must create one notification and one audit. Full 31-test suite is active at 92165; not counted as passing yet.
+- Notification creation now checks its order by tenant/branch and optional ticket by tenant/branch/order before insertion. Added two unit denial tests; latest 13-test unit suite is active at 62911. The 31-test run started before this latest scope-validation edit and cannot alone prove its integration behavior.
+- Required durable after-commit event delivery, signed-token Socket.IO/live browser workflows, UI/device gates, and temporary staging remain incomplete.
+
+- Latest scoped-reference notification unit suite **13/13 passed**, exit 0 (62911), including foreign order/ticket denials. Real-DB 31-test result remains pending at 92165; subsequent latest-code integration rerun is still required for the reference-validation addition.
+
+- Rollback/concurrency full lifecycle suite **31/31 passed**, exit 0 (92165). Actual AuditLog FK failure rolled back notification creation and valid retry succeeded. This run loaded before latest reference-validation edit; latest-code full integration rerun remains required.
+
+### After-commit fulfillment invalidation delivery
+
+- Latest reference-validation integration suite **31/31 passed**, exit 0 (8384).
+- Added explicit outbox handler registration with duplicate-registration rejection, and FulfillmentEventDelivery module wiring for five ticket lifecycle events and six fulfillment/Expo/waiter order events. Handler checks structured payload, aggregate identity, scoped order/ticket existence, and emits only event IDs, scoped IDs, and current versions. It never forwards arbitrary payloads, money, or proof metadata. Invalid events fail for outbox retry/dead-letter behavior rather than being silently acknowledged.
+- These handlers deliver actual socket invalidations after commit; duplicates trigger authoritative HTTP reconciliation, not replayed state patches. They do not yet guarantee durable notification creation or cure absent order/payment/other event handlers. Socket transport delivery and active room revocation remain separate requirements.
+- First handler/outbox unit gate **19/19 passed**, API typecheck and targeted lint completed exit 0 (24381). Subsequently corrected ticket contract to separate `ticket:invalidated`, because existing KDS `ticket:updated` merges full projections. Gateway sends a union of branch/station rooms; frontend forwards invalidations and KDS refetches rather than applying partial objects.
+- Latest handler tests/type/lint and frontend hook/type/lint commands are pending; full 31-test regression with new module handlers is active at 1791. Do not infer full live Socket.IO delivery from unit mocks or database lifecycle tests alone.
+
+### Fulfillment delivery boundary proof
+
+- Latest handler unit suite **9/9 passed**, typecheck and targeted lint passed (82620). Full new-module lifecycle regression **31/31 passed** (1791).
+- Strengthened actual HTTP-to-outbox lifecycle test: committed IN_PROGRESS/READY ticket events must both be PUBLISHED with publication timestamps after real processor polling, and gateway invalidation must contain the expected scoped ticket/order and current version. Full strengthened suite **31/31 passed**, exit 0 (86645). Gateway spy observes the actual handler call but does not substitute for signed-token Socket.IO transport testing.
+- Frontend invalidation/reconciliation hook suites **6/6 passed** (3827); subsequent frontend type/lint steps remain active. Heavy jsdom setup caused long elapsed time; no restart or test skip was used.
+- New fulfillment invalidation handlers resolve those event types; logs still evidence missing order.created/payment.approved handlers. Notification durability/recovery, full live transport/browser checks, broader MVP requirements and staging remain open.

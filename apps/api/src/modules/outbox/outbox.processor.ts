@@ -23,7 +23,7 @@ export interface OutboxScope {
 }
 
 // Raw query result type — includes new fields not yet in Prisma client
-interface OutboxEventRecord {
+export interface OutboxEventRecord {
   id: string;
   tenantId: string | null;
   branchId: string | null;
@@ -76,6 +76,11 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.start();
+  }
+
+  registerHandler(eventType: string, handler: EventHandler) {
+    if (this.handlers.has(eventType)) throw new Error(`Outbox handler already registered: ${eventType}`);
+    this.handlers.set(eventType, handler);
   }
 
   onModuleDestroy() {
