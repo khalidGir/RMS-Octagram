@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
+import { useFulfillmentLive } from '@/lib/use-fulfillment-live';
 import { useServiceBoard, useClaimOrder, useCollectOrder, useServeOrder, useServiceNotifications } from '@/lib/use-service-board';
 import { Button, Dialog, DialogContent, DialogTitle, StatusChip, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
 import type { ServiceBoardOrder } from '@/lib/fulfillment-types';
@@ -45,6 +46,7 @@ export function WaiterWorkspace() {
 
   const membership = profile?.memberships?.[0];
   const role = membership?.role;
+  const live = useFulfillmentLive(role === 'WAITER' || role === 'OWNER');
   if (!role || (role !== 'WAITER' && role !== 'OWNER')) {
     return <p role="alert" className="p-8 text-center text-sm font-bold text-red-700">Permission denied.</p>;
   }
@@ -57,7 +59,9 @@ export function WaiterWorkspace() {
             <p className="text-xs font-bold text-white/60">{membership?.tenant.name}</p>
             <h1 className="text-xl font-black">Waiter · Service Board</h1>
           </div>
-          <span className="rounded-full bg-emerald-400/15 px-3 py-2 text-xs font-black text-emerald-200">Online</span>
+          <button onClick={live.reconnect} aria-label="Reconnect live updates" className="min-h-11 rounded-full border border-white/30 px-3 py-2 text-xs font-black">
+            {live.status === 'connected' ? 'Live updates' : 'Polling · reconnect'}
+          </button>
         </div>
       </header>
 
@@ -120,8 +124,8 @@ function ReadyOrdersTab() {
               key={order.orderId}
               order={order}
               onClaim={() => claimOrder.mutateAsync(order.orderId)}
-              onCollect={() => collectOrder.mutateAsync({ orderId: order.orderId })}
-              onServe={() => serveOrder.mutateAsync(order.orderId)}
+              onCollect={() => collectOrder.mutateAsync({ orderId: order.orderId, expectedVersion: order.version })}
+              onServe={() => serveOrder.mutateAsync({ orderId: order.orderId, expectedVersion: order.version })}
               claimBusy={claimOrder.isPending}
               collectBusy={collectOrder.isPending}
               serveBusy={serveOrder.isPending}
@@ -158,8 +162,8 @@ function MyOrdersTab() {
             <OrderCard
               key={order.orderId}
               order={order}
-              onCollect={() => collectOrder.mutateAsync({ orderId: order.orderId })}
-              onServe={() => serveOrder.mutateAsync(order.orderId)}
+              onCollect={() => collectOrder.mutateAsync({ orderId: order.orderId, expectedVersion: order.version })}
+              onServe={() => serveOrder.mutateAsync({ orderId: order.orderId, expectedVersion: order.version })}
               collectBusy={collectOrder.isPending}
               serveBusy={serveOrder.isPending}
             />
@@ -197,9 +201,8 @@ function AllOrdersTab() {
               key={order.orderId}
               order={order}
               onClaim={() => claimOrder.mutateAsync(order.orderId)}
-              onCollect={() => collectOrder.mutateAsync({ orderId: order.orderId })}
-              onServe={() => serveOrder.mutateAsync(order.orderId)}
-              claimBusy={claimOrder.isPending}
+              onCollect={() => collectOrder.mutateAsync({ orderId: order.orderId, expectedVersion: order.version })}
+              onServe={() => serveOrder.mutateAsync({ orderId: order.orderId, expectedVersion: order.version })}
               collectBusy={collectOrder.isPending}
               serveBusy={serveOrder.isPending}
             />

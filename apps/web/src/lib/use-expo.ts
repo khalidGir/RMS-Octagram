@@ -18,9 +18,10 @@ function useAuthHeaders() {
 export function useExpoOrders() {
   const { accessToken, branchId, tenantId } = useAuthHeaders();
   return useQuery({
-    queryKey: ['expo-orders', branchId],
+    queryKey: ['expo-orders', tenantId, branchId],
     queryFn: () => fetchApi<ApiEnvelope<ExpoOrder[]>>(`/branches/${branchId}/expo/orders`, { accessToken, tenantId }),
     select: (d) => d.data,
+    enabled: Boolean(accessToken && tenantId && branchId),
     refetchInterval: 10_000,
   });
 }
@@ -32,9 +33,10 @@ export function useReleaseOrder() {
     mutationFn: ({ orderId, expectedVersion }: { orderId: string; expectedVersion: number }) =>
       fetchApi<ApiEnvelope<ExpoOrder>>(`/branches/${branchId}/expo/orders/${orderId}/release`, {
         accessToken, tenantId, method: 'POST',
-        body: { expectedVersion, idempotencyKey: newIdempotencyKey() },
+        headers: { 'Idempotency-Key': newIdempotencyKey() },
+        body: { expectedVersion },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expo-orders', branchId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expo-orders', tenantId, branchId] }),
   });
 }
 
@@ -45,8 +47,9 @@ export function useRecallExpoOrder() {
     mutationFn: ({ orderId, reason, expectedVersion }: { orderId: string; reason: string; expectedVersion: number }) =>
       fetchApi<ApiEnvelope<ExpoOrder>>(`/branches/${branchId}/expo/orders/${orderId}/recall`, {
         accessToken, tenantId, method: 'POST',
-        body: { reason, expectedVersion, idempotencyKey: newIdempotencyKey() },
+        headers: { 'Idempotency-Key': newIdempotencyKey() },
+        body: { reason, expectedVersion },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['expo-orders', branchId] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['expo-orders', tenantId, branchId] }),
   });
 }

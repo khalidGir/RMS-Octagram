@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useExpoOrders } from '@/lib/use-expo';
+import { useFulfillmentLive } from '@/lib/use-fulfillment-live';
 import { ExpoOrderCard } from '@/components/expo/expo-order-card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
@@ -13,13 +14,15 @@ export function ExpoBoard() {
   const allowedRoles = ['OWNER', 'MANAGER', 'KITCHEN_STAFF'];
   const membership = profile?.memberships?.[0];
   const role = membership?.role;
-  if (!role || !allowedRoles.includes(role)) {
-    return <p role="alert" className="p-8 text-center text-sm font-bold text-red-700">Permission denied.</p>;
-  }
+  const permitted = Boolean(role && allowedRoles.includes(role));
+  const live = useFulfillmentLive(permitted);
 
   const releasableOrders = useMemo(() => orders.filter((o) => o.canRelease), [orders]);
   const allOrders = useMemo(() => orders, [orders]);
   const completedOrders = useMemo(() => orders.filter((o) => o.fulfillmentStatus === 'READY_FOR_SERVICE' || o.fulfillmentStatus === 'PARTIALLY_SERVED'), [orders]);
+  if (!permitted) {
+    return <p role="alert" className="p-8 text-center text-sm font-bold text-red-700">Permission denied.</p>;
+  }
 
   if (isLoading) {
     return <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading expo orders...</p>;
@@ -49,6 +52,9 @@ export function ExpoBoard() {
           <p className="mt-1 text-sm text-ink-muted">Monitor and release orders for service.</p>
         </div>
         <div className="flex items-center gap-3">
+          <button onClick={live.reconnect} className="min-h-11 rounded-lg border border-line px-3 text-xs font-bold" aria-label="Reconnect live updates">
+            {live.status === 'connected' ? 'Live updates' : 'Polling · reconnect'}
+          </button>
           <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-700">
             {releasableOrders.length} ready to release
           </span>

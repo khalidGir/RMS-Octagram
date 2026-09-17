@@ -15,12 +15,12 @@ interface UseKdsSocketOptions {
   onTicketCreated?: (ticket: KdsTicketEvent) => void;
   onTicketUpdated?: (ticket: KdsTicketEvent) => void;
   onOrderConfirmed?: (order: Record<string, unknown>) => void;
+  onOperationalChange?: (event: string, data: Record<string, unknown>) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (error: Error) => void;
 }
 
-const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 16000];
 const MAX_RECONNECT_ATTEMPTS = 10;
 
 export function useKdsSocket({
@@ -31,38 +31,39 @@ export function useKdsSocket({
   onTicketCreated,
   onTicketUpdated,
   onOrderConfirmed,
+  onOperationalChange,
   onConnect,
   onDisconnect,
   onError,
 }: UseKdsSocketOptions) {
   const [status, setStatus] = useState<KdsSocketStatus>('disconnected');
   const socketRef = useRef<Socket | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const callbacksRef = useRef({ onTicketCreated, onTicketUpdated, onOrderConfirmed, onConnect, onDisconnect, onError });
-  callbacksRef.current = { onTicketCreated, onTicketUpdated, onOrderConfirmed, onConnect, onDisconnect, onError };
+  const callbacksRef = useRef({ onTicketCreated, onTicketUpdated, onOrderConfirmed, onOperationalChange, onConnect, onDisconnect, onError });
+  callbacksRef.current = { onTicketCreated, onTicketUpdated, onOrderConfirmed, onOperationalChange, onConnect, onDisconnect, onError };
 
   const cleanup = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
     if (socketRef.current) {
       socketRef.current.removeAllListeners();
+      socketRef.current.io.removeAllListeners();
       socketRef.current.disconnect();
       socketRef.current = null;
     }
-    reconnectAttemptsRef.current = 0;
   }, []);
 
   const connect = useCallback(() => {
-    if (!branchId || !accessToken || !tenantId) return;
     cleanup();
+    if (!branchId || !accessToken || !tenantId) {
+      setStatus('disconnected');
+      return;
+    }
 
     const socket = io(`${WS_URL}/kds`, {
       auth: { token: accessToken, tenantId },
       transports: ['websocket', 'polling'],
-      reconnection: false,
+      reconnection: true,
+      reconnectionAttempts: MAX_RECONNECT_ATTEMPTS,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 16000,
       timeout: 10000,
       forceNew: true,
     });
@@ -72,7 +73,6 @@ export function useKdsSocket({
 
     socket.on('connect', () => {
       setStatus('connected');
-      reconnectAttemptsRef.current = 0;
 
       socket.emit('join:branch', { branchId });
       if (stationId) {
@@ -86,15 +86,14 @@ export function useKdsSocket({
       setStatus('disconnected');
       callbacksRef.current.onDisconnect?.();
 
-      if (reason === 'io server disconnect') {
-        attemptReconnect();
-      }
+      // Socket.IO reconnects transport failures. A deliberate server disconnect
+      // (for example revoked access) requires an explicit user/auth retry.
+      if (reason === 'io server disconnect') setStatus('error');
     });
 
     socket.on('connect_error', () => {
       setStatus('error');
       callbacksRef.current.onError?.(new Error('Connection failed'));
-      attemptReconnect();
     });
 
     socket.on('ticket:created', (data: KdsTicketEvent) => {
@@ -108,22 +107,20 @@ export function useKdsSocket({
     socket.on('order:confirmed', (data: Record<string, unknown>) => {
       callbacksRef.current.onOrderConfirmed?.(data);
     });
+    for (const event of ['fulfillment:changed', 'expo:released', 'expo:updated', 'order:assignment_changed', 'service:notification']) {
+      socket.on(event, (data: Record<string, unknown>) => callbacksRef.current.onOperationalChange?.(event, data));
+    }
 
     socket.on('error', (data: { message?: string }) => {
+      setStatus('error');
       callbacksRef.current.onError?.(new Error(data?.message ?? 'Unknown socket error'));
     });
+    socket.io.on('reconnect_attempt', () => setStatus('connecting'));
+    socket.io.on('reconnect_failed', () => {
+      setStatus('error');
+      callbacksRef.current.onError?.(new Error('Live updates unavailable. Polling can continue; retry the connection when available.'));
+    });
   }, [branchId, accessToken, tenantId, stationId, cleanup]);
-
-  const attemptReconnect = useCallback(() => {
-    if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) return;
-    const delay = RECONNECT_DELAYS[Math.min(reconnectAttemptsRef.current, RECONNECT_DELAYS.length - 1)];
-    reconnectAttemptsRef.current++;
-
-    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-    reconnectTimerRef.current = setTimeout(() => {
-      connect();
-    }, delay);
-  }, [connect]);
 
   useEffect(() => {
     connect();
