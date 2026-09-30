@@ -3,27 +3,6 @@
  * Redacts passwords, tokens, hashes, authorization headers, and S3 signatures.
  */
 
-// Patterns that indicate sensitive values
-const SENSITIVE_PATTERNS = [
-  /password/i,
-  /passwordHash/i,
-  /token/i,
-  /secret/i,
-  /hash/i,
-  /authorization/i,
-  /cookie/i,
-  /signature/i,
-  /presigned/i,
-  /accessToken/i,
-  /refreshToken/i,
-  /paymentToken/i,
-  /trackingToken/i,
-  /qrToken/i,
-  /invitationToken/i,
-  /selectorHash/i,
-  /secretHash/i,
-];
-
 // Paths to redact in nested objects
 const SENSITIVE_PATHS = [
   'password',

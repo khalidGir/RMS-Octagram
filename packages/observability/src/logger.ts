@@ -1,5 +1,4 @@
 import pino from 'pino';
-import { redactSensitive } from './redactor';
 
 export function createLogger(context: string) {
   return pino({

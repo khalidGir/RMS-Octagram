@@ -163,6 +163,13 @@ This file records decisions that implementation agents must follow unless a late
 - **Reason:** Restaurants may need onboarding help without granting uncontrolled operational impersonation.
 - **Consequence:** Support context is short-lived, allowlisted, visibly bannered and fully audited.
 
+## ADR-024: Use a single Lightsail host for temporary staging
+
+- **Status:** Accepted for staging only; ADR-008 remains the production target
+- **Decision:** Run the NestJS API, PostgreSQL 16, and Redis 7 as isolated Docker containers on one 2 GB Amazon Lightsail instance. Store payment proofs and encrypted database backups in a private S3 bucket. Keep the Next.js frontend on Vercel.
+- **Reason:** The current environment is for integration and pilot validation. A single fixed-price host minimizes cost and operational complexity while preserving the application's PostgreSQL, Redis, S3, HTTPS, and WebSocket behavior.
+- **Consequence:** This environment is not approved for business-critical production data. PostgreSQL and Redis are never exposed publicly, nightly off-host backups are mandatory, and the deployment must move to managed RDS/Redis and redundant compute before production availability or recovery guarantees are promised.
+
 ## ADR-017: Multi-kitchen fulfillment architecture
 
 - **Status:** Accepted
