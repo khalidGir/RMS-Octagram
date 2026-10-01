@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiRequest, formatEtbMinor, newIdempotencyKey, type ApiEnvelope } from '@/lib/api-client';
+import { normalizePublicMenu } from '@/lib/public-menu';
 import { useAuth } from './auth-provider';
 import { useOnlineStatus } from '@/hooks';
 
@@ -87,7 +88,7 @@ export function PosWorkspace() {
   const menuQuery = useQuery({
     queryKey: ['pos-menu', tenantId, branchId],
     enabled: Boolean(tenantId && branchId),
-    queryFn: async () => (await apiRequest<ApiEnvelope<Menu>>(`/public/tenants/${tenantId}/branches/${branchId}/menu`)).data,
+    queryFn: async () => normalizePublicMenu((await apiRequest<ApiEnvelope<Menu>>(`/public/tenants/${tenantId}/branches/${branchId}/menu`)).data),
   });
 
   const tablesQuery = useQuery({

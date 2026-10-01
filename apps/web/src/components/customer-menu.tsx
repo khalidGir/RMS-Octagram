@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
+import { normalizePublicMenu } from '@/lib/public-menu';
 
 interface ApiVariant { id: string; name: string; basePriceMinor: string; isDefault: boolean }
 interface ApiModifierOption { id: string; name: string; priceDeltaMinor: string }
@@ -41,7 +42,11 @@ export function CustomerMenu() {
 
   const query = useQuery({
     queryKey: ['public-menu', branchSlug],
-    queryFn: () => apiRequest<ApiEnvelope<ApiMenu>>(`/public/restaurants/${encodeURIComponent(branchSlug!)}/menu`),
+    queryFn: async () => {
+      const response = await apiRequest<ApiEnvelope<ApiMenu>>(`/public/restaurants/${encodeURIComponent(branchSlug!)}/menu`);
+      normalizePublicMenu(response.data);
+      return response;
+    },
     enabled: !!branchSlug,
     retry: 1,
   });

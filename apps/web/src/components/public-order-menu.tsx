@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
+import { normalizePublicMenu } from '@/lib/public-menu';
 import { useLocale } from './locale-provider';
 
 interface PublicMenuItem {
@@ -47,12 +48,12 @@ type Entry = { kind: 'pickup'; publicSlug: string } | { kind: 'table'; token: st
 async function loadEntry(entry: Entry): Promise<{ menu: PublicMenu; context: PickupContext | TableContext }> {
   if (entry.kind === 'pickup') {
     const response = await apiRequest<ApiEnvelope<PublicMenu & { context: PickupContext }>>(`/public/restaurants/${encodeURIComponent(entry.publicSlug)}/menu`);
-    return { menu: response.data, context: response.data.context };
+    return { menu: normalizePublicMenu(response.data), context: response.data.context };
   }
   const contextResponse = await apiRequest<ApiEnvelope<TableContext>>('/public/table-context/resolve', { method: 'POST', body: { token: entry.token } });
   const { tenant, branch } = contextResponse.data;
   const menuResponse = await apiRequest<ApiEnvelope<PublicMenu>>(`/public/tenants/${encodeURIComponent(tenant.id)}/branches/${encodeURIComponent(branch.id)}/menu`);
-  return { menu: menuResponse.data, context: contextResponse.data };
+  return { menu: normalizePublicMenu(menuResponse.data), context: contextResponse.data };
 }
 
 export function PublicOrderMenu({ entry }: { entry: Entry }) {
