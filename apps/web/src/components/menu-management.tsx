@@ -6,6 +6,7 @@ import { ApiError, apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/ap
 import { useAuth } from './auth-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -448,16 +449,7 @@ function CreateMenuItemDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-black">
               Category
-              <select
-                value={categoryId}
-                onChange={(event) => setCategoryId(event.target.value)}
-                className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-3 font-normal"
-              >
-                <option value="">Uncategorized</option>
-                {categories.map((category) => (
-                  <option value={category.id} key={category.id}>{category.name}</option>
-                ))}
-              </select>
+              <div className="mt-2"><Select value={categoryId || 'uncategorized'} onValueChange={(value) => setCategoryId(value === 'uncategorized' ? '' : value)}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="uncategorized">Uncategorized</SelectItem>{categories.map((category) => <SelectItem value={category.id} key={category.id}>{category.name}</SelectItem>)}</SelectContent></Select></div>
             </label>
             <label className="text-sm font-black">
               Price (ETB)
@@ -616,16 +608,7 @@ function ItemDetailDialog({
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-sm font-black">
                   Category
-                  <select
-                    value={categoryId}
-                    onChange={(e) => setCategoryId(e.target.value)}
-                    className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-3 font-normal"
-                  >
-                    <option value="">Uncategorized</option>
-                    {categories.map((c) => (
-                      <option value={c.id} key={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+                  <div className="mt-2"><Select value={categoryId || 'uncategorized'} onValueChange={(value) => setCategoryId(value === 'uncategorized' ? '' : value)}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="uncategorized">Uncategorized</SelectItem>{categories.map((c) => <SelectItem value={c.id} key={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
                 </label>
                 <label className="text-sm font-black">
                   SKU
@@ -1146,7 +1129,7 @@ export function MenuManagement() {
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedItem(item); } }}
                     aria-label={`Edit ${item.name}`}
                   >
-                    <div className="mb-5 grid h-24 place-items-center rounded-xl bg-gradient-to-br from-[#b4532a] to-[#17231f] text-2xl font-black text-white">
+                    <div className="mb-5 grid h-24 place-items-center rounded-xl bg-gradient-to-br from-brand to-dark text-2xl font-black text-white">
                       {initials}
                     </div>
                     <div className="flex items-start justify-between">

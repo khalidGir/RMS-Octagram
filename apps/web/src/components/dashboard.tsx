@@ -6,6 +6,9 @@ import { useAuth } from '@/components/auth-provider';
 import { useBranch } from '@/components/shell/branch-provider';
 import { formatEtbMinor } from '@/lib/money';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AlertTriangle, ArrowUpRight, BarChart3, Boxes, ChefHat, CreditCard, Plus, ReceiptText } from 'lucide-react';
+import { Card, PageHeader } from '@/components/ui';
+import type { ReactNode } from 'react';
 import {
   fetchRevenueByDay,
   fetchOrdersReport,
@@ -19,7 +22,7 @@ import {
   type RevenueDay,
 } from '@/lib/dashboard-api';
 
-const TONES = ['#B4532A', '#D39A3E', '#31584A', '#8E4A38', '#49362D'];
+const RANK_TONES = ['bg-brand', 'bg-success', 'bg-warning', 'bg-info', 'bg-dark-muted'];
 
 function timeGreeting(): string {
   const h = new Date().getHours();
@@ -108,30 +111,23 @@ export function Dashboard() {
   }
 
   return (
-    <div className="mx-auto max-w-[1500px]">
-      <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-brand">{dayLabel()}</p>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.045em] text-ink sm:text-4xl">{timeGreeting()}, {userName}.</h1>
-          <p className="mt-2 text-sm text-ink-muted">Here is what is happening across your restaurant today.</p>
-        </div>
-        {branches.length > 1 && (
+    <div className="page-shell">
+      <PageHeader eyebrow={dayLabel()} title={`${timeGreeting()}, ${userName}.`} description="A clear view of today’s service, sales, and operational attention points." actions={branches.length > 1 ? (
           <div className="flex items-center gap-3 rounded-card border border-line bg-white px-4 py-3 shadow-card text-sm">
-            <span className="text-xs font-black uppercase tracking-wider text-ink-muted">Branch</span>
-            <span className="font-extrabold">{branches.find((b) => b.id === branchId)?.name ?? '—'}</span>
+            <span className="text-xs font-semibold text-ink-muted">Viewing</span>
+            <span className="font-semibold">{branches.find((b) => b.id === branchId)?.name ?? '—'}</span>
           </div>
-        )}
-      </section>
+        ) : undefined} />
 
       <section className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today's metrics">
-        <MetricCard label="Today's revenue" value={formatEtbMinor(todayRevenue)} detail={percentChange(todayRevenue, yesterdayRevenue)} direction={todayRevenue >= yesterdayRevenue ? 'up' : 'attention'} icon="↗" />
-        <MetricCard label="Orders today" value={String(todayOrderCount)} detail={`${orderStats?.completedOrders ?? 0} completed`} direction="neutral" icon="◇" />
-        <MetricCard label="Avg. order value" value={orderStats ? formatEtbMinor(Number(orderStats.avgOrderMinor)) : '—'} detail={`${orderStats?.cancelledOrders ?? 0} cancelled`} direction="neutral" icon="◷" />
-        <MetricCard label="Low stock alerts" value={String(pendingReviews)} detail={pendingReviews > 0 ? 'Items running low' : 'All stocked'} direction={pendingReviews > 0 ? 'attention' : 'neutral'} icon="◉" />
+        <MetricCard label="Today's revenue" value={formatEtbMinor(todayRevenue)} detail={percentChange(todayRevenue, yesterdayRevenue)} direction={todayRevenue >= yesterdayRevenue ? 'up' : 'attention'} icon={<ArrowUpRight />} />
+        <MetricCard label="Orders today" value={String(todayOrderCount)} detail={`${orderStats?.completedOrders ?? 0} completed`} direction="neutral" icon={<ReceiptText />} />
+        <MetricCard label="Avg. order value" value={orderStats ? formatEtbMinor(Number(orderStats.avgOrderMinor)) : '—'} detail={`${orderStats?.cancelledOrders ?? 0} cancelled`} direction="neutral" icon={<BarChart3 />} />
+        <MetricCard label="Low stock alerts" value={String(pendingReviews)} detail={pendingReviews > 0 ? 'Items running low' : 'All stocked'} direction={pendingReviews > 0 ? 'attention' : 'neutral'} icon={<AlertTriangle />} />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[1.7fr_1fr]">
-        <article className="overflow-hidden rounded-panel border border-line bg-white shadow-card">
+        <Card className="overflow-hidden rounded-panel">
           <div className="flex items-center justify-between border-b border-line px-5 py-5 sm:px-6">
             <div>
               <h2 className="text-lg font-black">Revenue trend</h2>
@@ -159,7 +155,7 @@ export function Dashboard() {
               </div>
             )}
           </div>
-        </article>
+        </Card>
 
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
           <Link href="/kitchen" className="rounded-panel bg-dark p-6 text-white shadow-float block hover:opacity-95 transition-opacity">
@@ -168,7 +164,7 @@ export function Dashboard() {
                 <p className="text-xs font-bold text-white/50">Quick action</p>
                 <h2 className="mt-1 text-xl font-black">Kitchen display</h2>
               </div>
-              <span className="grid size-11 place-items-center rounded-xl bg-white/10 text-xl">⏱</span>
+              <span className="grid size-11 place-items-center rounded-xl bg-white/10"><ChefHat size={21} aria-hidden="true" /></span>
             </div>
             <p className="mt-4 text-sm text-white/70">View live kitchen queue and bump tickets.</p>
             <div className="mt-6 min-h-11 w-full rounded-control bg-white text-center text-sm font-black text-dark leading-[2.75rem]">Open kitchen display</div>
@@ -185,7 +181,7 @@ export function Dashboard() {
               ) : (
                 bestSellers.map((item, index) => (
                   <div key={item.variantId} className="flex items-center gap-3">
-                    <span className="grid size-9 place-items-center rounded-xl text-xs font-black text-white" style={{ backgroundColor: TONES[index % TONES.length] }}>{index + 1}</span>
+                    <span className={`grid size-9 place-items-center rounded-xl text-xs font-semibold text-white ${RANK_TONES[index % RANK_TONES.length]}`}>{index + 1}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-extrabold">{item.itemName}</span>
                       <span className="text-xs text-ink-muted">{item.totalQuantity} sold</span>
@@ -201,21 +197,21 @@ export function Dashboard() {
 
       <section className="mt-5 grid gap-3 sm:grid-cols-3">
         <Link href="/pos" className="flex min-h-20 items-center gap-4 rounded-card border border-line bg-white px-5 text-left shadow-card hover:-translate-y-0.5 transition-transform">
-          <span className="grid size-11 place-items-center rounded-xl bg-brand text-xl text-white">+</span>
+          <span className="grid size-11 place-items-center rounded-xl bg-brand text-white"><Plus size={20} aria-hidden="true" /></span>
           <span>
             <span className="block text-sm font-black">Start POS order</span>
             <span className="mt-1 block text-xs text-ink-muted">Create a counter or table order</span>
           </span>
         </Link>
         <Link href="/payments" className="flex min-h-20 items-center gap-4 rounded-card border border-line bg-white px-5 text-left shadow-card hover:-translate-y-0.5 transition-transform">
-          <span className="grid size-11 place-items-center rounded-xl bg-amber-100 text-xl text-amber-800">◎</span>
+          <span className="grid size-11 place-items-center rounded-xl bg-warning-surface text-warning"><CreditCard size={20} aria-hidden="true" /></span>
           <span>
             <span className="block text-sm font-black">Review payments</span>
             <span className="mt-1 block text-xs text-ink-muted">Transfers awaiting confirmation</span>
           </span>
         </Link>
         <Link href="/inventory" className="flex min-h-20 items-center gap-4 rounded-card border border-line bg-white px-5 text-left shadow-card hover:-translate-y-0.5 transition-transform">
-          <span className="grid size-11 place-items-center rounded-xl bg-emerald-100 text-xl text-emerald-800">▤</span>
+          <span className="grid size-11 place-items-center rounded-xl bg-success-surface text-success"><Boxes size={20} aria-hidden="true" /></span>
           <span>
             <span className="block text-sm font-black">Check inventory</span>
             <span className="mt-1 block text-xs text-ink-muted">{pendingReviews} items are running low</span>
@@ -226,13 +222,13 @@ export function Dashboard() {
   );
 }
 
-function MetricCard({ label, value, detail, direction, icon }: { label: string; value: string; detail: string; direction: 'up' | 'neutral' | 'attention'; icon: string }) {
+function MetricCard({ label, value, detail, direction, icon }: { label: string; value: string; detail: string; direction: 'up' | 'neutral' | 'attention'; icon: ReactNode }) {
   return (
     <article className="relative overflow-hidden rounded-card border border-line bg-white p-5 shadow-card">
       <div className={`absolute inset-y-0 left-0 w-1 ${direction === 'attention' ? 'bg-amber-500' : direction === 'up' ? 'bg-accent-teal' : 'bg-brand'}`} />
       <div className="flex items-start justify-between">
         <p className="text-sm font-bold text-ink-muted">{label}</p>
-        <span className="text-lg text-ink-muted/50">{icon}</span>
+        <span className="text-ink-muted/60 [&>svg]:size-4">{icon}</span>
       </div>
       <p className="mt-4 text-2xl font-black tracking-[-0.035em]">{value}</p>
       <p className={`mt-2 text-xs font-semibold ${direction === 'attention' ? 'text-amber-700' : direction === 'up' ? 'text-emerald-700' : 'text-ink-muted'}`}>

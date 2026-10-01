@@ -50,7 +50,7 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   CBE_BIRR: 'CBE Birr',
 };
 
-const TONES = ['#B4532A', '#D39A3E', '#31584A', '#8E4A38', '#49362D'];
+const RANK_TONES = ['bg-brand', 'bg-success', 'bg-warning', 'bg-info', 'bg-dark-muted'];
 
 export function ReportsPage() {
   const { accessToken, csrfToken, profile } = useAuth();
@@ -181,7 +181,7 @@ export function ReportsPage() {
             ) : (
               methods.map((m, i) => (
                 <div key={m.method} className="flex items-center gap-3">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg text-xs font-black text-white" style={{ backgroundColor: TONES[i % TONES.length] }}>{m.method[0]}</span>
+                  <span className={`grid size-8 shrink-0 place-items-center rounded-lg text-xs font-black text-white ${RANK_TONES[i % RANK_TONES.length]}`}>{m.method[0]}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-sm font-extrabold">{PAYMENT_METHOD_LABELS[m.method] ?? m.method}</span>
                     <span className="text-xs text-ink-muted">{m.paymentCount} payments</span>
@@ -216,7 +216,7 @@ export function ReportsPage() {
             ) : (
               bestSellers.slice(0, 8).map((item, index) => (
                 <div key={item.variantId} className="flex items-center gap-3">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg text-xs font-black text-white" style={{ backgroundColor: TONES[index % TONES.length] }}>{index + 1}</span>
+                  <span className={`grid size-8 shrink-0 place-items-center rounded-lg text-xs font-black text-white ${RANK_TONES[index % RANK_TONES.length]}`}>{index + 1}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-extrabold">{item.itemName}</span>
                     <span className="text-xs text-ink-muted">{item.totalQuantity} sold · {item.orderCount} orders</span>

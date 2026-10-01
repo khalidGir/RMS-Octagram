@@ -4,32 +4,32 @@
 
 :root {
   /* Brand */
-  --brand-primary: 180 83 42;
+  --brand-primary: 0 113 227;
   --brand-primary-foreground: 255 255 255;
-  --brand-accent: 192 138 46;
-  --brand-50: 255 247 237;
-  --brand-100: 255 237 213;
-  --brand-500: 199 91 42;
-  --brand-600: 171 71 32;
-  --brand-700: 137 57 29;
+  --brand-accent: 0 113 227;
+  --brand-50: 240 247 255;
+  --brand-100: 222 238 255;
+  --brand-500: 0 113 227;
+  --brand-600: 0 94 204;
+  --brand-700: 0 74 173;
 
   /* Ink / Text */
-  --ink: 23 33 29;
-  --ink-muted: 102 113 108;
-  --ink-faint: 150 158 154;
+  --ink: 29 29 31;
+  --ink-muted: 99 99 102;
+  --ink-faint: 142 142 147;
 
   /* Canvas / Surface */
-  --canvas: 247 243 235;
+  --canvas: 247 246 242;
   --surface: 255 255 255;
-  --surface-subtle: 240 242 239;
-  --surface-sunken: 235 237 234;
-  --surface-warm: 255 250 243;
-  --surface-cream: 247 243 235;
+  --surface-subtle: 245 245 247;
+  --surface-sunken: 235 235 240;
+  --surface-warm: 252 250 246;
+  --surface-cream: 247 246 242;
 
   /* Dark surfaces */
-  --dark: 24 36 31;
-  --dark-deep: 16 24 21;
-  --dark-muted: 23 35 31;
+  --dark: 29 29 31;
+  --dark-deep: 18 18 20;
+  --dark-muted: 44 44 46;
 
   /* Accent */
   --accent-teal: 49 88 74;
@@ -42,8 +42,8 @@
   --text-secondary-dark: 102 95 87;
 
   /* Border */
-  --border: 221 226 222;
-  --border-strong: 199 206 201;
+  --border: 222 222 226;
+  --border-strong: 199 199 204;
 
   /* Status */
   --success: 19 122 82;
@@ -56,17 +56,17 @@
   --info-surface: 234 242 255;
 
   /* Elevation */
-  --shadow-raised: 0 12px 40px rgb(37 27 20 / 0.07);
-  --shadow-floating: 0 20px 60px rgb(37 27 20 / 0.14);
-  --shadow-modal: 0 24px 80px rgb(37 27 20 / 0.22);
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 30px rgb(0 0 0 / 0.05);
+  --shadow-floating: 0 18px 50px rgb(0 0 0 / 0.12);
+  --shadow-modal: 0 28px 90px rgb(0 0 0 / 0.2);
 
   /* Focus */
-  --focus-ring: 3px solid rgb(var(--brand-accent));
-  --focus-offset: 3px;
+  --focus-ring: 3px solid rgb(var(--brand-primary) / 0.65);
+  --focus-offset: 2px;
 
   /* Motion */
   --duration-fast: 140ms;
-  --duration-normal: 180ms;
+  --duration-normal: 190ms;
   --duration-slow: 240ms;
   --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
   --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
@@ -78,9 +78,16 @@
   --text-primary: 32 26 23;
   --text-secondary: 107 98 92;
   --border-default: 224 216 207;
-  --radius-control: 0.625rem;
-  --radius-card: 0.875rem;
-  --radius-panel: 1rem;
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
+  --radius-panel: 1.5rem;
+
+  /* Data visualization */
+  --chart-1: 0 113 227;
+  --chart-2: 52 199 89;
+  --chart-3: 255 159 10;
+  --chart-4: 175 82 222;
+  --chart-5: 255 69 58;
 }
 
 @layer base {
@@ -89,11 +96,11 @@
   html {
     background: rgb(var(--canvas));
     color: rgb(var(--ink));
-    font-family: var(--font-inter), Inter, ui-sans-serif, system-ui, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", var(--font-inter), sans-serif;
     text-rendering: optimizeLegibility;
   }
 
-  body { min-height: 100vh; margin: 0; }
+  body { min-height: 100vh; margin: 0; background: rgb(var(--canvas)); }
   button, input, select, textarea { font: inherit; }
   button, a, input, select { -webkit-tap-highlight-color: transparent; }
 
@@ -108,15 +115,11 @@
 @layer components {
   .staff-grid {
     background-color: rgb(var(--canvas));
-    background-image:
-      radial-gradient(circle at 10% 0%, rgb(var(--brand-accent) / 0.08), transparent 28rem),
-      linear-gradient(rgb(255 255 255 / 0.38) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(255 255 255 / 0.38) 1px, transparent 1px);
-    background-size: auto, 32px 32px, 32px 32px;
+    background-image: radial-gradient(circle at 12% 0%, rgb(255 255 255 / 0.95), transparent 34rem);
   }
 
   .control-select {
-    min-height: 2.5rem;
+    min-height: 2.75rem;
     width: 100%;
     cursor: pointer;
     border: 1px solid rgb(var(--border));
@@ -126,6 +129,19 @@
     font-size: 0.875rem;
     font-weight: 700;
     outline: none;
+  }
+
+  .page-shell { width: 100%; max-width: 1500px; margin-inline: auto; }
+  .page-header { display: flex; flex-direction: column; gap: 0.5rem; }
+  .page-eyebrow { color: rgb(var(--brand-primary)); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .page-title { color: rgb(var(--ink)); font-size: clamp(1.75rem, 3vw, 2.5rem); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08; }
+  .page-description { max-width: 48rem; color: rgb(var(--ink-muted)); font-size: 0.9375rem; line-height: 1.6; }
+  .glass-surface { background: rgb(var(--surface) / 0.82); border: 1px solid rgb(var(--border) / 0.8); backdrop-filter: blur(22px) saturate(160%); }
+
+  [data-tenant-theme] {
+    --brand-primary: var(--tenant-primary, 180 83 42);
+    --brand-accent: var(--tenant-accent, 192 138 46);
+    --radius-card: var(--tenant-radius, 0.875rem);
   }
 
   .sr-only {

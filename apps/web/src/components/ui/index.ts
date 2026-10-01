@@ -19,3 +19,4 @@ export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tool
 export { Skeleton, type SkeletonProps } from './skeleton';
 export { ConfirmDialog } from './confirm-dialog';
 export { Popover, PopoverTrigger, PopoverContent } from './popover';
+export { PageHeader, FilterBar } from './page-header';

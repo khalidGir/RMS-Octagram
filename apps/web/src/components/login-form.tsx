@@ -6,6 +6,7 @@ import type { Route } from 'next';
 import { normalizeEthiopianPhone } from '@rms/contracts';
 import { ApiError } from '@/lib/api-client';
 import { useAuth, type StaffProfile } from './auth-provider';
+import { Button, TextField } from '@/components/ui';
 
 function landingPage(profile: StaffProfile): Route {
   if (profile.platformRole === 'SUPER_ADMIN') return '/platform';
@@ -51,27 +52,12 @@ export function LoginForm() {
 
   return (
     <form className="mt-8 space-y-5" onSubmit={submit} noValidate>
-      {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800">{error}</div>}
-      <label className="block">
-        <span className="mb-2 block text-sm font-extrabold">Phone number</span>
-        <input
-          required
-          type="tel"
-          inputMode="tel"
-          autoComplete="tel"
-          placeholder="0911 234 567"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-          className="min-h-12 w-full rounded-control border border-line bg-white px-4 text-sm outline-none transition focus:border-brand"
-        />
-      </label>
-      <label className="block">
-        <span className="mb-2 block text-sm font-extrabold">Password</span>
-        <input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12 w-full rounded-control border border-line bg-white px-4 text-sm outline-none transition focus:border-brand" />
-      </label>
-      <button disabled={submitting || !phone || !password} className="flex min-h-12 w-full items-center justify-center rounded-control bg-brand px-5 text-sm font-black text-white shadow-lg shadow-brand/20 transition hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-60">
-        {submitting ? 'Signing in…' : 'Sign in to RMS'}
-      </button>
+      {error && <div role="alert" className="rounded-card border border-danger/20 bg-danger-surface p-3 text-sm font-semibold text-danger">{error}</div>}
+      <TextField required label="Phone number" type="tel" inputMode="tel" autoComplete="tel" placeholder="0911 234 567" value={phone} onChange={(event) => setPhone(event.target.value)} className="min-h-12" />
+      <TextField required label="Password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12" />
+      <Button type="submit" size="lg" loading={submitting} disabled={!phone || !password} className="w-full">
+        Sign in to RestaurantMS
+      </Button>
     </form>
   );
 }

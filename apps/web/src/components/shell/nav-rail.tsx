@@ -27,7 +27,7 @@ export function NavRail({
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-40 flex flex-col overflow-y-auto bg-[#101815] text-white transition-all duration-200',
+        'fixed inset-y-0 left-0 z-40 flex flex-col overflow-y-auto bg-dark-deep text-white transition-all duration-200',
         collapsed ? 'w-[72px]' : 'w-[256px]',
         'lg:sticky lg:top-0 lg:h-screen',
         'max-lg:-translate-x-full',
@@ -67,7 +67,7 @@ export function NavRail({
                 'group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors',
                 collapsed && 'justify-center px-0',
                 active
-                  ? 'bg-white text-[#18201d]'
+                  ? 'bg-white text-ink shadow-sm'
                   : 'text-white/65 hover:bg-white/[.08] hover:text-white',
               )}
             >
@@ -76,7 +76,7 @@ export function NavRail({
               </span>
               {!collapsed && <span className="truncate">{item.label}</span>}
               {collapsed && (
-                <span className="pointer-events-none absolute left-full ml-3 hidden whitespace-nowrap rounded-lg bg-[#1a2520] px-3 py-1.5 text-xs font-bold text-white shadow-lg group-hover:block">
+                <span className="pointer-events-none absolute left-full ml-3 hidden whitespace-nowrap rounded-lg bg-dark-muted px-3 py-1.5 text-xs font-semibold text-white shadow-lg group-hover:block">
                   {item.label}
                 </span>
               )}

@@ -7,6 +7,7 @@ import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -450,15 +451,7 @@ function InviteDialog({
           </label>
           <label className="text-sm font-black">
             Role
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-3 font-normal"
-            >
-              {availableRoles.map((r) => (
-                <option value={r} key={r}>{roleLabel(r)}</option>
-              ))}
-            </select>
+            <div className="mt-2"><Select value={role} onValueChange={setRole}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent>{availableRoles.map((r) => <SelectItem value={r} key={r}>{roleLabel(r)}</SelectItem>)}</SelectContent></Select></div>
           </label>
           {branches.length > 0 && (
             <div>
@@ -569,27 +562,11 @@ function EditMemberDialog({
           <div className="grid grid-cols-2 gap-4">
             <label className="text-sm font-black">
               Role
-              <select
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-3 font-normal"
-              >
-                {ROLES.map((r) => (
-                  <option value={r} key={r}>{roleLabel(r)}</option>
-                ))}
-              </select>
+              <div className="mt-2"><Select value={role} onValueChange={setRole}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map((r) => <SelectItem value={r} key={r}>{roleLabel(r)}</SelectItem>)}</SelectContent></Select></div>
             </label>
             <label className="text-sm font-black">
               Status
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-3 font-normal"
-              >
-                <option value="ACTIVE">Active</option>
-                <option value="SUSPENDED">Suspended</option>
-                <option value="REVOKED">Revoked</option>
-              </select>
+              <div className="mt-2"><Select value={status} onValueChange={setStatus}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Active</SelectItem><SelectItem value="SUSPENDED">Suspended</SelectItem><SelectItem value="REVOKED">Revoked</SelectItem></SelectContent></Select></div>
             </label>
           </div>
           {branches.length > 0 && (

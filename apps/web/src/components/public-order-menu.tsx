@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
 import { normalizePublicMenu } from '@/lib/public-menu';
 import { useLocale } from './locale-provider';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface PublicMenuItem {
   id: string;
@@ -100,12 +101,7 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
       <header className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
         <div className="mx-auto flex min-h-[68px] max-w-6xl items-center gap-3 px-4">
           <div><p className="font-black">{query.data.menu.tenant.name}</p><p className="text-xs text-ink-muted">{query.data.menu.branch.name}</p></div>
-          <label className="ms-auto flex items-center gap-2 text-xs font-bold">
-            <span className="sr-only">{t.language}</span>
-            <select value={locale} onChange={(event) => setLocale(event.target.value as 'en' | 'am' | 'ar')} className="min-h-11 rounded-xl border border-line bg-white px-3" aria-label={t.language}>
-              <option value="en">English</option><option value="am">አማርኛ</option><option value="ar">العربية</option>
-            </select>
-          </label>
+          <div className="ms-auto w-32"><span className="sr-only">{t.language}</span><Select value={locale} onValueChange={(value) => setLocale(value as 'en' | 'am' | 'ar')}><SelectTrigger aria-label={t.language}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="en">English</SelectItem><SelectItem value="am">አማርኛ</SelectItem><SelectItem value="ar">العربية</SelectItem></SelectContent></Select></div>
         </div>
       </header>
       <section className="bg-dark-muted px-4 py-9 text-white">

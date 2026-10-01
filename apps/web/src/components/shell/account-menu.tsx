@@ -19,7 +19,7 @@ export function AccountMenu({ initials }: { initials: string }) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          className="grid size-11 place-items-center rounded-xl border border-line bg-white text-sm font-black text-ink transition hover:bg-surface-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/25"
+          className="grid size-11 place-items-center rounded-full bg-dark text-sm font-semibold text-white shadow-sm transition hover:bg-dark-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/30"
           aria-label="Account menu"
         >
           {initials}

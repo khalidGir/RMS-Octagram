@@ -6,6 +6,7 @@ import { ApiError, apiRequest, formatEtbMinor, newIdempotencyKey, type ApiEnvelo
 import { normalizePublicMenu } from '@/lib/public-menu';
 import { useAuth } from './auth-provider';
 import { useOnlineStatus } from '@/hooks';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ModifierOption { id: string; name: string; priceDeltaMinor: string; }
 interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number | null; options: ModifierOption[]; }
@@ -477,16 +478,7 @@ export function PosWorkspace() {
           {orderType === 'DINE_IN' && (
             <div className="mt-4">
               <label className="text-xs font-bold text-ink-muted">Table</label>
-              <select
-                value={tableId}
-                onChange={(e) => setTableId(e.target.value)}
-                className="mt-1 min-h-11 w-full rounded-xl border border-line bg-white px-3"
-              >
-                <option value="">Select table…</option>
-                {tablesQuery.data?.filter((t) => t.isActive).map((t) => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
-              </select>
+              <Select value={tableId || undefined} onValueChange={setTableId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select table…" /></SelectTrigger><SelectContent>{tablesQuery.data?.filter((t) => t.isActive).map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}</SelectContent></Select>
             </div>
           )}
 

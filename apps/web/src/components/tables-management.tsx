@@ -7,6 +7,7 @@ import { useAuth } from './auth-provider';
 import { useBranch } from './shell/branch-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -647,16 +648,7 @@ function CreateTableDialog({
             </label>
             <label className="text-sm font-black">
               Dining area
-              <select
-                value={diningAreaId}
-                onChange={(e) => setDiningAreaId(e.target.value)}
-                className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-3 font-normal"
-              >
-                <option value="">None</option>
-                {areas.map((a) => (
-                  <option value={a.id} key={a.id}>{a.name}</option>
-                ))}
-              </select>
+              <div className="mt-2"><Select value={diningAreaId || 'none'} onValueChange={(value) => setDiningAreaId(value === 'none' ? '' : value)}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{areas.map((a) => <SelectItem value={a.id} key={a.id}>{a.name}</SelectItem>)}</SelectContent></Select></div>
             </label>
           </div>
           <p className="text-xs text-ink-muted">A QR code will be generated automatically for this table.</p>

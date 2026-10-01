@@ -52,8 +52,8 @@ export function WaiterWorkspace() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f6f3ed]">
-      <header className="sticky top-0 z-20 border-b border-line bg-[#14201b] px-4 py-4 text-white">
+    <main className="min-h-screen bg-canvas">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-dark-deep px-4 py-4 text-white shadow-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold text-white/60">{membership?.tenant.name}</p>

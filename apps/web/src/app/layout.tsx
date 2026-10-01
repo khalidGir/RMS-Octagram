@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'RMS' },
 };
 
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#121816' };
+export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: '#1d1d1f' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return <html lang="en" className={inter.variable}><body><Providers>{children}</Providers></body></html>;
