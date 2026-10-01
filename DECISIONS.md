@@ -177,7 +177,14 @@ This file records decisions that implementation agents must follow unless a late
 - **Reason:** The current system assumes one kitchen per branch. Real restaurants have multiple production areas (main kitchen, bar, bakery, coffee counter). The existing ticket/station foundation is solid but lacks physical-kitchen grouping, fulfillment-status tracking, expo coordination, waiter assignment, and durable service notifications.
 - **Consequence:** Every order confirmation must validate routes across all stations in all kitchens, create one ticket per station, and derive a fulfillment summary. KDS displays must be scoped to kitchen and/or station. The migration must backfill a default "Main Kitchen" for every branch with existing stations.
 
-## Open Product Decisions
+## ADR-025: Phone-first staff authentication
+
+- **Status:** Accepted for the staging rollout; email-compat removal tracked below
+- **Decision:** Staff sign in with phone number + password. Ethiopian numbers are stored canonically in E.164 (`User.phoneE164`, unique) and accepted from local (`0911 234 567`), national (`911234567`), and full (`+251911234567`) formats via `@rms/contracts` `normalizeEthiopianPhone`. Email is retained only as optional compatibility/recovery data and is no longer collected by the UI. No SMS OTP in this phase — password only. Rate limiting keys on the normalized identity (`phone:<e164>`), so format games cannot dodge the limit. During the staged rollout the API temporarily also accepts the deprecated `email` login property so the old frontend keeps working while phones are backfilled; the window closes after staging verification (remove in a follow-up once: new API deployed, phones backfilled, phone login verified, new frontend deployed).
+- **Reason:** Every target user already has a phone number; email is unreliable for Ethiopian restaurant staff. E.164 storage makes identity comparison exact, enables future SMS/OTP work without schema change, and local-format equivalence (`0911…` ≡ `+251911…`) avoids duplicate accounts.
+- **Consequence:** Invitations, JWT claims, audit payloads, and staff screens carry phone instead of email; passwords remain the only factor, so phone-account takeover resistance equals password strength until OTP ships. The deprecated email path must not outlive the rollout window, and the login route throttle (10 req/min) applies per normalized identity.
+
+
 
 These do not block architecture or initial scaffolding, but must be confirmed before their feature is finalized:
 
