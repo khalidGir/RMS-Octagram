@@ -65,6 +65,7 @@ describe('Expo + Waiter Fulfillment — Integration (e2e)', () => {
   const managerEmail = `ewf-manager-${ts}@test.com`;
   const kitchenEmail = `ewf-kitchen-${ts}@test.com`;
   const waiterEmail = `ewf-waiter-${ts}@test.com`;
+  const waiterPhone = `+2519${(ts % 100000000).toString().padStart(8, '0')}`;
   const cashierEmail = `ewf-cashier-${ts}@test.com`;
   const waiter2Email = `ewf-waiter2-${ts}@test.com`;
   const owner2Email = `ewf-owner2-${ts}@test.com`;
@@ -148,7 +149,7 @@ describe('Expo + Waiter Fulfillment — Integration (e2e)', () => {
     });
 
     const waiter = await prisma.user.create({
-      data: { email: waiterEmail, passwordHash, displayName: 'Waiter', status: 'ACTIVE' },
+      data: { email: waiterEmail, phoneE164: waiterPhone, passwordHash, displayName: 'Waiter', status: 'ACTIVE' },
     });
     waiterUserId = waiter.id;
     const wm = await prisma.tenantMembership.create({
@@ -689,7 +690,7 @@ describe('Expo + Waiter Fulfillment — Integration (e2e)', () => {
       const found = boardRes.body.data.find((o: any) => o.id === orderId);
       expect(found).toBeDefined();
       expect(found.assignedWaiterUserId).toBe(waiterUserId);
-      expect(found.assignedWaiterEmail).toBe(waiterEmail);
+      expect(found.assignedWaiterPhone).toBe(waiterPhone);
     });
   });
 

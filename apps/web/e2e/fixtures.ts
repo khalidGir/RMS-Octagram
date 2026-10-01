@@ -60,8 +60,8 @@ function httpPost(
   });
 }
 
-async function apiLogin(email: string, password: string): Promise<TokenBundle> {
-  const res = await httpPost('/auth/login', {}, { email, password });
+async function apiLogin(phone: string, password: string): Promise<TokenBundle> {
+  const res = await httpPost('/auth/login', {}, { phone, password });
   if (res.status !== 200) throw new Error(`Login failed: ${res.status} ${JSON.stringify(res.body)}`);
   const body = res.body as { data: { accessToken: string; csrfToken?: string } };
   return { accessToken: body.data.accessToken, csrfToken: body.data.csrfToken ?? '' };
@@ -116,10 +116,10 @@ async function getProfile(token: string): Promise<{ landing: string; role: strin
 
 async function loginViaUI(
   page: import('@playwright/test').Page,
-  email: string,
+  phone: string,
   password: string,
 ): Promise<void> {
-  const tokens = await apiLogin(email, password);
+  const tokens = await apiLogin(phone, password);
   const profile = await getProfile(tokens.accessToken);
 
   await setupAuthRoute(page, tokens);
@@ -130,10 +130,10 @@ async function loginViaUI(
 
 async function loginAndCaptureToken(
   page: import('@playwright/test').Page,
-  email: string,
+  phone: string,
   password: string,
 ): Promise<TokenBundle> {
-  const tokens = await apiLogin(email, password);
+  const tokens = await apiLogin(phone, password);
   const profile = await getProfile(tokens.accessToken);
 
   await setupAuthRoute(page, tokens);
@@ -162,28 +162,28 @@ export const test = base.extend<TestFixtures>({
   managerToken: async ({ browser, seed }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    const tokens = await loginAndCaptureToken(page, seed.manager.email, seed.manager.password);
+    const tokens = await loginAndCaptureToken(page, seed.manager.phone, seed.manager.password);
     await use(tokens);
     await context.close();
   },
   ownerToken: async ({ browser, seed }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    const tokens = await loginAndCaptureToken(page, seed.owner.email, seed.owner.password);
+    const tokens = await loginAndCaptureToken(page, seed.owner.phone, seed.owner.password);
     await use(tokens);
     await context.close();
   },
   cashierToken: async ({ browser, seed }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    const tokens = await loginAndCaptureToken(page, seed.cashier.email, seed.cashier.password);
+    const tokens = await loginAndCaptureToken(page, seed.cashier.phone, seed.cashier.password);
     await use(tokens);
     await context.close();
   },
   ownerPage: async ({ browser, seed }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await loginViaUI(page, seed.owner.email, seed.owner.password);
+    await loginViaUI(page, seed.owner.phone, seed.owner.password);
     await page.waitForURL((url) => url.pathname === '/dashboard', { timeout: 15_000 });
     await page.locator('aside nav a[href="/payments"]').first().click();
     await page.waitForURL((url) => url.pathname === '/payments', { timeout: 15_000 });
@@ -193,7 +193,7 @@ export const test = base.extend<TestFixtures>({
   managerPage: async ({ browser, seed }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await loginViaUI(page, seed.manager.email, seed.manager.password);
+    await loginViaUI(page, seed.manager.phone, seed.manager.password);
     await page.waitForURL((url) => url.pathname === '/dashboard', { timeout: 15_000 });
     await use(page);
     await context.close();
@@ -201,7 +201,7 @@ export const test = base.extend<TestFixtures>({
   cashierPage: async ({ browser, seed }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await loginViaUI(page, seed.cashier.email, seed.cashier.password);
+    await loginViaUI(page, seed.cashier.phone, seed.cashier.password);
     await page.waitForURL('**/pos', { timeout: 15_000 });
     await use(page);
     await context.close();
@@ -209,7 +209,7 @@ export const test = base.extend<TestFixtures>({
   kitchenStaffPage: async ({ browser, seed }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await loginViaUI(page, seed.kitchenStaff.email, seed.kitchenStaff.password);
+    await loginViaUI(page, seed.kitchenStaff.phone, seed.kitchenStaff.password);
     await page.waitForURL((url) => url.pathname.includes('/kitchen'), { timeout: 15_000 });
     await use(page);
     await context.close();
@@ -217,7 +217,7 @@ export const test = base.extend<TestFixtures>({
   superAdminPage: async ({ browser, seed }, use) => {
     const context = await browser.newContext();
     const page = await context.newPage();
-    await loginViaUI(page, seed.superAdmin.email, seed.superAdmin.password);
+    await loginViaUI(page, seed.superAdmin.phone, seed.superAdmin.password);
     await page.waitForURL((url) => url.pathname === '/platform', { timeout: 15_000 });
     await use(page);
     await context.close();

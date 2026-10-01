@@ -41,8 +41,8 @@ function httpPost(
   });
 }
 
-async function loginApi(email: string, password: string): Promise<TokenBundle> {
-  const res = await httpPost('/auth/login', {}, { email, password });
+async function loginApi(phone: string, password: string): Promise<TokenBundle> {
+  const res = await httpPost('/auth/login', {}, { phone, password });
   if (res.status !== 200) throw new Error(`Login failed: ${res.status}`);
   const body = res.body as { data: { accessToken: string; csrfToken?: string } };
   return { accessToken: body.data.accessToken, csrfToken: body.data.csrfToken ?? '' };
@@ -64,8 +64,8 @@ async function apiCall(
 
 test.describe('Concurrent Multi-User', () => {
   test('cashier creates order, manager sees it in orders list', async ({ seed, browser }) => {
-    const cashierTokens = await loginApi(seed.cashier.email, seed.cashier.password);
-    const managerTokens = await loginApi(seed.manager.email, seed.manager.password);
+    const cashierTokens = await loginApi(seed.cashier.phone, seed.cashier.password);
+    const managerTokens = await loginApi(seed.manager.phone, seed.manager.password);
 
     const cashierContext = await browser.newContext();
     const cashierPage = await cashierContext.newPage();
@@ -105,7 +105,7 @@ test.describe('Concurrent Multi-User', () => {
   });
 
   test('two concurrent orders with different idempotency keys both succeed', async ({ seed }) => {
-    const managerTokens = await loginApi(seed.manager.email, seed.manager.password);
+    const managerTokens = await loginApi(seed.manager.phone, seed.manager.password);
 
     const results = await Promise.all(
       [1, 2].map((i) =>

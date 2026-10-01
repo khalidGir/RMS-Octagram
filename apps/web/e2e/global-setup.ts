@@ -11,11 +11,11 @@ const PASSWORD = 'Test1234!';
 export interface SeedData {
   api: string;
   frontend: string;
-  owner: { email: string; password: string };
-  manager: { email: string; password: string };
-  cashier: { email: string; password: string };
-  kitchenStaff: { email: string; password: string };
-  superAdmin: { email: string; password: string };
+  owner: { phone: string; password: string };
+  manager: { phone: string; password: string };
+  cashier: { phone: string; password: string };
+  kitchenStaff: { phone: string; password: string };
+  superAdmin: { phone: string; password: string };
   tenantId: string;
   branchId: string;
   branchSlug: string;
@@ -60,6 +60,15 @@ export default async function globalSetup(): Promise<void> {
   const cashierEmail = `pw-cashier-${ts}@test.com`;
   const kitchenStaffEmail = `pw-kitchen-${ts}@test.com`;
   const superAdminEmail = `pw-superadmin-${ts}@test.com`;
+  // Phone identity: unique E.164 per run, role digit as final digit
+  // owner=1 manager=2 cashier=3 kitchen=4 superAdmin=5
+  const phoneBase = (ts % 10000000).toString().padStart(7, '0');
+  const mkPhone = (roleDigit: string) => `+2519${phoneBase}${roleDigit}`;
+  const ownerPhone = mkPhone('1');
+  const managerPhone = mkPhone('2');
+  const cashierPhone = mkPhone('3');
+  const kitchenStaffPhone = mkPhone('4');
+  const superAdminPhone = mkPhone('5');
   const tenantSlug = `pw-tenant-${ts}`;
   const branchSlug = `pw-branch-${ts}`;
 
@@ -82,35 +91,35 @@ export default async function globalSetup(): Promise<void> {
 
     // Owner user
     const ownerId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,'PW Owner','ACTIVE',now(),now())`, [ownerId, ownerEmail, passwordHash]);
+    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Owner','ACTIVE',now(),now())`, [ownerId, ownerEmail, ownerPhone, passwordHash]);
     const ownerMembershipId = uuid();
     await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'OWNER','ACTIVE',now(),now())`, [ownerMembershipId, tenantId, ownerId]);
     await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, ownerMembershipId]);
 
     // Manager user
     const managerId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,'PW Manager','ACTIVE',now(),now())`, [managerId, managerEmail, passwordHash]);
+    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Manager','ACTIVE',now(),now())`, [managerId, managerEmail, managerPhone, passwordHash]);
     const managerMembershipId = uuid();
     await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'MANAGER','ACTIVE',now(),now())`, [managerMembershipId, tenantId, managerId]);
     await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, managerMembershipId]);
 
     // Cashier user
     const cashierId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,'PW Cashier','ACTIVE',now(),now())`, [cashierId, cashierEmail, passwordHash]);
+    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Cashier','ACTIVE',now(),now())`, [cashierId, cashierEmail, cashierPhone, passwordHash]);
     const cashierMembershipId = uuid();
     await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'CASHIER','ACTIVE',now(),now())`, [cashierMembershipId, tenantId, cashierId]);
     await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, cashierMembershipId]);
 
     // Kitchen Staff user
     const kitchenStaffId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,'PW Kitchen Staff','ACTIVE',now(),now())`, [kitchenStaffId, kitchenStaffEmail, passwordHash]);
+    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Kitchen Staff','ACTIVE',now(),now())`, [kitchenStaffId, kitchenStaffEmail, kitchenStaffPhone, passwordHash]);
     const kitchenStaffMembershipId = uuid();
     await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'KITCHEN_STAFF','ACTIVE',now(),now())`, [kitchenStaffMembershipId, tenantId, kitchenStaffId]);
     await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, kitchenStaffMembershipId]);
 
     // Super Admin user (platform-level, no tenant membership needed)
     const superAdminId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","passwordHash","displayName","platformRole","status","createdAt","updatedAt") VALUES ($1,$2,$3,'PW Super Admin','SUPER_ADMIN','ACTIVE',now(),now())`, [superAdminId, superAdminEmail, passwordHash]);
+    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","platformRole","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Super Admin','SUPER_ADMIN','ACTIVE',now(),now())`, [superAdminId, superAdminEmail, superAdminPhone, passwordHash]);
 
     // Menu category
     const categoryId = uuid();
@@ -204,11 +213,11 @@ export default async function globalSetup(): Promise<void> {
     const seedData: SeedData = {
       api: API_URL + '/api/v1',
       frontend: FRONTEND_URL,
-      owner: { email: ownerEmail, password: PASSWORD },
-      manager: { email: managerEmail, password: PASSWORD },
-      cashier: { email: cashierEmail, password: PASSWORD },
-      kitchenStaff: { email: kitchenStaffEmail, password: PASSWORD },
-      superAdmin: { email: superAdminEmail, password: PASSWORD },
+      owner: { phone: ownerPhone, password: PASSWORD },
+      manager: { phone: managerPhone, password: PASSWORD },
+      cashier: { phone: cashierPhone, password: PASSWORD },
+      kitchenStaff: { phone: kitchenStaffPhone, password: PASSWORD },
+      superAdmin: { phone: superAdminPhone, password: PASSWORD },
       tenantId,
       branchId,
       branchSlug,
@@ -229,7 +238,7 @@ export default async function globalSetup(): Promise<void> {
     fs.writeFileSync(SEED_FILE, JSON.stringify(seedData, null, 2));
     console.log(`  Seed data written to ${SEED_FILE}`);
     console.log(`  Tenant: ${tenantSlug}, Branch: ${branchSlug}`);
-    console.log(`  Owner: ${ownerEmail}, Manager: ${managerEmail}, Cashier: ${cashierEmail}, Kitchen: ${kitchenStaffEmail}, SuperAdmin: ${superAdminEmail}`);
+    console.log(`  Owner: ${ownerPhone}, Manager: ${managerPhone}, Cashier: ${cashierPhone}, Kitchen: ${kitchenStaffPhone}, SuperAdmin: ${superAdminPhone}`);
   } finally {
     await client.end();
   }

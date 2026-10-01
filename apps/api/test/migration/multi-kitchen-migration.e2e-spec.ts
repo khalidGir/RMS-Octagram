@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
+import { FulfillmentStatusService } from '../../src/modules/kitchen/fulfillment-status.service';
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL;
 if (!TEST_DATABASE_URL) {
@@ -9,6 +10,9 @@ if (!TEST_DATABASE_URL) {
 /**
  * Migration verification tests for 20260912000000_multi_kitchen_fulfillment.
  *
+ * Runs against a dedicated replay database built by test/migration/global-setup.ts:
+ * migrations 1..23, then the pre-multi-kitchen fixture, then the target migration,
+ * so every assertion below verifies the migration backfills on data this suite owns.
  * Every test compares against the complete Branch table — no silent passes
  * on empty subsets. Constraint tests create their own fixtures when needed.
  */
@@ -80,17 +84,11 @@ describe('multi-kitchen migration verification (e2e)', () => {
       const active = tickets.map((t) => t.status).filter((s) => s !== 'CANCELLED');
       if (active.length === 0) continue;
 
-      const allReadyOrComplete = active.every((s) => s === 'READY' || s === 'COMPLETED');
-      const hasReady = active.includes('READY');
-      const hasInProgress = active.some((s) => s !== 'READY' && s !== 'COMPLETED');
-
-      if (allReadyOrComplete && hasReady) {
-        expect(order.fulfillmentStatus).toBe('READY_FOR_SERVICE');
-      } else if (hasReady && hasInProgress) {
-        expect(order.fulfillmentStatus).toBe('PARTIALLY_READY');
-      } else {
-        expect(order.fulfillmentStatus).toBe('QUEUED');
-      }
+      // Canonical derivation rules (same implementation production uses to
+      // maintain Order.fulfillmentStatus). The previous inline mirror disagreed
+      // with migration §16 and production for all-COMPLETED tickets.
+      const expected = FulfillmentStatusService.computeFromStatuses(active);
+      expect(order.fulfillmentStatus).toBe(expected);
     }
   });
 
@@ -112,33 +110,49 @@ describe('multi-kitchen migration verification (e2e)', () => {
     const line = await prisma.orderLine.findFirst({ where: { orderId: order.id } });
     if (!line) return;
 
-    const testTicket = await prisma.kitchenTicket.create({
-      data: {
+    // Reuse an existing ticket for this order+station when present; other
+    // suites legitimately own tickets on shared orders (unique constraint on
+    // tenantId+branchId+orderId+stationId) and this suite must not collide.
+    const existingTicket = await prisma.kitchenTicket.findFirst({
+      where: {
         tenantId: tenant!.id,
         branchId: branch!.id,
         orderId: order.id,
         stationId: station!.id,
-        kitchenId: kitchen!.id,
-        ticketNumber: BigInt(999900),
-        ticketType: 'PREPARATION',
-        status: 'QUEUED',
       },
     });
+    const ownsTicket = !existingTicket;
+    const testTicket =
+      existingTicket ??
+      (await prisma.kitchenTicket.create({
+        data: {
+          tenantId: tenant!.id,
+          branchId: branch!.id,
+          orderId: order.id,
+          stationId: station!.id,
+          kitchenId: kitchen!.id,
+          ticketNumber: BigInt(999900),
+          ticketType: 'PREPARATION',
+          status: 'QUEUED',
+        },
+      }));
 
     await expect(
       prisma.$executeRaw`
         INSERT INTO "KitchenTicketLine" (
           "id", "tenantId", "branchId", "ticketId", "orderLineId",
           "routeType", "isRequired", "quantity", "quantityPrepared",
-          "quantityReady", "quantityCollected", "quantityServed", "version"
+          "quantityReady", "quantityCollected", "quantityServed", "version", "updatedAt"
         ) VALUES (
           gen_random_uuid(), ${tenant!.id}, ${branch!.id}, ${testTicket.id}, ${line.id},
-          'PREPARE', true, -1, 0, 0, 0, 0, 1
+          'PREPARE', true, -1, 0, 0, 0, 0, 1, now()
         )
       `,
     ).rejects.toThrow();
 
-    await prisma.kitchenTicket.delete({ where: { id: testTicket.id } });
+    if (ownsTicket) {
+      await prisma.kitchenTicket.delete({ where: { id: testTicket.id } });
+    }
   });
 
   it('KitchenTicketLine constraint: collected > ready rejected', async () => {
@@ -150,10 +164,10 @@ describe('multi-kitchen migration verification (e2e)', () => {
         INSERT INTO "KitchenTicketLine" (
           "id", "tenantId", "branchId", "ticketId", "orderLineId",
           "routeType", "isRequired", "quantity", "quantityPrepared",
-          "quantityReady", "quantityCollected", "quantityServed", "version"
+          "quantityReady", "quantityCollected", "quantityServed", "version", "updatedAt"
         ) VALUES (
           gen_random_uuid(), ${ticket.tenantId}, ${ticket.branchId}, ${ticket.id},
-          'nonexistent-line', 'PREPARE', true, 10, 5, 3, 7, 0, 1
+          'nonexistent-line', 'PREPARE', true, 10, 5, 3, 7, 0, 1, now()
         )
       `,
     ).rejects.toThrow();
@@ -168,10 +182,10 @@ describe('multi-kitchen migration verification (e2e)', () => {
         INSERT INTO "KitchenTicketLine" (
           "id", "tenantId", "branchId", "ticketId", "orderLineId",
           "routeType", "isRequired", "quantity", "quantityPrepared",
-          "quantityReady", "quantityCollected", "quantityServed", "version"
+          "quantityReady", "quantityCollected", "quantityServed", "version", "updatedAt"
         ) VALUES (
           gen_random_uuid(), ${ticket.tenantId}, ${ticket.branchId}, ${ticket.id},
-          'nonexistent-line', 'PREPARE', true, 10, 8, 6, 4, 5, 1
+          'nonexistent-line', 'PREPARE', true, 10, 8, 6, 4, 5, 1, now()
         )
       `,
     ).rejects.toThrow();
@@ -187,10 +201,10 @@ describe('multi-kitchen migration verification (e2e)', () => {
         INSERT INTO "KitchenTicketLine" (
           "id", "tenantId", "branchId", "ticketId", "orderLineId",
           "routeType", "isRequired", "quantity", "quantityPrepared",
-          "quantityReady", "quantityCollected", "quantityServed", "version"
+          "quantityReady", "quantityCollected", "quantityServed", "version", "updatedAt"
         ) VALUES (
           ${lineId}, ${ticket.tenantId}, ${ticket.branchId}, ${ticket.id},
-          'valid-test-line', 'PREPARE', true, 10, 7, 5, 4, 3, 1
+          'valid-test-line', 'PREPARE', true, 10, 7, 5, 4, 3, 1, now()
         )
       `,
     ).resolves.toBeDefined();

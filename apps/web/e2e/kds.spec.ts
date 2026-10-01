@@ -30,9 +30,9 @@ function httpPost(urlPath: string, headers: Record<string, string>, body?: unkno
   });
 }
 
-async function loginApi(email: string, password: string): Promise<TokenBundle> {
-  console.log(`[loginApi] POST ${API}/auth/login for ${email}`);
-  const res = await httpPost('/auth/login', {}, { email, password });
+async function loginApi(phone: string, password: string): Promise<TokenBundle> {
+  console.log(`[loginApi] POST ${API}/auth/login for ${phone}`);
+  const res = await httpPost('/auth/login', {}, { phone, password });
   if (res.status !== 200) throw new Error(`Login failed: ${res.status} ${JSON.stringify(res.body)}`);
   const body = res.body as { data: { accessToken: string; csrfToken?: string } };
   console.log(`[loginApi] OK, accessToken length=${body.data.accessToken?.length}`);
@@ -197,8 +197,8 @@ test.describe('Kitchen Display System', () => {
   });
 
   test('KDS shows ticket with bump button after order creation', async ({ kitchenStaffPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
-    const cashierToken = await loginApi(seed.cashier.email, seed.cashier.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
+    const cashierToken = await loginApi(seed.cashier.phone, seed.cashier.password);
     const { orderId } = await createOrderAndPayment(
       managerToken, cashierToken, seed.tenantId, seed.branchId,
       seed.variantId, seed.modifierOptionIds,
@@ -217,8 +217,8 @@ test.describe('Kitchen Display System', () => {
   });
 
   test('KDS bump moves ticket from Queued to In progress', async ({ kitchenStaffPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
-    const cashierToken = await loginApi(seed.cashier.email, seed.cashier.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
+    const cashierToken = await loginApi(seed.cashier.phone, seed.cashier.password);
     const { orderNumber } = await createOrderAndPayment(
       managerToken, cashierToken, seed.tenantId, seed.branchId,
       seed.variantId, seed.modifierOptionIds,
@@ -237,8 +237,8 @@ test.describe('Kitchen Display System', () => {
   });
 
   test('KDS complete moves ticket from Ready to Completed', async ({ kitchenStaffPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
-    const cashierToken = await loginApi(seed.cashier.email, seed.cashier.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
+    const cashierToken = await loginApi(seed.cashier.phone, seed.cashier.password);
     const { orderNumber } = await createOrderAndPayment(
       managerToken, cashierToken, seed.tenantId, seed.branchId,
       seed.variantId, seed.modifierOptionIds,
@@ -265,8 +265,8 @@ test.describe('Kitchen Display System', () => {
   });
 
   test('KDS recall moves ticket back from Ready to In progress', async ({ kitchenStaffPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
-    const cashierToken = await loginApi(seed.cashier.email, seed.cashier.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
+    const cashierToken = await loginApi(seed.cashier.phone, seed.cashier.password);
     const { orderNumber } = await createOrderAndPayment(
       managerToken, cashierToken, seed.tenantId, seed.branchId,
       seed.variantId, seed.modifierOptionIds,
@@ -307,8 +307,8 @@ test.describe('Kitchen Display System', () => {
   });
 
   test('KDS shows elapsed time on ticket cards', async ({ kitchenStaffPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
-    const cashierToken = await loginApi(seed.cashier.email, seed.cashier.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
+    const cashierToken = await loginApi(seed.cashier.phone, seed.cashier.password);
     const { orderId } = await createOrderAndPayment(
       managerToken, cashierToken, seed.tenantId, seed.branchId,
       seed.variantId, seed.modifierOptionIds,
@@ -326,8 +326,8 @@ test.describe('Kitchen Display System', () => {
   });
 
   test('KDS shows order number on ticket cards', async ({ kitchenStaffPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
-    const cashierToken = await loginApi(seed.cashier.email, seed.cashier.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
+    const cashierToken = await loginApi(seed.cashier.phone, seed.cashier.password);
     const { orderId } = await createOrderAndPayment(
       managerToken, cashierToken, seed.tenantId, seed.branchId,
       seed.variantId, seed.modifierOptionIds,

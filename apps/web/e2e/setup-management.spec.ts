@@ -47,7 +47,7 @@ test.describe('Team Management', () => {
     await managerPage.waitForURL((url) => url.pathname === '/team', { timeout: 15_000 });
     await managerPage.getByRole('button', { name: /invite member/i }).click({ timeout: 15_000 });
     await expect(managerPage.getByRole('dialog')).toBeVisible();
-    await expect(managerPage.getByText(/email address/i)).toBeVisible();
+    await expect(managerPage.getByText(/phone number/i)).toBeVisible();
   });
 });
 

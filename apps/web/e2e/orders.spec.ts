@@ -30,8 +30,8 @@ function httpPost(urlPath: string, headers: Record<string, string>, body?: unkno
   });
 }
 
-async function loginApi(email: string, password: string): Promise<TokenBundle> {
-  const res = await httpPost('/auth/login', {}, { email, password });
+async function loginApi(phone: string, password: string): Promise<TokenBundle> {
+  const res = await httpPost('/auth/login', {}, { phone, password });
   if (res.status !== 200) throw new Error(`Login failed: ${res.status}`);
   const body = res.body as { data: { accessToken: string; csrfToken?: string } };
   return { accessToken: body.data.accessToken, csrfToken: body.data.csrfToken ?? '' };
@@ -86,7 +86,7 @@ test.describe('Orders List Page', () => {
   });
 
   test('orders page shows real orders from API', async ({ cashierPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
     await createOrderViaApi(managerToken, seed.tenantId, seed.branchId, seed.variantId, seed.modifierOptionIds);
 
     await cashierPage.locator('aside nav a[href="/orders"]').first().click();
@@ -106,7 +106,7 @@ test.describe('Orders List Page', () => {
   });
 
   test('order card shows order number and amount', async ({ cashierPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
     const { orderNumber } = await createOrderViaApi(managerToken, seed.tenantId, seed.branchId, seed.variantId, seed.modifierOptionIds);
 
     await cashierPage.locator('aside nav a[href="/orders"]').first().click();
@@ -117,7 +117,7 @@ test.describe('Orders List Page', () => {
   });
 
   test('clicking order card navigates to detail page', async ({ cashierPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
     const { orderNumber } = await createOrderViaApi(managerToken, seed.tenantId, seed.branchId, seed.variantId, seed.modifierOptionIds);
 
     await cashierPage.locator('aside nav a[href="/orders"]').first().click();
@@ -143,7 +143,7 @@ test.describe('Orders List Page', () => {
 
 test.describe('Order Detail Page', () => {
   test('shows order detail with items after navigation', async ({ cashierPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
     const { orderNumber } = await createOrderViaApi(managerToken, seed.tenantId, seed.branchId, seed.variantId, seed.modifierOptionIds);
 
     await cashierPage.locator('aside nav a[href="/orders"]').first().click();
@@ -159,7 +159,7 @@ test.describe('Order Detail Page', () => {
   });
 
   test('shows order status on detail page', async ({ cashierPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
     const { orderNumber } = await createOrderViaApi(managerToken, seed.tenantId, seed.branchId, seed.variantId, seed.modifierOptionIds);
 
     await cashierPage.locator('aside nav a[href="/orders"]').first().click();
@@ -175,7 +175,7 @@ test.describe('Order Detail Page', () => {
   });
 
   test('back link returns to orders list', async ({ cashierPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
     const { orderNumber } = await createOrderViaApi(managerToken, seed.tenantId, seed.branchId, seed.variantId, seed.modifierOptionIds);
 
     await cashierPage.locator('aside nav a[href="/orders"]').first().click();
@@ -192,7 +192,7 @@ test.describe('Order Detail Page', () => {
   });
 
   test('shows total amount on detail page', async ({ cashierPage, seed }) => {
-    const managerToken = await loginApi(seed.manager.email, seed.manager.password);
+    const managerToken = await loginApi(seed.manager.phone, seed.manager.password);
     const { orderNumber } = await createOrderViaApi(managerToken, seed.tenantId, seed.branchId, seed.variantId, seed.modifierOptionIds);
 
     await cashierPage.locator('aside nav a[href="/orders"]').first().click();

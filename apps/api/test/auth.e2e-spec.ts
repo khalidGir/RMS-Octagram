@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const request = require('supertest');
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { AppModule } from '../src/app.module';
+import { TenancyService } from '../src/modules/tenancy/tenancy.service';
 import { OutboxProcessor } from '../src/modules/outbox/outbox.processor';
 import { seedEntitlements, cleanupEntitlements } from './entitlements-test-utils';
 
@@ -27,6 +28,7 @@ process.env.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'test-refresh
 
 describe('Auth & Tenancy Security (e2e)', () => {
   let app: INestApplication;
+  let moduleRef: TestingModule;
 
   let ownerToken: string;
   let managerToken: string;
@@ -49,7 +51,7 @@ describe('Auth & Tenancy Security (e2e)', () => {
   const owner2Email = `se-owner2-${ts}@test.com`;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix('api/v1');
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
@@ -396,12 +398,15 @@ describe('Auth & Tenancy Security (e2e)', () => {
   // Invitation Flow
   // ═══════════════════════════════════════════════
   describe('Invitation Flow', () => {
-    it('creates invitation with hashed token', async () => {
+    const inviteSuffix = ((ts + 1) % 100000000).toString().padStart(8, '0');
+    const invitePhone = `+2519${inviteSuffix}`;
+
+    it('creates invitation with hashed token via phone', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/memberships/invitations')
         .set('Authorization', `Bearer ${ownerToken}`)
         .set('x-tenant-id', tenantId)
-        .send({ email: `invite-${ts}@test.com`, role: 'CASHIER', branchIds: [mainBranchId] });
+        .send({ phone: invitePhone, role: 'CASHIER', branchIds: [mainBranchId] });
 
       expect(res.status).toBe(201);
       expect(res.body.data.invitationToken).toBeDefined();
@@ -413,9 +418,51 @@ describe('Auth & Tenancy Security (e2e)', () => {
       expect(mem?.invitationTokenHash).not.toBe(res.body.data.invitationToken);
       expect(mem?.status).toBe('INVITED');
 
-      // Cleanup
+      // Invited user is created with phone identity
+      const invitedUser = await prisma.user.findUnique({ where: { phoneE164: invitePhone } });
+      expect(invitedUser).not.toBeNull();
+      expect(invitedUser!.displayName).toBe(`Staff ${inviteSuffix.slice(-4)}`);
+
+      // Audit stores the masked phone, never the full number
+      const audit = await prisma.auditLog.findFirst({
+        where: { action: 'MEMBERSHIP_INVITE', entityId: mem!.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(audit).not.toBeNull();
+      const after = audit!.afterJson as Record<string, unknown>;
+      expect(after.phone).toBe(`+2519*****${inviteSuffix.slice(-4)}`);
+      expect(JSON.stringify(after)).not.toContain(invitePhone);
+
+      // Duplicate invite for the same phone → 409
+      const dup = await request(app.getHttpServer())
+        .post('/api/v1/memberships/invitations')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId)
+        .send({ phone: invitePhone, role: 'CASHIER', branchIds: [mainBranchId] });
+      expect(dup.status).toBe(409);
+
+      // Local format resolves to the same invite target → still 409
+      const dupLocal = await request(app.getHttpServer())
+        .post('/api/v1/memberships/invitations')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId)
+        .send({ phone: `09${inviteSuffix}`, role: 'CASHIER', branchIds: [mainBranchId] });
+      expect(dupLocal.status).toBe(409);
+
+      // Cleanup (invited user has no email — must delete by phone)
       await prisma.branchAssignment.deleteMany({ where: { membershipId: mem!.id } });
       await prisma.tenantMembership.delete({ where: { id: mem!.id } });
+      await prisma.authSession.deleteMany({ where: { userId: invitedUser!.id } });
+      await prisma.user.delete({ where: { id: invitedUser!.id } });
+    });
+
+    it('rejects invitation with invalid phone number', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/memberships/invitations')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('x-tenant-id', tenantId)
+        .send({ phone: '0111234567', role: 'CASHIER', branchIds: [mainBranchId] });
+      expect(res.status).toBe(400);
     });
 
     it('invitation expires', async () => {
@@ -482,6 +529,155 @@ describe('Auth & Tenancy Security (e2e)', () => {
       await prisma.tenantMembership.delete({ where: { id: m.id } });
       await prisma.authSession.deleteMany({ where: { userId: u.id } });
       await prisma.user.delete({ where: { id: u.id } });
+    });
+  });
+
+  // ═══════════════════════════════════════════════
+  // Phone-first authentication
+  // ═══════════════════════════════════════════════
+  describe('Phone-first authentication', () => {
+    const suffix = (n: number) => ((ts + n) % 100000000).toString().padStart(8, '0');
+    const phOwner = `+2519${suffix(3)}`;
+    const phOwnerLocal = `09${suffix(3)}`;
+    const phOwnerNational = `9${suffix(3)}`;
+    const phOwnerE164 = phOwner;
+    const phOwnerHyphen = `09${suffix(3).slice(0, 3)}-${suffix(3).slice(3, 6)}-${suffix(3).slice(6)}`;
+    const phRate = `+2519${suffix(2)}`;
+    const phRateLocal = `09${suffix(2)}`;
+    const phUnknown = `+2519${suffix(50)}`;
+
+    const loginWith = (phone: string, password = 'Test1234!') =>
+      request(app.getHttpServer()).post('/api/v1/auth/login').send({ phone, password });
+
+    const decodeJwt = (token: string) =>
+      JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'));
+
+    beforeAll(async () => {
+      const hash = await argon2.hash('Test1234!', { type: argon2.argon2id });
+      await prisma.user.create({
+        data: { email: `se-ph-${ts}@test.com`, phoneE164: phOwner, passwordHash: hash, displayName: 'PhOwner', status: 'ACTIVE' },
+      });
+      await prisma.user.create({
+        data: { email: `se-phrate-${ts}@test.com`, phoneE164: phRate, passwordHash: hash, displayName: 'PhRate', status: 'ACTIVE' },
+      });
+    });
+
+    it('accepts local, national, E.164, spaced and hyphenated formats', async () => {
+      const spaced = `${phOwnerLocal.slice(0, 4)} ${phOwnerLocal.slice(4, 7)} ${phOwnerLocal.slice(7)}`;
+      for (const phone of [phOwnerLocal, phOwnerNational, phOwnerE164, spaced, phOwnerHyphen]) {
+        const res = await loginWith(phone);
+        expect(res.status, `format: ${phone}`).toBe(200);
+        expect(res.body.data.accessToken).toBeDefined();
+      }
+    });
+
+    it('local and E.164 formats resolve to the same user', async () => {
+      const a = await loginWith(phOwnerLocal);
+      const b = await loginWith(phOwnerE164);
+      expect(a.status).toBe(200);
+      expect(b.status).toBe(200);
+
+      const meA = await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${a.body.data.accessToken}`);
+      const meB = await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${b.body.data.accessToken}`);
+
+      expect(meA.body.data.id).toBe(meB.body.data.id);
+      expect(meA.body.data.phone).toBe(phOwner);
+    });
+
+    it('/auth/me returns the phone in E.164', async () => {
+      const login = await loginWith(phOwnerLocal);
+      const me = await request(app.getHttpServer())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${login.body.data.accessToken}`);
+      expect(me.status).toBe(200);
+      expect(me.body.data.phone).toBe(phOwnerE164);
+    });
+
+    it('JWT access token carries the phone claim', async () => {
+      const login = await loginWith(phOwnerE164);
+      const payload = decodeJwt(login.body.data.accessToken);
+      expect(payload.phone).toBe(phOwnerE164);
+      expect(payload.sub).toBeDefined();
+    });
+
+    it('rejects wrong password with generic 401', async () => {
+      const res = await loginWith(phOwnerLocal, 'wrong-password');
+      expect(res.status).toBe(401);
+      expect(res.body.message).toBe('Invalid credentials');
+    });
+
+    it('rejects unknown phone with generic 401', async () => {
+      const res = await loginWith(phUnknown);
+      expect(res.status).toBe(401);
+      expect(res.body.message).toBe('Invalid credentials');
+    });
+
+    it('rejects malformed and landline numbers with generic 401', async () => {
+      for (const phone of ['0111234567', '+14155552671', 'not-a-phone', '091123456']) {
+        const res = await loginWith(phone);
+        expect(res.status, `input: ${phone}`).toBe(401);
+        expect(res.body.message).toBe('Invalid credentials');
+      }
+    });
+
+    it('rate limit cannot be bypassed by reformatting the phone', async () => {
+      for (let i = 0; i < 10; i++) {
+        const res = await loginWith(phRateLocal, 'wrong-password');
+        expect(res.status).toBe(401);
+      }
+      // Same identity expressed in E.164 must be locked out too
+      const reformatted = await loginWith(phRate, 'wrong-password');
+      expect(reformatted.status).toBe(429);
+      // Even the correct password is rejected while locked
+      const correct = await loginWith(phRate, 'Test1234!');
+      expect(correct.status).toBe(429);
+    });
+
+    it('creates tenant with owner phone as identity', async () => {
+      const tenancy = moduleRef.get(TenancyService);
+      const ownerSuffix = suffix(4);
+      const result = await tenancy.createTenant({
+        name: `PhoneT ${ts}`,
+        slug: `phone-t-${ts}`,
+        ownerPhone: `09${ownerSuffix}`,
+        ownerPassword: 'Test1234!',
+        ownerName: 'PhoneOwner',
+      });
+      expect(result.owner.phoneE164).toBe(`+2519${ownerSuffix}`);
+
+      try {
+        const login = await loginWith(`09${ownerSuffix}`);
+        expect(login.status).toBe(200);
+        const me = await request(app.getHttpServer())
+          .get('/api/v1/auth/me')
+          .set('Authorization', `Bearer ${login.body.data.accessToken}`);
+        expect(me.body.data.phone).toBe(`+2519${ownerSuffix}`);
+        expect(me.body.data.memberships[0].tenant.slug).toBe(`phone-t-${ts}`);
+      } finally {
+        await prisma.featureSetting.deleteMany({ where: { tenantId: result.tenant.id } });
+        await prisma.tenantEntitlement.deleteMany({ where: { tenantId: result.tenant.id } });
+        await prisma.tenantMembership.deleteMany({ where: { tenantId: result.tenant.id } });
+        await prisma.tenant.deleteMany({ where: { id: result.tenant.id } });
+        await prisma.authSession.deleteMany({ where: { userId: result.owner.id } });
+        await prisma.user.deleteMany({ where: { id: result.owner.id } });
+      }
+    });
+
+    it('rejects tenant creation with invalid owner phone', async () => {
+      const tenancy = moduleRef.get(TenancyService);
+      await expect(
+        tenancy.createTenant({
+          name: `PhoneBad ${ts}`,
+          slug: `phone-bad-${ts}`,
+          ownerPhone: '0111234567',
+          ownerPassword: 'Test1234!',
+          ownerName: 'BadOwner',
+        }),
+      ).rejects.toThrow('Enter a valid Ethiopian mobile number');
     });
   });
 });

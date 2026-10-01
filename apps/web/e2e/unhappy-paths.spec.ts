@@ -41,8 +41,8 @@ function httpPost(
   });
 }
 
-async function loginApi(email: string, password: string): Promise<TokenBundle> {
-  const res = await httpPost('/auth/login', {}, { email, password });
+async function loginApi(phone: string, password: string): Promise<TokenBundle> {
+  const res = await httpPost('/auth/login', {}, { phone, password });
   if (res.status !== 200) throw new Error(`Login failed: ${res.status}`);
   const body = res.body as { data: { accessToken: string; csrfToken?: string } };
   return { accessToken: body.data.accessToken, csrfToken: body.data.csrfToken ?? '' };
@@ -176,7 +176,7 @@ test.describe('Invalid input rejection', () => {
   });
 
   test('login with wrong password returns 401', async () => {
-    const res = await httpPost('/auth/login', {}, { email: 'nonexistent@test.com', password: 'wrong' });
+    const res = await httpPost('/auth/login', {}, { phone: '+251911000000', password: 'wrong' });
     expect(res.status).toBeGreaterThanOrEqual(400);
     expect(res.status).toBeLessThan(500);
   });

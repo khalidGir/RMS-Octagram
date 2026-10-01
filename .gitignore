@@ -32,6 +32,7 @@ coverage/
 test-results/
 playwright-report/
 baseline-screenshots/
+apps/web/e2e/.playwright-seed.json
 
 # Logs
 logs/
@@ -42,3 +43,4 @@ infrastructure/cdk/cdk.out/
 
 # Docker
 docker-compose.override.yml
+.vercel/
