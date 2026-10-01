@@ -13,7 +13,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export function AccountMenu({ initials }: { initials: string }) {
-  const { logout } = useAuth();
+  const { logout, profile } = useAuth();
+  const firstRole = profile?.memberships[0]?.role;
+  const canOpenSettings = firstRole === 'OWNER' || firstRole === 'MANAGER';
 
   return (
     <DropdownMenu>
@@ -34,12 +36,14 @@ export function AccountMenu({ initials }: { initials: string }) {
             Profile
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/settings" className="flex items-center gap-2">
-            <Settings size={16} aria-hidden="true" />
-            Settings
-          </Link>
-        </DropdownMenuItem>
+        {canOpenSettings && (
+          <DropdownMenuItem asChild>
+            <Link href="/settings" className="flex items-center gap-2">
+              <Settings size={16} aria-hidden="true" />
+              Settings
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {

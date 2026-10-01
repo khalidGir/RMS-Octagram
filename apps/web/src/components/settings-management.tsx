@@ -56,7 +56,18 @@ export function SettingsManagement() {
   });
 
   if (!membership || !['OWNER', 'MANAGER'].includes(membership.role)) {
-    return <p role="alert">Permission denied.</p>;
+    return (
+      <section className="grid min-h-72 place-items-center text-center">
+        <div>
+          <h1 className="text-2xl font-black">Permission denied</h1>
+          <p className="mt-2 max-w-md text-sm text-ink-muted">
+            {membership
+              ? 'Restaurant settings are available to the owner and manager only. Ask your restaurant owner for access.'
+              : 'Your platform account has no restaurant to configure.'}
+          </p>
+        </div>
+      </section>
+    );
   }
 
   const isOwner = membership.role === 'OWNER';
