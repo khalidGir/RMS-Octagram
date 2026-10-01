@@ -12,6 +12,39 @@ export interface Tenant {
   };
 }
 
+export interface TenantBranch {
+  id: string;
+  name: string;
+  slug: string;
+  publicSlug: string | null;
+  timezone: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface TenantMember {
+  role: string;
+  status: string;
+  createdAt: string;
+  user: {
+    id: string;
+    displayName: string | null;
+    phoneE164: string | null;
+    email: string | null;
+    status: string;
+    lastLoginAt: string | null;
+  };
+}
+
+export interface TenantDetail extends Tenant {
+  defaultCurrency: string;
+  defaultTimezone: string;
+  defaultLocale: string;
+  _count: { memberships: number; branches: number };
+  branches: TenantBranch[];
+  memberships: TenantMember[];
+}
+
 export interface TenantsResponse {
   data: Tenant[];
 }
@@ -33,6 +66,17 @@ export async function fetchTenants(
 ): Promise<Tenant[]> {
   const qs = opts?.status ? `?status=${opts.status}` : '';
   const res = await apiRequest<TenantsResponse>(`/platform/tenants${qs}`, {
+    accessToken, csrfToken,
+  });
+  return res.data;
+}
+
+export async function fetchTenantDetail(
+  tenantId: string,
+  accessToken: string,
+  csrfToken: string | null,
+): Promise<TenantDetail> {
+  const res = await apiRequest<ApiEnvelope<TenantDetail>>(`/platform/tenants/${tenantId}`, {
     accessToken, csrfToken,
   });
   return res.data;

@@ -1,9 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/components/auth-provider';
 import { branchOverrideLabel, dependencyBlockers, effectiveFeatureEnabled, featureCatalog } from '@/lib/feature-control';
-import { fetchTenants, fetchEntitlements, setEntitlement, type Tenant, type FeatureEntitlement } from '@/lib/platform-api';
+import {
+  fetchTenants,
+  fetchTenantDetail,
+  fetchEntitlements,
+  setEntitlement,
+  type Tenant,
+  type TenantBranch,
+  type FeatureEntitlement,
+} from '@/lib/platform-api';
 import type { BranchOverride, EntitlementState, FeatureKey, TenantFeatureControl } from '@/lib/types';
 import { Button, PageHeader, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@/components/ui';
 
@@ -28,10 +37,13 @@ function mapEntitlementToControl(e: FeatureEntitlement): TenantFeatureControl {
 
 export function FeatureControlPanel() {
   const { accessToken, csrfToken } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [controls, setControls] = useState<TenantFeatureControl[]>([]);
-  const [branch, setBranch] = useState('Bole Main');
+  const [branches, setBranches] = useState<TenantBranch[]>([]);
+  const [branchId, setBranchId] = useState<string>('');
   const [category, setCategory] = useState('All');
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
@@ -41,39 +53,69 @@ export function FeatureControlPanel() {
   const visibleFeatures = useMemo(() => featureCatalog.filter((f) => category === 'All' || f.category === category), [category]);
   const enabledCount = controls.filter((c) => effectiveFeatureEnabled(c, controls)).length;
   const dirtyCount = Object.values(dirty).filter(Boolean).length;
+  const selectedBranchName = branches.find((b) => b.id === branchId)?.name ?? 'this branch';
 
-  async function loadTenants() {
+  const loadEntitlements = useCallback(
+    async (tenantId: string) => {
+      if (!accessToken || !tenantId) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await fetchEntitlements(tenantId, accessToken, csrfToken);
+        setControls(data.map(mapEntitlementToControl));
+        setDirty({});
+      } catch {
+        setError('Failed to load feature entitlements');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [accessToken, csrfToken],
+  );
+
+  const loadBranches = useCallback(
+    async (tenantId: string) => {
+      if (!accessToken || !tenantId) return;
+      try {
+        const detail = await fetchTenantDetail(tenantId, accessToken, csrfToken);
+        const list = detail.branches ?? [];
+        setBranches(list);
+        setBranchId((prev) => {
+          if (prev && list.some((b) => b.id === prev)) return prev;
+          return (list.find((b) => b.isActive) ?? list[0])?.id ?? '';
+        });
+      } catch {
+        setError('Failed to load branches for this restaurant');
+      }
+    },
+    [accessToken, csrfToken],
+  );
+
+  const loadTenants = useCallback(async () => {
     if (!accessToken) return;
     try {
       const data = await fetchTenants(accessToken, csrfToken);
       setTenants(data);
-      if (data.length > 0 && !selectedTenantId) {
-        setSelectedTenantId(data[0].id);
+      if (data.length > 0) {
+        const requested = searchParams.get('tenant');
+        const initial = requested && data.some((t) => t.id === requested) ? requested : data[0].id;
+        setSelectedTenantId(initial);
+        await Promise.all([loadEntitlements(initial), loadBranches(initial)]);
       }
     } catch {
       setError('Failed to load tenants');
     }
-  }
+  }, [accessToken, csrfToken, searchParams, loadEntitlements, loadBranches]);
 
-  async function loadEntitlements(tenantId: string) {
-    if (!accessToken || !tenantId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchEntitlements(tenantId, accessToken, csrfToken);
-      const mapped = data.map(mapEntitlementToControl);
-      setControls(mapped);
-      setDirty({});
-    } catch {
-      setError('Failed to load feature entitlements');
-    } finally {
-      setLoading(false);
-    }
-  }
+  useEffect(() => {
+    void loadTenants();
+  }, [loadTenants]);
 
   function handleTenantChange(tenantId: string) {
     setSelectedTenantId(tenantId);
-    loadEntitlements(tenantId);
+    router.replace(`/platform/features?tenant=${tenantId}`, { scroll: false });
+    void loadEntitlements(tenantId);
+    void loadBranches(tenantId);
   }
 
   async function handleSave() {
@@ -131,7 +173,7 @@ export function FeatureControlPanel() {
           <div className="flex gap-2 overflow-x-auto hide-scrollbar" aria-label="Feature categories">
             {['All', 'Ordering', 'Payments', 'Operations', 'Growth'].map((item) => <button key={item} onClick={() => setCategory(item)} className={`min-h-10 whitespace-nowrap rounded-full px-4 text-xs font-black ${category === item ? 'bg-dark text-white' : 'bg-muted text-ink-muted hover:text-ink'}`}>{item}</button>)}
           </div>
-          <div className="min-w-64"><p className="mb-2 text-xs font-semibold text-ink-muted">Branch view</p><Select value={branch} onValueChange={setBranch}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Bole Main', 'Downtown', 'Airport'].map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectContent></Select></div>
+          <div className="min-w-64"><p className="mb-2 text-xs font-semibold text-ink-muted">Branch view</p><Select value={branchId} onValueChange={setBranchId} disabled={branches.length === 0}><SelectTrigger><SelectValue placeholder={branches.length > 0 ? 'Select branch' : 'No branches yet'} /></SelectTrigger><SelectContent>{branches.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}{b.isActive ? '' : ' (inactive)'}</SelectItem>)}</SelectContent></Select></div>
         </div>
       </section>
 
@@ -154,7 +196,7 @@ export function FeatureControlPanel() {
                   <div className="flex gap-4"><span className={`grid size-12 shrink-0 place-items-center rounded-xl text-sm font-black ${effective ? 'bg-brand text-white' : 'bg-muted text-ink-muted'}`}>{feature.name.split(' ').map((word) => word[0]).slice(0, 2).join('')}</span><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-black">{feature.name}</h2><span className="rounded-full bg-muted px-2 py-1 text-[9px] font-black uppercase tracking-wider text-ink-muted">{feature.category}</span></div><p className="mt-1 max-w-xl text-sm leading-5 text-ink-muted">{feature.description}</p>{blockers.length > 0 && <p className="mt-2 text-xs font-bold text-amber-700">Requires {blockers.map((item) => item.name).join(', ')}</p>}</div></div>
                   <Control label="Platform entitlement"><Select value={control.entitlement} onValueChange={(value) => updateControl(feature.key, { entitlement: value as EntitlementState })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(['ENABLED', 'TRIAL', 'DISABLED', 'SUSPENDED'] as const).map((value) => <SelectItem key={value} value={value}>{value[0]}{value.slice(1).toLowerCase()}</SelectItem>)}</SelectContent></Select><span className={`mt-2 inline-flex w-fit rounded-full px-2 py-1 text-[9px] font-black ring-1 ring-inset ${entitlementStyles[control.entitlement]}`}>{control.entitlement}</span></Control>
                   <Control label="Restaurant setting"><div className="flex min-h-11 items-center justify-between rounded-control border border-border px-3"><span className="text-sm font-semibold">{control.tenantEnabled ? 'On' : 'Off'}</span><Switch label={`${feature.name} restaurant setting`} disabled={!['ENABLED', 'TRIAL'].includes(control.entitlement)} checked={control.tenantEnabled} onCheckedChange={(checked) => updateControl(feature.key, { tenantEnabled: checked })} className="[&+label]:sr-only" /></div></Control>
-                  <Control label={feature.branchConfigurable ? branch : 'Scope'}>{feature.branchConfigurable ? <Select value={control.branchOverride} onValueChange={(value) => updateControl(feature.key, { branchOverride: value as BranchOverride })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INHERIT">Follow tenant</SelectItem><SelectItem value="ENABLED">Enabled here</SelectItem><SelectItem value="DISABLED">Disabled here</SelectItem></SelectContent></Select> : <div className="flex min-h-11 items-center rounded-control bg-muted px-3 text-sm font-bold text-ink-muted">Tenant-wide</div>}<p className={`mt-2 text-xs font-black ${effective ? 'text-emerald-700' : 'text-stone-500'}`}>{effective ? 'Effective: enabled' : 'Effective: disabled'}{feature.branchConfigurable ? ` · ${branchOverrideLabel(control.branchOverride)}` : ''}</p></Control>
+                  <Control label={feature.branchConfigurable ? selectedBranchName : 'Scope'}>{feature.branchConfigurable ? <Select value={control.branchOverride} onValueChange={(value) => updateControl(feature.key, { branchOverride: value as BranchOverride })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="INHERIT">Follow tenant</SelectItem><SelectItem value="ENABLED">Enabled here</SelectItem><SelectItem value="DISABLED">Disabled here</SelectItem></SelectContent></Select> : <div className="flex min-h-11 items-center rounded-control bg-muted px-3 text-sm font-bold text-ink-muted">Tenant-wide</div>}<p className={`mt-2 text-xs font-black ${effective ? 'text-emerald-700' : 'text-stone-500'}`}>{effective ? 'Effective: enabled' : 'Effective: disabled'}{feature.branchConfigurable ? ` · ${branchOverrideLabel(control.branchOverride)}` : ''}</p></Control>
                 </div>
                 {dirty[feature.key] && <div className="mt-3 text-xs font-bold text-amber-600">Unsaved change</div>}
               </article>

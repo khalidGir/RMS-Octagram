@@ -6,6 +6,9 @@ import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
 import { StatusChip } from '@/components/ui/status-chip';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Banner } from '@/components/ui/banner';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/cn';
 import {
   fetchTenants,
@@ -26,6 +29,8 @@ export function PlatformAdmin() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<Tenant | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchAll = useCallback(async () => {
     if (!accessToken) return;
@@ -46,6 +51,7 @@ export function PlatformAdmin() {
   async function handleToggle(tenant: Tenant) {
     if (!accessToken) return;
     setActionLoading(tenant.id);
+    setActionError(null);
     try {
       if (tenant.status === 'SUSPENDED') {
         const updated = await activateTenant(tenant.id, accessToken, csrfToken);
@@ -55,8 +61,10 @@ export function PlatformAdmin() {
         setTenants((prev) => prev.map((prev) => prev.id === tenant.id ? updated : prev));
       }
     } catch {
+      setActionError(`Could not ${tenant.status === 'SUSPENDED' ? 'activate' : 'suspend'} ${tenant.name}. Please try again.`);
     } finally {
       setActionLoading(null);
+      setPendingAction(null);
     }
   }
 
@@ -80,13 +88,17 @@ export function PlatformAdmin() {
 
   return (
     <div className="mx-auto max-w-[1500px]">
-      <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-brand">Platform</p>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.045em] sm:text-4xl">Tenant operations</h1>
-          <p className="mt-2 text-sm text-ink-muted">Manage restaurant tenants, account status, and platform-wide access.</p>
-        </div>
-      </header>
+      <PageHeader
+        eyebrow="Platform"
+        title="Tenant operations"
+        description="Manage restaurant tenants, account status, and platform-wide access."
+      />
+
+      {actionError && (
+        <Banner variant="danger" title="Action failed" onDismiss={() => setActionError(null)} className="mt-5">
+          {actionError}
+        </Banner>
+      )}
 
       <section className="mt-7 grid gap-3 sm:grid-cols-3">
         <SummaryCard label="Active tenants" value={String(activeCount)} detail="Currently active" tone="brand" />
@@ -115,7 +127,11 @@ export function PlatformAdmin() {
             <tbody>
               {tenants.map((tenant) => (
                 <tr key={tenant.id} className="border-b border-line last:border-0 text-sm">
-                  <td className="px-5 py-5 font-black">{tenant.name}</td>
+                  <td className="px-5 py-5">
+                    <Link href={`/platform/tenants/${tenant.id}`} className="font-black hover:text-brand hover:underline">
+                      {tenant.name}
+                    </Link>
+                  </td>
                   <td className="px-5 py-5 text-ink-muted">{tenant.slug}</td>
                   <td className="px-5 py-5">{tenant._count?.memberships ?? 0}</td>
                   <td className="px-5 py-5">{tenant._count?.branches ?? 0}</td>
@@ -125,13 +141,13 @@ export function PlatformAdmin() {
                   <td className="px-5 py-5">
                     <div className="flex gap-3">
                       <button
-                        onClick={() => void handleToggle(tenant)}
+                        onClick={() => setPendingAction(tenant)}
                         disabled={actionLoading === tenant.id}
                         className={cn('text-xs font-black', tenant.status === 'SUSPENDED' ? 'text-emerald-700' : 'text-amber-700')}
                       >
                         {actionLoading === tenant.id ? '...' : tenant.status === 'SUSPENDED' ? 'Activate' : 'Suspend'}
                       </button>
-                      <Link href="/platform/features" className="text-xs font-black text-brand">Features →</Link>
+                      <Link href={`/platform/features?tenant=${tenant.id}`} className="text-xs font-black text-brand">Features →</Link>
                     </div>
                   </td>
                 </tr>
@@ -140,6 +156,20 @@ export function PlatformAdmin() {
           </table>
         )}
       </section>
+
+      <ConfirmDialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => { if (!open) setPendingAction(null); }}
+        title={pendingAction ? `${pendingAction.status === 'SUSPENDED' ? 'Activate' : 'Suspend'} ${pendingAction.name}?` : ''}
+        description={
+          pendingAction?.status === 'SUSPENDED'
+            ? 'Staff of this restaurant will be able to sign in and use the platform again.'
+            : 'All users of this restaurant will lose access until the account is reactivated. Existing data is kept.'
+        }
+        confirmLabel={pendingAction?.status === 'SUSPENDED' ? 'Activate restaurant' : 'Suspend restaurant'}
+        variant={pendingAction?.status === 'SUSPENDED' ? 'primary' : 'danger'}
+        onConfirm={() => { if (pendingAction) void handleToggle(pendingAction); }}
+      />
     </div>
   );
 }

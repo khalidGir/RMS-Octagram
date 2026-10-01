@@ -52,6 +52,13 @@ export class PlatformAdminController {
     return { data: tenants };
   }
 
+  @Get('tenants/:tenantId')
+  @ApiOperation({ summary: 'Tenant detail with branches and members' })
+  async getTenant(@Param('tenantId') tenantId: string) {
+    const tenant = await this.platformAdminService.getTenantDetail(tenantId);
+    return { data: tenant };
+  }
+
   @Patch('tenants/:tenantId/suspend')
   @ApiOperation({ summary: 'Suspend tenant' })
   async suspendTenant(@Param('tenantId') tenantId: string) {

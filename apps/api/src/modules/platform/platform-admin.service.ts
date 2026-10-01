@@ -29,6 +29,47 @@ export class PlatformAdminService {
     });
   }
 
+  async getTenantDetail(tenantId: string) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: {
+        _count: { select: { branches: true, memberships: true } },
+        branches: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            publicSlug: true,
+            timezone: true,
+            isActive: true,
+            createdAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        memberships: {
+          select: {
+            role: true,
+            status: true,
+            createdAt: true,
+            user: {
+              select: {
+                id: true,
+                displayName: true,
+                phoneE164: true,
+                email: true,
+                status: true,
+                lastLoginAt: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+    return tenant;
+  }
+
   async suspendTenant(tenantId: string) {
     this.logger.warn(`Tenant suspended: ${tenantId}`);
     return this.prisma.tenant.update({
