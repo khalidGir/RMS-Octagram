@@ -38,16 +38,24 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle({ ttl: 60_000, limit: 100, name: 'login' })
-  @ApiOperation({ summary: 'Staff login' })
+  @Throttle({ ttl: 60_000, limit: 10, name: 'login' })
+  @ApiOperation({ summary: 'Staff login with phone number' })
   async login(
     @Body() body: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    if (!body || typeof body.email !== 'string' || typeof body.password !== 'string' || !body.email || !body.password) {
-      throw new BadRequestException('Email and password are required');
+    if (
+      !body ||
+      typeof body.password !== 'string' ||
+      !body.password ||
+      (!body.phone && !body.email)
+    ) {
+      throw new BadRequestException('Phone number and password are required');
     }
-    const tokens = await this.authService.login(body.email, body.password);
+    const tokens = await this.authService.login(
+      { phone: body.phone, email: body.email },
+      body.password,
+    );
 
     // Set refresh token cookie
     res.cookie('refresh_token', tokens.refreshToken, this.getCookieOptions());

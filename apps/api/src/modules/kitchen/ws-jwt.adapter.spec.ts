@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WsJwtAdapter } from './ws-jwt.adapter';
 
 function setup(exp: number | undefined = Math.floor(Date.now() / 1000) + 60) {
-  const jwt = { verifyAsync: vi.fn().mockResolvedValue({ sub: 'user-1', email: null, platformRole: null, exp }) };
+  const jwt = { verifyAsync: vi.fn().mockResolvedValue({ sub: 'user-1', phone: null, email: null, platformRole: null, exp }) };
   const prisma = {
     user: { findUnique: vi.fn().mockResolvedValue({ id: 'user-1', status: 'ACTIVE', platformRole: null }) },
     tenant: { findUnique: vi.fn().mockResolvedValue({ id: 'tenant-1', status: 'ACTIVE' }) },
@@ -62,7 +62,7 @@ describe('connected socket token lifetime', () => {
   });
   it('rejects verified payloads without a finite expiration', async () => {
     const { authenticate, jwt, socket } = setup();
-    jwt.verifyAsync.mockResolvedValue({ sub: 'user-1', email: null, platformRole: null, exp: undefined });
+    jwt.verifyAsync.mockResolvedValue({ sub: 'user-1', phone: null, email: null, platformRole: null, exp: undefined });
     await expect(authenticate()).rejects.toThrow('Invalid or expired token');
     expect(socket.once).not.toHaveBeenCalled();
   });

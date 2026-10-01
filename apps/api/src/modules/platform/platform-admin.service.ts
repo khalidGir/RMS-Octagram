@@ -54,6 +54,7 @@ export class PlatformAdminService {
         select: {
           id: true,
           email: true,
+          phoneE164: true,
           displayName: true,
           platformRole: true,
           status: true,
@@ -68,6 +69,7 @@ export class PlatformAdminService {
       select: {
         id: true,
         email: true,
+        phoneE164: true,
         displayName: true,
         platformRole: true,
         status: true,

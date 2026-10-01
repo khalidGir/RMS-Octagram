@@ -38,7 +38,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     return {
       sub: payload.sub,
-      email: payload.email,
+      phone: payload.phone ?? null,
+      email: payload.email ?? null,
       platformRole: user.platformRole, // Use fresh platform role from DB
     };
   }

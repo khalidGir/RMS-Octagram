@@ -135,6 +135,7 @@ export class WsJwtAdapter extends IoAdapter {
     // 3. Build base context
     const ctx: TenantContext = {
       userId: user.id,
+      phone: payload.phone ?? null,
       email: payload.email,
       platformRole: user.platformRole,
     };

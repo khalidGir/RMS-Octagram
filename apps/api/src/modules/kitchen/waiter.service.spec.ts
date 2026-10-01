@@ -446,7 +446,7 @@ describe('WaiterService', () => {
           fulfillmentStatus: 'READY_FOR_SERVICE',
           version: 4,
           assignedWaiterUserId: 'w1',
-          waiter: { id: 'w1', email: 'w@test.com' },
+          waiter: { id: 'w1', phoneE164: '+251911111111' },
           readyForServiceAt: new Date(),
           servedAt: null,
           createdAt: new Date(),

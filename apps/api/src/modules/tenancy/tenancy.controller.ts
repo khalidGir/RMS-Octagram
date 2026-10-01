@@ -123,7 +123,7 @@ export class TenancyController {
   async inviteMember(@Req() req: Request, @Body() body: InviteMemberDto) {
     const ctx = req.tenantContext as TenantContext;
     const result = await this.tenancyService.inviteMember(ctx.tenantId!, {
-      email: body.email,
+      phone: body.phone,
       role: body.role as TenantRole,
       branchIds: body.branchIds,
       invitedByUserId: ctx.userId,

@@ -21,20 +21,21 @@ async function main() {
 
   console.log(`Seeding database (env: ${env})...`);
 
-  // 1. Platform super admin
+  // 1. Platform super admin (staging QA phone accounts — idempotent backfill)
   const superAdminPasswordHash = await argon2.hash('admin123', { type: argon2.argon2id });
   const superAdmin = await prisma.user.upsert({
     where: { email: 'admin@rms.dev' },
-    update: {},
+    update: { phoneE164: '+251900000001' },
     create: {
       email: 'admin@rms.dev',
+      phoneE164: '+251900000001',
       passwordHash: superAdminPasswordHash,
       displayName: 'Platform Admin',
       platformRole: 'SUPER_ADMIN',
       status: 'ACTIVE',
     },
   });
-  console.log(`Super admin: ${superAdmin.email} (admin123)`);
+  console.log(`Super admin: ${superAdmin.phoneE164} (admin123)`);
 
   // 2. Demo tenant: Coffee House
   const tenant = await prisma.tenant.upsert({
@@ -51,9 +52,10 @@ async function main() {
   const ownerPasswordHash = await argon2.hash('owner123', { type: argon2.argon2id });
   const owner = await prisma.user.upsert({
     where: { email: 'owner@demo.com' },
-    update: {},
+    update: { phoneE164: '+251900000002' },
     create: {
       email: 'owner@demo.com',
+      phoneE164: '+251900000002',
       passwordHash: ownerPasswordHash,
       displayName: 'Abebe Kebede',
       status: 'ACTIVE',
@@ -70,15 +72,16 @@ async function main() {
       status: 'ACTIVE',
     },
   });
-  console.log(`Owner: ${owner.email} (owner123)`);
+  console.log(`Owner: ${owner.phoneE164} (owner123)`);
 
   // 4. Manager
   const managerPasswordHash = await argon2.hash('manager123', { type: argon2.argon2id });
   const manager = await prisma.user.upsert({
     where: { email: 'manager@demo.com' },
-    update: {},
+    update: { phoneE164: '+251900000003' },
     create: {
       email: 'manager@demo.com',
+      phoneE164: '+251900000003',
       passwordHash: managerPasswordHash,
       displayName: 'Almaz Tesfaye',
       status: 'ACTIVE',
@@ -100,9 +103,10 @@ async function main() {
   const cashierPasswordHash = await argon2.hash('cashier123', { type: argon2.argon2id });
   const cashier = await prisma.user.upsert({
     where: { email: 'cashier@demo.com' },
-    update: {},
+    update: { phoneE164: '+251900000004' },
     create: {
       email: 'cashier@demo.com',
+      phoneE164: '+251900000004',
       passwordHash: cashierPasswordHash,
       displayName: 'Dawit Mulugeta',
       status: 'ACTIVE',
@@ -124,9 +128,10 @@ async function main() {
   const kitchenPasswordHash = await argon2.hash('kitchen123', { type: argon2.argon2id });
   const kitchen = await prisma.user.upsert({
     where: { email: 'kitchen@demo.com' },
-    update: {},
+    update: { phoneE164: '+251900000005' },
     create: {
       email: 'kitchen@demo.com',
+      phoneE164: '+251900000005',
       passwordHash: kitchenPasswordHash,
       displayName: 'Fatima Hassan',
       status: 'ACTIVE',
@@ -189,9 +194,9 @@ async function main() {
     });
   }
 
-  console.log(`Cashier: ${cashier.email} (cashier123) — assigned to Main only`);
-  console.log(`Kitchen: ${kitchen.email} (kitchen123) — assigned to Main only`);
-  console.log(`Manager: ${manager.email} (manager123) — assigned to both branches`);
+  console.log(`Cashier: ${cashier.phoneE164} (cashier123) — assigned to Main only`);
+  console.log(`Kitchen: ${kitchen.phoneE164} (kitchen123) — assigned to Main only`);
+  console.log(`Manager: ${manager.phoneE164} (manager123) — assigned to both branches`);
 
   // 9. Feature defaults
   // Gateway remains disabled: there is no integrated provider in the MVP.
@@ -231,9 +236,10 @@ async function main() {
   const waiterPasswordHash = await argon2.hash('waiter123', { type: argon2.argon2id });
   const waiter = await prisma.user.upsert({
     where: { email: 'waiter@demo.com' },
-    update: {},
+    update: { phoneE164: '+251900000006' },
     create: {
       email: 'waiter@demo.com',
+      phoneE164: '+251900000006',
       passwordHash: waiterPasswordHash,
       displayName: 'Hana Tesfalem',
       status: 'ACTIVE',
@@ -260,7 +266,7 @@ async function main() {
       membershipId: waiterMembership.id,
     },
   });
-  console.log(`Waiter: ${waiter.email} (waiter123) — assigned to Main only`);
+  console.log(`Waiter: ${waiter.phoneE164} (waiter123) — assigned to Main only`);
 
   // 11. Kitchens for Main Branch
   const mainKitchen = await prisma.kitchen.upsert({

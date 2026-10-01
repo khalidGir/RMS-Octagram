@@ -68,7 +68,7 @@ export class ExpoService {
             kitchen: { select: { name: true } },
           },
         },
-        waiter: { select: { id: true, email: true } },
+        waiter: { select: { id: true, phoneE164: true } },
       },
       orderBy: [{ readyForServiceAt: 'asc' }, { createdAt: 'asc' }],
       take: limit,
@@ -100,7 +100,7 @@ export class ExpoService {
             lines: true,
           },
         },
-        waiter: { select: { id: true, email: true } },
+        waiter: { select: { id: true, phoneE164: true } },
       },
     });
 

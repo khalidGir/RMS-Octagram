@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { normalizeEthiopianPhone, isValidEthiopianPhone } from '@rms/contracts';
 import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
@@ -26,7 +27,7 @@ interface Member {
   userId: string;
   role: string;
   status: string;
-  user: { id: string; email: string; displayName: string };
+  user: { id: string; displayName: string; phone: string | null };
   branchAssignments: BranchAssignment[];
 }
 
@@ -225,7 +226,7 @@ function TeamList({
                 <tr className="border-t border-line text-sm" key={m.id}>
                   <td className="px-5 py-5">
                     <p className="font-black">{m.user.displayName}</p>
-                    <p className="text-xs text-ink-muted">{m.user.email}</p>
+                    <p className="text-xs text-ink-muted">{m.user.phone ?? '—'}</p>
                   </td>
                   <td className="px-5 py-5">{roleLabel(m.role)}</td>
                   <td className="px-5 py-5 text-ink-muted">{branchNames}</td>
@@ -384,7 +385,7 @@ function InviteDialog({
   onClose: () => void;
   onCreated: () => Promise<void>;
 }) {
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [role, setRole] = useState<string>('CASHIER');
   const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -396,9 +397,11 @@ function InviteDialog({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = email.trim();
-    if (!trimmed) return setError('Enter an email address.');
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return setError('Enter a valid email address.');
+    const trimmed = phone.trim();
+    if (!trimmed) return setError('Enter a phone number.');
+    if (!isValidEthiopianPhone(trimmed)) return setError('Enter a valid Ethiopian mobile number (e.g. 0911 234 567).');
+    const normalizedPhone = normalizeEthiopianPhone(trimmed);
+    if (!normalizedPhone) return setError('Enter a valid Ethiopian mobile number (e.g. 0911 234 567).');
     setBusy(true);
     setError(null);
     try {
@@ -408,7 +411,7 @@ function InviteDialog({
         csrfToken,
         tenantId,
         body: {
-          email: trimmed,
+          phone: normalizedPhone,
           role,
           branchIds: selectedBranches.length > 0 ? selectedBranches : undefined,
         },
@@ -433,12 +436,14 @@ function InviteDialog({
         <DialogTitle>Invite team member</DialogTitle>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <label className="text-sm font-black">
-            Email address
+            Phone number
             <input
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              type="email"
-              placeholder="colleague@example.com"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="0911 234 567"
               className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-4 font-normal outline-none focus:ring-2 focus:ring-brand/20"
               autoFocus
             />
@@ -483,7 +488,7 @@ function InviteDialog({
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
               Cancel
             </button>
-            <button disabled={busy || !email.trim()} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
+            <button disabled={busy || !phone.trim()} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
               {busy ? 'Sending…' : 'Send invitation'}
             </button>
           </div>
@@ -559,7 +564,7 @@ function EditMemberDialog({
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-lg" aria-label={`Manage ${member.user.displayName}`}>
         <DialogTitle>Manage {member.user.displayName}</DialogTitle>
-        <p className="text-sm text-ink-muted">{member.user.email}</p>
+        <p className="text-sm text-ink-muted">{member.user.phone ?? '—'}</p>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <div className="grid grid-cols-2 gap-4">
             <label className="text-sm font-black">

@@ -8,8 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 export function AccountManagement() {
   const { profile, loading } = useAuth();
   const [displayName, setDisplayName] = useState(profile?.displayName ?? '');
-  const [email, setEmail] = useState(profile?.email ?? '');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(profile?.phone ?? '');
   const [saved, setSaved] = useState(false);
   const [notifications, setNotifications] = useState({
     paymentProofs: true,
@@ -52,12 +51,8 @@ export function AccountManagement() {
               <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="mt-2 w-full rounded-xl border border-line p-3 text-sm" />
             </label>
             <label className="block text-xs font-black text-ink-muted">
-              Email
-              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="mt-2 w-full rounded-xl border border-line p-3 text-sm" />
-            </label>
-            <label className="block text-xs font-black text-ink-muted">
               Phone
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" placeholder="+251 911 000 000" className="mt-2 w-full rounded-xl border border-line p-3 text-sm" />
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" inputMode="tel" autoComplete="tel" placeholder="0911 234 567" className="mt-2 w-full rounded-xl border border-line p-3 text-sm" />
             </label>
             {membership && (
               <div className="rounded-xl bg-muted p-4 text-sm">

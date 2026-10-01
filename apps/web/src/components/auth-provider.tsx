@@ -2,12 +2,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { apiRequest, type ApiEnvelope } from '@/lib/api-client';
+import { normalizeEthiopianPhone } from '@rms/contracts';
 
 export type StaffRole = 'OWNER' | 'MANAGER' | 'CASHIER' | 'KITCHEN_STAFF' | 'WAITER';
 
 export interface StaffProfile {
   id: string;
-  email: string | null;
+  phone: string | null;
   displayName: string;
   platformRole: 'SUPER_ADMIN' | null;
   memberships: Array<{
@@ -23,7 +24,7 @@ interface AuthState {
   csrfToken: string | null;
   profile: StaffProfile | null;
   loading: boolean;
-  login(email: string, password: string): Promise<StaffProfile>;
+  login(phone: string, password: string): Promise<StaffProfile>;
   logout(): Promise<void>;
   refreshProfile(): Promise<StaffProfile | null>;
 }
@@ -64,10 +65,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     csrfToken,
     profile,
     loading,
-    async login(email, password) {
+    async login(phone, password) {
+      const normalizedPhone = normalizeEthiopianPhone(phone);
+      if (!normalizedPhone) {
+        throw new Error('Enter a valid Ethiopian mobile number (e.g. 0911 234 567).');
+      }
       const response = await apiRequest<ApiEnvelope<{ accessToken: string; csrfToken: string }>>('/auth/login', {
         method: 'POST',
-        body: { email, password },
+        body: { phone: normalizedPhone, password },
       });
       setAccessToken(response.data.accessToken);
       setCsrfToken(response.data.csrfToken);

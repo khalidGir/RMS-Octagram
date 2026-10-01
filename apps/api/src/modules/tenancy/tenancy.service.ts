@@ -17,7 +17,7 @@ import { AuthService } from '../auth/auth.service';
 import { AuditService } from '../audit/audit.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { FeatureResolver } from '../features/feature-resolver.service';
-import { TenantRole, FeatureKey } from '@rms/contracts';
+import { TenantRole, FeatureKey, normalizeEthiopianPhone, maskEthiopianPhone } from '@rms/contracts';
 import { getAllFeatureKeys, DEFAULT_NEW_TENANT_FEATURES } from '../features/feature-catalog';
 
 /** Role hierarchy: who can grant what */
@@ -76,13 +76,18 @@ export class TenancyService {
   async createTenant(data: {
     name: string;
     slug: string;
-    ownerEmail: string;
+    ownerPhone: string;
     ownerPassword: string;
     ownerName: string;
   }) {
     const existing = await this.prisma.tenant.findUnique({ where: { slug: data.slug } });
     if (existing) {
       throw new ConflictException('Tenant slug already exists');
+    }
+
+    const ownerPhone = normalizeEthiopianPhone(data.ownerPhone);
+    if (!ownerPhone) {
+      throw new BadRequestException('Enter a valid Ethiopian mobile number');
     }
 
     const passwordHash = await this.authService.hashPassword(data.ownerPassword);
@@ -94,7 +99,7 @@ export class TenancyService {
 
       const owner = await tx.user.create({
         data: {
-          email: data.ownerEmail,
+          phoneE164: ownerPhone,
           passwordHash,
           displayName: data.ownerName,
           status: 'ACTIVE',
@@ -198,15 +203,25 @@ export class TenancyService {
   }
 
   async listMemberships(tenantId: string) {
-    return this.prisma.tenantMembership.findMany({
+    const memberships = await this.prisma.tenantMembership.findMany({
       where: { tenantId },
       include: {
-        user: { select: { id: true, email: true, displayName: true } },
+        user: { select: { id: true, email: true, displayName: true, phoneE164: true } },
         branchAssignments: {
           include: { branch: { select: { id: true, name: true, slug: true } } },
         },
       },
     });
+
+    return memberships.map((membership) => ({
+      ...membership,
+      user: {
+        id: membership.user.id,
+        email: membership.user.email,
+        displayName: membership.user.displayName,
+        phone: membership.user.phoneE164,
+      },
+    }));
   }
 
   /**
@@ -351,7 +366,7 @@ export class TenancyService {
   async inviteMember(
     tenantId: string,
     data: {
-      email: string;
+      phone: string;
       role: TenantRole;
       branchIds?: string[];
       invitedByUserId: string;
@@ -365,6 +380,11 @@ export class TenancyService {
       throw new ForbiddenException(
         `Your role (${data.callerRole}) cannot invite as ${data.role}. Grantable: ${grantable.join(', ')}`,
       );
+    }
+
+    const phone = normalizeEthiopianPhone(data.phone);
+    if (!phone) {
+      throw new BadRequestException('Enter a valid Ethiopian mobile number');
     }
 
     // Validate branches
@@ -395,8 +415,9 @@ export class TenancyService {
     const invitationExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     const result = await this.prisma.$transaction(async (tx) => {
-      // Find or create user
-      let user = await tx.user.findFirst({ where: { email: data.email } });
+      // Find or create user by normalized phone (equivalent input formats
+      // resolve to the same user).
+      let user = await tx.user.findFirst({ where: { phoneE164: phone } });
 
       if (!user) {
         const tempPassword = randomBytes(16).toString('hex');
@@ -404,9 +425,9 @@ export class TenancyService {
 
         user = await tx.user.create({
           data: {
-            email: data.email,
+            phoneE164: phone,
             passwordHash,
-            displayName: data.email.split('@')[0],
+            displayName: `Staff ${phone.slice(-4)}`,
             status: 'ACTIVE',
           },
         });
@@ -454,7 +475,7 @@ export class TenancyService {
       action: 'MEMBERSHIP_INVITE',
       entityType: 'TenantMembership',
       entityId: result.membershipId,
-      after: { email: data.email, role: data.role, branchIds: data.branchIds },
+      after: { phone: maskEthiopianPhone(phone), role: data.role, branchIds: data.branchIds },
     });
 
     return {

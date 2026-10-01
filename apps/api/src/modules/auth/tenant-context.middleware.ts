@@ -28,6 +28,7 @@ export class TenantContextMiddleware implements NestMiddleware {
 
       const ctx: TenantContext = {
         userId: payload.sub,
+        phone: payload.phone ?? null,
         email: payload.email,
         platformRole: payload.platformRole,
       };

@@ -3,6 +3,7 @@ import type { TenantRole, PlatformRole } from '@rms/contracts';
 
 export interface TenantContext {
   userId: string;
+  phone: string | null;
   email: string | null;
   platformRole: string | null;
   tenantId?: string;
