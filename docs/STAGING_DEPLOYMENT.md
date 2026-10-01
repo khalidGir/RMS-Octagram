@@ -113,6 +113,9 @@ These credentials are for staging only and **must be rotated before any external
 
 - `multi-kitchen-migration.e2e-spec.ts` moved to `test/migration/` and now runs via `pnpm --filter @rms/api test:migration` against a dedicated replay database (migrations 1–23 → pre-migration fixture → target migration). Root cause: global branch-invariant scans are state-dependent — production `createBranch`, `seed.ts`, and ~45 test fixtures create branches without a Main Kitchen/policy. Product fix (provision kitchen+policy on branch creation) is a tracked follow-up; see DECISIONS.md ADR-025 context and the release report.
 - Full Playwright `desktop-chrome` run (144 tests) was interrupted by local Next.js dev-server memory exhaustion during the release window; server-side phone-auth coverage (627/627 API tests) and the dedicated `phone-login.spec.ts` UI checks are green. Re-run the full suite before the pilot.
+- Browser session persistence: the boot-time `/auth/refresh` originally sent no `x-csrf-token`, so any hard navigation returned 403 and forced re-login (local e2e never caught this because `e2e/fixtures.ts` stubs `/auth/refresh`). Fixed by persisting the CSRF token in `localStorage` (`rms.csrfToken`) in `auth-provider.tsx`; logout clears it. Follow-up: replace the refresh stub in e2e fixtures with a real cookie+CSRF round trip.
+- `/waiter` crashed with `useBranch must be used inside BranchProvider` because the page rendered `WaiterWorkspace` without `StaffShell`. Fixed by wrapping it like the other staff pages.
+- CORS rejects disallowed origins by throwing from the origin callback, which surfaces as HTTP 500 + ERROR logs (secure, but noisy). Tracked cosmetic follow-up: return a non-allowed response without throwing.
 
 
 
