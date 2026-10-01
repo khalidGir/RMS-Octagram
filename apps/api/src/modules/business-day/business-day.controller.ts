@@ -2,12 +2,13 @@ import { Controller, Get, Post, Body, Param, Req, HttpCode, HttpStatus, Inject, 
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { IsString, IsBoolean, IsOptional, MinLength, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Roles } from '../auth/types';
+import { BranchScoped, Roles } from '../auth/types';
 import type { TenantContext } from '../auth/types';
 import { TenantRole } from '@rms/contracts';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { BranchScopeGuard } from '../auth/branch-scope.guard';
 import { BusinessDayService } from './business-day.service';
 
 class CloseBusinessDayDto {
@@ -34,7 +35,8 @@ class ReopenBusinessDayDto {
 
 @ApiTags('Business Day')
 @Controller()
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, BranchScopeGuard)
+@BranchScoped()
 export class BusinessDayController {
   constructor(@Inject(BusinessDayService) private readonly businessDayService: BusinessDayService) {}
 

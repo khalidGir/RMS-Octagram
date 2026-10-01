@@ -55,4 +55,29 @@ describe('NavRail', () => {
     const overviewLink = screen.getByRole('link', { name: /Overview/ });
     expect(overviewLink.className).toContain('bg-white');
   });
+
+  it('renders group headers for owner', () => {
+    render(<NavRail role="OWNER" collapsed={false} onToggleCollapse={vi.fn()} />);
+    expect(screen.getByText('Serve')).toBeDefined();
+    expect(screen.getByText('Kitchen')).toBeDefined();
+    expect(screen.getByText('Money')).toBeDefined();
+    expect(screen.getByText('Manage')).toBeDefined();
+  });
+
+  it('hides group headers when collapsed', () => {
+    render(<NavRail role="OWNER" collapsed={true} onToggleCollapse={vi.fn()} />);
+    expect(screen.queryByText('Serve')).toBeNull();
+    expect(screen.queryByText('Money')).toBeNull();
+    expect(screen.queryByText('Manage')).toBeNull();
+  });
+
+  it('keeps Kitchen config inside Manage, away from daily kitchen work', () => {
+    render(<NavRail role="OWNER" collapsed={false} onToggleCollapse={vi.fn()} />);
+    const kitchenConfig = screen.getByText('Kitchen config');
+    const manage = screen.getByText('Manage');
+    const kitchen = screen.getByText('Kitchen');
+    // Both group headers appear before Kitchen config in document order
+    expect(kitchenConfig.compareDocumentPosition(manage) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(kitchenConfig.compareDocumentPosition(kitchen) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
 });

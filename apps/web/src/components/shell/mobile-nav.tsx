@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { navItems, activeNavHrefs } from './nav-config';
+import { navItems, activeNavHrefs, primaryMobileNav } from './nav-config';
 import type { AppRole } from '@/components/staff-shell';
 
 export function MobileNav({
@@ -18,12 +18,8 @@ export function MobileNav({
   const fullVisible = navItems.filter((item) =>
     (item.roles as readonly string[]).includes(role),
   );
-  const visibleNav = [...fullVisible].sort(
-    (a, b) => (a.mobileOrder ?? 99) - (b.mobileOrder ?? 99),
-  );
-
-  const primary = visibleNav.slice(0, 4);
-  const hasMore = visibleNav.length > 4;
+  const primary = primaryMobileNav(fullVisible);
+  const hasMore = fullVisible.length > 4;
   const activeSet = activeNavHrefs(pathname, fullVisible, primary);
 
   return (

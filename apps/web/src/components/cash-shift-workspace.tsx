@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
+import { useBranch } from './shell/branch-provider';
 
 interface ShiftProjection { id:string; status:'OPEN'; openingCashMinor:string; approvedCashMinor:string; expectedCashMinor:string; cashOrderCount:number; cashPaymentCount:number; openedAt:string; version:number; }
 interface ShiftReport { id:string; cashShiftId:string; openingCashMinor:string; approvedCashMinor:string; expectedCashMinor:string; countedCashMinor:string; varianceMinor:string; varianceReason:string|null; orderCount:number; paymentCount:number; localOpenedAt:string; localClosedAt:string; localBusinessDate:string; }
@@ -12,7 +13,7 @@ function etbToMinor(value:string):string|null { const normalized=value.trim().re
 
 export function CashShiftWorkspace(){
   const {accessToken,csrfToken,profile}=useAuth(); const membership=profile?.memberships[0];
-  const branchId=typeof window==='undefined'?'':window.sessionStorage.getItem('rms-branch-id')??membership?.branchAssignments[0]?.branchId??'';
+  const {branchId}=useBranch();
   const tenantId=membership?.tenant.id??''; const [online,setOnline]=useState(true); const [opening,setOpening]=useState(''); const [counted,setCounted]=useState(''); const [reason,setReason]=useState(''); const [busy,setBusy]=useState(false); const [message,setMessage]=useState<string|null>(null); const [report,setReport]=useState<ShiftReport|null>(null); const [clock,setClock]=useState(0);
   useEffect(()=>{const update=()=>setOnline(navigator.onLine);update();window.addEventListener('online',update);window.addEventListener('offline',update);const timer=window.setInterval(()=>setClock((value)=>value+1),60_000);return()=>{window.removeEventListener('online',update);window.removeEventListener('offline',update);window.clearInterval(timer);};},[]);
   const query=useQuery({queryKey:['current-shift',tenantId,branchId],enabled:Boolean(accessToken&&tenantId&&branchId),queryFn:async()=> (await apiRequest<ApiEnvelope<ShiftProjection|null>>(`/branches/${branchId}/shifts/current`,{accessToken,tenantId})).data,refetchInterval:15_000});

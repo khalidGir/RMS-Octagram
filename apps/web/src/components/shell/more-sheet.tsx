@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
-import { navItems, activeNavHrefs } from './nav-config';
+import { navItems, activeNavHrefs, moreMobileNav } from './nav-config';
 import type { AppRole } from '@/components/staff-shell';
 import {
   Dialog,
@@ -24,7 +24,7 @@ export function MoreSheet({
   const fullVisible = navItems.filter((item) =>
     (item.roles as readonly string[]).includes(role),
   );
-  const visibleNav = fullVisible.slice(4);
+  const visibleNav = moreMobileNav(fullVisible);
   const activeSet = activeNavHrefs(pathname, fullVisible, visibleNav);
 
   return (

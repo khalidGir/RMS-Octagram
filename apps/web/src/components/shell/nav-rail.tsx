@@ -57,31 +57,41 @@ export function NavRail({
       </div>
 
       <nav className="flex-1 space-y-1 px-2" aria-label="Staff navigation">
-        {visibleNav.map((item) => {
+        {visibleNav.map((item, index) => {
           const active = activeSet.has(item.href);
+          const showGroup =
+            item.group !== undefined &&
+            !collapsed &&
+            (index === 0 || visibleNav[index - 1].group !== item.group);
           return (
-            <Link
-              key={item.label}
-              href={item.href}
-              title={collapsed ? item.label : undefined}
-              className={cn(
-                'group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors',
-                collapsed && 'justify-center px-0',
-                active
-                  ? 'bg-white text-ink shadow-sm'
-                  : 'text-white/65 hover:bg-white/[.08] hover:text-white',
+            <div key={item.label}>
+              {showGroup && (
+                <p className="mt-4 mb-1 px-3 text-[9px] font-black uppercase tracking-[.16em] text-white/35">
+                  {item.group}
+                </p>
               )}
-            >
-              <span className="grid size-7 shrink-0 place-items-center rounded-lg">
-                <item.icon size={18} aria-hidden="true" />
-              </span>
-              {!collapsed && <span className="truncate">{item.label}</span>}
-              {collapsed && (
-                <span className="pointer-events-none absolute left-full ml-3 hidden whitespace-nowrap rounded-lg bg-dark-muted px-3 py-1.5 text-xs font-semibold text-white shadow-lg group-hover:block">
-                  {item.label}
+              <Link
+                href={item.href}
+                title={collapsed ? item.label : undefined}
+                className={cn(
+                  'group relative flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors',
+                  collapsed && 'justify-center px-0',
+                  active
+                    ? 'bg-white text-ink shadow-sm'
+                    : 'text-white/65 hover:bg-white/[.08] hover:text-white',
+                )}
+              >
+                <span className="grid size-7 shrink-0 place-items-center rounded-lg">
+                  <item.icon size={18} aria-hidden="true" />
                 </span>
-              )}
-            </Link>
+                {!collapsed && <span className="truncate">{item.label}</span>}
+                {collapsed && (
+                  <span className="pointer-events-none absolute left-full ml-3 hidden whitespace-nowrap rounded-lg bg-dark-muted px-3 py-1.5 text-xs font-semibold text-white shadow-lg group-hover:block">
+                    {item.label}
+                  </span>
+                )}
+              </Link>
+            </div>
           );
         })}
       </nav>

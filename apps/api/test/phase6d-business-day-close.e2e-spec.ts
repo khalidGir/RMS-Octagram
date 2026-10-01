@@ -320,7 +320,7 @@ describe('Phase 6D — Business Day Close (e2e)', () => {
     expect(res.body.data.branchTimezone).toBe('Africa/Addis_Ababa');
   });
 
-  it('14. cross-tenant isolation returns 404', async () => {
+  it('14. cross-tenant isolation denied by branch scope guard', async () => {
     const tenant2 = await prisma.tenant.create({ data: { name: 'T2', slug: `phase6d-t2-${ts}`, status: 'ACTIVE' } });
     await seedEntitlements(prisma, tenant2.id);
     const branch2 = await prisma.branch.create({ data: { tenantId: tenant2.id, name: 'B2', slug: `phase6d-b2-${ts}`, isActive: true } });
@@ -329,7 +329,10 @@ describe('Phase 6D — Business Day Close (e2e)', () => {
       .get(`/api/v1/branches/${branch2.id}/day-close/preview?localBusinessDate=${testBusinessDate}`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .set('x-tenant-id', tenantId);
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(403);
+
+    await prisma.branch.delete({ where: { id: branch2.id } }).catch(() => {});
+    await prisma.tenant.delete({ where: { id: tenant2.id } }).catch(() => {});
   });
 
   it('15. WAITER cannot close business day', async () => {
@@ -348,5 +351,45 @@ describe('Phase 6D — Business Day Close (e2e)', () => {
       .set('x-tenant-id', tenantId)
       .send({ reason: 'test' });
     expect(res.status).toBe(403);
+  });
+
+  it('17. MANAGER assigned to another branch is denied (cross-branch denial)', async () => {
+    const otherBranch = await prisma.branch.create({
+      data: {
+        tenantId,
+        name: 'Other Branch',
+        slug: `phase6d-other-${ts}`,
+        isActive: true,
+        timezone: 'Africa/Addis_Ababa',
+        businessDayCutoffLocal: '06:00',
+      },
+    });
+
+    const previewRes = await request(app.getHttpServer())
+      .get(`/api/v1/branches/${otherBranch.id}/day-close/preview?localBusinessDate=${testBusinessDate}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('x-tenant-id', tenantId);
+    expect(previewRes.status).toBe(403);
+
+    const reportRes = await request(app.getHttpServer())
+      .get(`/api/v1/branches/${otherBranch.id}/day-close/report?localBusinessDate=${testBusinessDate}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('x-tenant-id', tenantId);
+    expect(reportRes.status).toBe(403);
+
+    const currentRes = await request(app.getHttpServer())
+      .get(`/api/v1/branches/${otherBranch.id}/day-close/current?localBusinessDate=${testBusinessDate}`)
+      .set('Authorization', `Bearer ${managerToken}`)
+      .set('x-tenant-id', tenantId);
+    expect(currentRes.status).toBe(403);
+
+    // OWNER still reaches any branch inside the same tenant
+    const ownerPreview = await request(app.getHttpServer())
+      .get(`/api/v1/branches/${otherBranch.id}/day-close/preview?localBusinessDate=${testBusinessDate}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('x-tenant-id', tenantId);
+    expect(ownerPreview.status).toBe(200);
+
+    await prisma.branch.delete({ where: { id: otherBranch.id } }).catch(() => {});
   });
 });

@@ -36,6 +36,16 @@ describe('MoreSheet', () => {
     expect(screen.queryByText('Point of sale')).toBeNull();
   });
 
+  it('shows exactly the complement of the mobile bottom bar (owner)', () => {
+    render(<MoreSheet role="OWNER" open={true} onClose={vi.fn()} />);
+    // Orders ranks 5th by mobileOrder so it is not in the bottom bar — it must be here
+    expect(screen.getByText('Orders')).toBeDefined();
+    expect(screen.getByText('Payment review')).toBeDefined();
+    // Kitchen display and Expo are bottom-bar items and must not be duplicated here
+    expect(screen.queryByText('Kitchen display')).toBeNull();
+    expect(screen.queryByText('Expo')).toBeNull();
+  });
+
   it('calls onClose when close button clicked', () => {
     const onClose = vi.fn();
     render(<MoreSheet role="OWNER" open={true} onClose={onClose} />);
