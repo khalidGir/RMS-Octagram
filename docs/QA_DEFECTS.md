@@ -116,3 +116,30 @@ The API exposes preview/close/reopen/report/current for business-day reconciliat
 - [x] "Past shifts" section lists closed shifts (date, opening, expected, counted, variance, reason)
 - [x] Owner and Manager only
 - [x] Empty and error states covered by tests
+
+---
+
+## QA-005 — Owner dashboard crashed on load (fractional avg order value)
+
+- **Status:** Fixed (this release)
+- **Reported:** 2026-10-02 - live staging verification of the day-close release
+- **Severity:** High (whole dashboard fell back to the Next.js error screen)
+- **Area:** API analytics + web money formatting
+
+### Description
+
+`GET /reports/orders` returned `avgOrderMinor: "48333.333333333336"` because the
+query used raw `AVG(o."totalMinor")`, violating the integer-minor-units money
+invariant. `formatEtbMinor` then called `BigInt(48333.33…)` and threw, taking
+down the entire owner dashboard (and the Reports page, which uses the same
+value). `GET /reports/revenue-by-method` had the same fractional `avgMinor`
+pattern. This was data-dependent, so it only surfaced once seeded totals were
+no longer evenly divisible.
+
+### Acceptance criteria
+
+- [x] `avgOrderMinor` and revenue-by-method `avgMinor` are rounded to integer minor units in SQL
+- [x] e2e regression guards: fractional seeded averages must serialize as `/^\d+$/`
+- [x] `formatEtbMinor` rounds fractional input instead of crashing the page
+- [x] Unit tests cover fractional number and fractional string inputs
+- [x] Dashboard and Reports render normally on staging again

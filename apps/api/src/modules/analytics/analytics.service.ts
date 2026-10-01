@@ -300,7 +300,7 @@ export class AnalyticsService {
         SUM(p."amountMinor")::text AS total_minor,
         COUNT(*)::text AS payment_count,
         CASE WHEN COUNT(*) > 0
-          THEN (SUM(p."amountMinor") / COUNT(*))::text
+          THEN ROUND(SUM(p."amountMinor") / COUNT(*), 0)::text
           ELSE '0'
         END AS avg_minor
       FROM "Payment" p
@@ -385,7 +385,7 @@ export class AnalyticsService {
         COUNT(*) FILTER (WHERE o."status" IN ('CONFIRMED', 'IN_PROGRESS', 'READY', 'COMPLETED'))::text AS completed_orders,
         COUNT(*) FILTER (WHERE o."status" = 'CANCELLED')::text AS cancelled_orders,
         COUNT(*) FILTER (WHERE o."status" = 'VOIDED')::text AS voided_orders,
-        COALESCE(AVG(o."totalMinor") FILTER (WHERE o."status" NOT IN ('CANCELLED', 'VOIDED')), 0)::text AS avg_order_minor,
+        ROUND(COALESCE(AVG(o."totalMinor") FILTER (WHERE o."status" NOT IN ('CANCELLED', 'VOIDED')), 0), 0)::text AS avg_order_minor,
         COALESCE(SUM(o."totalMinor") FILTER (WHERE o."status" NOT IN ('CANCELLED', 'VOIDED')), 0)::text AS total_revenue_minor
       FROM "Order" o
       WHERE o."tenantId" = ${tenantId}

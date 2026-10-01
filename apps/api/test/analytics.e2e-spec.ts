@@ -128,11 +128,14 @@ describe('Analytics & Reporting (e2e)', () => {
       ON CONFLICT ("branchId") DO NOTHING
     `;
 
-    // Create 3 orders with approved payments
-    for (let i = 1; i <= 3; i++) {
+    // Create 4 orders with approved payments.
+    // Order 4 carries an odd total so seeded averages are fractional
+    // and the integer-money assertions below actually regress-guard.
+    for (let i = 1; i <= 4; i++) {
       const crypto = await import('crypto');
       const trackingRaw = crypto.randomBytes(32).toString('base64url');
       const trackingHash = crypto.createHash('sha256').update(trackingRaw).digest('hex');
+      const totalMinor = BigInt(25000 * i + (i === 4 ? 1 : 0));
 
       const order = await prisma.order.create({
         data: {
@@ -140,11 +143,11 @@ describe('Analytics & Reporting (e2e)', () => {
           branchId,
           orderNumber: BigInt(i),
           orderType: 'DINE_IN',
-          status: i === 1 ? 'COMPLETED' : i === 2 ? 'CANCELLED' : 'VOIDED',
+          status: i === 1 ? 'COMPLETED' : i === 2 ? 'CANCELLED' : i === 3 ? 'VOIDED' : 'CONFIRMED',
           tableId: table.id,
           currency: 'ETB',
-          subtotalMinor: BigInt(25000 * i),
-          totalMinor: BigInt(25000 * i),
+          subtotalMinor: totalMinor,
+          totalMinor,
           source: 'CASHIER_POS',
           trackingTokenHash: trackingHash,
           version: 1,
@@ -161,7 +164,7 @@ describe('Analytics & Reporting (e2e)', () => {
           variantNameSnapshot: 'Regular',
           quantity: i,
           unitPriceMinor: 25000n,
-          lineTotalMinor: BigInt(25000 * i),
+          lineTotalMinor: totalMinor,
         },
       });
 
@@ -171,8 +174,8 @@ describe('Analytics & Reporting (e2e)', () => {
             tenantId,
             branchId,
             orderId: order.id,
-            method: i === 1 ? 'CASH' : 'MOBILE_MONEY',
-            amountMinor: BigInt(25000 * i),
+            method: i === 1 || i === 4 ? 'CASH' : 'MOBILE_MONEY',
+            amountMinor: totalMinor,
             currency: 'ETB',
             status: 'APPROVED',
           },
@@ -183,7 +186,7 @@ describe('Analytics & Reporting (e2e)', () => {
     // Update branch order counter
     await prisma.branchOrderCounter.update({
       where: { branchId },
-      data: { lastNumber: 3 },
+      data: { lastNumber: 4 },
     });
   }, 60000);
 
@@ -325,6 +328,11 @@ describe('Analytics & Reporting (e2e)', () => {
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveProperty('methods');
       expect(Array.isArray(res.body.data.methods)).toBe(true);
+      // Money fields must be integer minor units — never fractional strings.
+      for (const method of res.body.data.methods) {
+        expect(method.totalMinor).toMatch(/^\d+$/);
+        expect(method.avgMinor).toMatch(/^\d+$/);
+      }
     });
   });
 
@@ -343,6 +351,10 @@ describe('Analytics & Reporting (e2e)', () => {
       expect(res.body.data.stats).toHaveProperty('voidedOrders');
       expect(res.body.data.stats).toHaveProperty('avgOrderMinor');
       expect(res.body.data.stats).toHaveProperty('totalRevenueMinor');
+      // The seeded average is fractional (125001/2), so this fails if the
+      // API ever emits raw AVG() numerics again instead of rounded minors.
+      expect(res.body.data.stats.avgOrderMinor).toMatch(/^\d+$/);
+      expect(res.body.data.stats.totalRevenueMinor).toMatch(/^\d+$/);
     });
   });
 
