@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
-import { navItems } from './nav-config';
+import { navItems, activeNavHrefs } from './nav-config';
 import type { AppRole } from '@/components/staff-shell';
 import {
   Dialog,
@@ -21,9 +21,11 @@ export function MoreSheet({
   onClose: () => void;
 }) {
   const pathname = usePathname();
-  const visibleNav = navItems
-    .filter((item) => (item.roles as readonly string[]).includes(role))
-    .slice(4);
+  const fullVisible = navItems.filter((item) =>
+    (item.roles as readonly string[]).includes(role),
+  );
+  const visibleNav = fullVisible.slice(4);
+  const activeSet = activeNavHrefs(pathname, fullVisible, visibleNav);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
@@ -34,7 +36,7 @@ export function MoreSheet({
         <DialogTitle className="text-sm font-black">More</DialogTitle>
         <nav className="mt-3 space-y-1" aria-label="More navigation options">
           {visibleNav.map((item) => {
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const active = activeSet.has(item.href);
             return (
               <Link
                 key={item.label}

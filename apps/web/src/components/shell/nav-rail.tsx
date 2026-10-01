@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { BrandMark } from '@/components/brand-mark';
-import { navItems, roleLabels } from './nav-config';
+import { navItems, roleLabels, activeNavHrefs } from './nav-config';
 import type { AppRole } from '@/components/staff-shell';
 
 export function NavRail({
@@ -23,6 +23,7 @@ export function NavRail({
   const visibleNav = navItems.filter((item) =>
     (item.roles as readonly string[]).includes(role),
   );
+  const activeSet = activeNavHrefs(pathname, visibleNav, visibleNav);
 
   return (
     <aside
@@ -57,7 +58,7 @@ export function NavRail({
 
       <nav className="flex-1 space-y-1 px-2" aria-label="Staff navigation">
         {visibleNav.map((item) => {
-          const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = activeSet.has(item.href);
           return (
             <Link
               key={item.label}

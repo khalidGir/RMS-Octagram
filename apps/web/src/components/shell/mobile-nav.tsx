@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/cn';
-import { navItems } from './nav-config';
+import { navItems, activeNavHrefs } from './nav-config';
 import type { AppRole } from '@/components/staff-shell';
 
 export function MobileNav({
@@ -15,12 +15,16 @@ export function MobileNav({
   onOpenMore: () => void;
 }) {
   const pathname = usePathname();
-  const visibleNav = navItems
-    .filter((item) => (item.roles as readonly string[]).includes(role))
-    .sort((a, b) => (a.mobileOrder ?? 99) - (b.mobileOrder ?? 99));
+  const fullVisible = navItems.filter((item) =>
+    (item.roles as readonly string[]).includes(role),
+  );
+  const visibleNav = [...fullVisible].sort(
+    (a, b) => (a.mobileOrder ?? 99) - (b.mobileOrder ?? 99),
+  );
 
   const primary = visibleNav.slice(0, 4);
   const hasMore = visibleNav.length > 4;
+  const activeSet = activeNavHrefs(pathname, fullVisible, primary);
 
   return (
     <nav
@@ -28,7 +32,7 @@ export function MobileNav({
       aria-label="Mobile navigation"
     >
       {primary.map((item) => {
-        const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+        const active = activeSet.has(item.href);
         return (
           <Link
             key={item.label}

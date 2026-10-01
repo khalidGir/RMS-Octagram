@@ -43,3 +43,40 @@ export const roleLabels: Record<AppRole, string> = {
   WAITER: 'Waiter',
   SUPER_ADMIN: 'Super admin',
 };
+
+function longestMatch(pathname: string, items: readonly NavItem[]): string | null {
+  let best: string | null = null;
+  for (const item of items) {
+    const href = item.href as string;
+    if (pathname === href || pathname.startsWith(`${href}/`)) {
+      if (best === null || href.length > best.length) best = href;
+    }
+  }
+  return best;
+}
+
+/**
+ * Returns the single nav item that should be highlighted for this view.
+ * The longest matching href wins (so /kitchen/config highlights only
+ * "Kitchen config", never also "Kitchen display"). If the exact item is
+ * not shown in this view (e.g. mobile primary bar), the nearest visible
+ * ancestor is highlighted instead.
+ */
+export function activeNavHrefs(
+  pathname: string,
+  fullItems: readonly NavItem[],
+  viewItems: readonly NavItem[],
+): ReadonlySet<string> {
+  const activeHref = longestMatch(pathname, fullItems);
+  if (activeHref === null) return new Set<string>();
+  const exact = viewItems.find((item) => (item.href as string) === activeHref);
+  if (exact) return new Set<string>([exact.href as string]);
+  let ancestor: string | null = null;
+  for (const item of viewItems) {
+    const href = item.href as string;
+    if (activeHref.startsWith(`${href}/`) && (ancestor === null || href.length > ancestor.length)) {
+      ancestor = href;
+    }
+  }
+  return ancestor === null ? new Set<string>() : new Set<string>([ancestor]);
+}
