@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Put,
   Body,
@@ -10,7 +11,7 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiCookieAuth, ApiProperty } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { PlatformAdminService } from './platform-admin.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -18,7 +19,42 @@ import { RolesGuard } from '../auth/roles.guard';
 import { Roles, type TenantContext } from '../auth/types';
 import { PlatformRole, EntitlementStatus } from '@rms/contracts';
 import type { FeatureKey } from '@rms/contracts';
-import { IsString, IsEnum, IsOptional, IsDateString } from 'class-validator';
+import { IsString, IsEnum, IsOptional, IsDateString, IsNotEmpty, MinLength, MaxLength, Matches } from 'class-validator';
+
+export class CreateTenantDto {
+  @ApiProperty({ example: 'Buna House' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  name!: string;
+
+  @ApiProperty({ required: false, example: 'buna-house', description: 'Generated from name when omitted' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  slug?: string;
+
+  @ApiProperty({ example: '0911 234 567' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(32)
+  ownerPhone!: string;
+
+  @ApiProperty({ example: 'StrongP@ss1' })
+  @IsString()
+  @MinLength(8)
+  @MaxLength(128)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/, {
+    message: 'Password must contain at least one uppercase, one lowercase, and one digit',
+  })
+  ownerPassword!: string;
+
+  @ApiProperty({ required: false, example: 'Abebe Kebede' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  ownerName?: string;
+}
 
 class SetEntitlementDto {
   @IsEnum(EntitlementStatus)
@@ -44,6 +80,14 @@ class SetEntitlementDto {
 @ApiCookieAuth()
 export class PlatformAdminController {
   constructor(@Inject(PlatformAdminService) private readonly platformAdminService: PlatformAdminService) {}
+
+  @Post('tenants')
+  @ApiOperation({ summary: 'Provision tenant and first owner' })
+  async createTenant(@Req() req: Request, @Body() body: CreateTenantDto) {
+    const ctx = req.tenantContext as TenantContext;
+    const result = await this.platformAdminService.createTenant(body, ctx.userId);
+    return { data: result };
+  }
 
   @Get('tenants')
   @ApiOperation({ summary: 'List tenants with aggregate counts' })

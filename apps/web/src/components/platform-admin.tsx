@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ const statusVariant: Record<string, 'success' | 'warning' | 'danger' | 'idle'> =
 
 export function PlatformAdmin() {
   const { accessToken, csrfToken } = useAuth();
+  const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +94,9 @@ export function PlatformAdmin() {
         eyebrow="Platform"
         title="Tenant operations"
         description="Manage restaurant tenants, account status, and platform-wide access."
+        actions={
+          <Button onClick={() => router.push('/platform/tenants/new')}>New tenant</Button>
+        }
       />
 
       {actionError && (

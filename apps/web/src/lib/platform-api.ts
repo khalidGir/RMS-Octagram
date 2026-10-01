@@ -59,6 +59,33 @@ export interface EntitlementsResponse {
   data: FeatureEntitlement[];
 }
 
+export interface CreateTenantInput {
+  name: string;
+  slug?: string;
+  ownerPhone: string;
+  ownerPassword: string;
+  ownerName?: string;
+}
+
+export interface CreateTenantResult {
+  tenant: Tenant;
+  owner: { id: string; phoneE164: string | null; displayName: string | null };
+}
+
+export async function createTenant(
+  input: CreateTenantInput,
+  accessToken: string,
+  csrfToken: string | null,
+): Promise<CreateTenantResult> {
+  const res = await apiRequest<ApiEnvelope<CreateTenantResult>>('/platform/tenants', {
+    method: 'POST',
+    body: input,
+    accessToken,
+    csrfToken,
+  });
+  return res.data;
+}
+
 export async function fetchTenants(
   accessToken: string,
   csrfToken: string | null,

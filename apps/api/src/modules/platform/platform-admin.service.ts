@@ -1,12 +1,23 @@
-import { Injectable, Inject, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeatureResolver } from '../features/feature-resolver.service';
-import { PlatformRole, EntitlementStatus } from '@rms/contracts';
+import { TenancyService } from '../tenancy/tenancy.service';
+import { PlatformRole, EntitlementStatus, maskEthiopianPhone } from '@rms/contracts';
 import type { FeatureKey } from '@rms/contracts';
 import { getAllFeatureKeys } from '../features/feature-catalog';
 
 function getValidStatuses(): string[] {
   return Object.values(EntitlementStatus);
+}
+
+function slugify(input: string): string {
+  return input
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/^-+|-+$/g, '');
 }
 
 @Injectable()
@@ -16,6 +27,7 @@ export class PlatformAdminService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
+    @Inject(TenancyService) private readonly tenancyService: TenancyService,
   ) {}
 
   async listTenants(filters?: { status?: string }) {
@@ -84,6 +96,85 @@ export class PlatformAdminService {
       where: { id: tenantId },
       data: { status: 'ACTIVE' },
     });
+  }
+
+  async createTenant(
+    data: {
+      name: string;
+      slug?: string;
+      ownerPhone: string;
+      ownerPassword: string;
+      ownerName?: string;
+    },
+    actorUserId: string,
+  ) {
+    const name = data.name.trim();
+    const slug = await this.resolveTenantSlug(data.slug, name);
+
+    const digits = data.ownerPhone.replace(/\D/g, '');
+    const ownerName = data.ownerName?.trim() || `Owner ${digits.slice(-4)}`;
+
+    const result = await this.tenancyService.createTenant({
+      name,
+      slug,
+      ownerPhone: data.ownerPhone,
+      ownerPassword: data.ownerPassword,
+      ownerName,
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorUserId,
+        tenantId: result.tenant.id,
+        action: 'PLATFORM_TENANT_CREATE',
+        entityType: 'Tenant',
+        entityId: result.tenant.id,
+        afterJson: {
+          name: result.tenant.name,
+          slug: result.tenant.slug,
+          ownerPhone: maskEthiopianPhone(result.owner.phoneE164 ?? data.ownerPhone),
+        },
+      },
+    });
+
+    this.logger.log(`Tenant provisioned: ${result.tenant.id} (${result.tenant.slug})`);
+
+    return {
+      tenant: result.tenant,
+      owner: {
+        id: result.owner.id,
+        phoneE164: result.owner.phoneE164,
+        displayName: result.owner.displayName,
+      },
+    };
+  }
+
+  private async resolveTenantSlug(provided: string | undefined, name: string): Promise<string> {
+    const base = provided ? slugify(provided) : slugify(name);
+    if (!base) {
+      throw new BadRequestException(
+        provided ? 'Slug must contain letters or numbers' : 'Could not derive a slug from the tenant name',
+      );
+    }
+
+    if (provided) {
+      const existing = await this.prisma.tenant.findUnique({
+        where: { slug: base },
+        select: { id: true },
+      });
+      if (existing) throw new ConflictException('Tenant slug already exists');
+      return base;
+    }
+
+    for (let i = 1; i <= 50; i++) {
+      const candidate = i === 1 ? base : `${base}-${i}`;
+      const existing = await this.prisma.tenant.findUnique({
+        where: { slug: candidate },
+        select: { id: true },
+      });
+      if (!existing) return candidate;
+    }
+    return `${base}-${Date.now()}`;
   }
 
   async listUsers(tenantId?: string) {

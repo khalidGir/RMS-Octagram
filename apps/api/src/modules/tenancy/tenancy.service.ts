@@ -90,6 +90,12 @@ export class TenancyService {
       throw new BadRequestException('Enter a valid Ethiopian mobile number');
     }
 
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(data.ownerPassword)) {
+      throw new BadRequestException(
+        'Password must contain at least one uppercase, one lowercase, and one digit',
+      );
+    }
+
     const passwordHash = await this.authService.hashPassword(data.ownerPassword);
 
     const result = await this.prisma.$transaction(async (tx) => {
