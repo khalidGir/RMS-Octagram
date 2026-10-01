@@ -31,6 +31,25 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+const CSRF_STORAGE_KEY = 'rms.csrfToken';
+
+function readStoredCsrf(): string | null {
+  try {
+    return globalThis.localStorage?.getItem(CSRF_STORAGE_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function persistCsrf(token: string | null): void {
+  try {
+    if (token) globalThis.localStorage?.setItem(CSRF_STORAGE_KEY, token);
+    else globalThis.localStorage?.removeItem(CSRF_STORAGE_KEY);
+  } catch {
+    // Storage unavailable — the session then degrades to re-login after reload.
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
@@ -45,14 +64,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshSession = useCallback(async () => {
     try {
-      const response = await apiRequest<ApiEnvelope<{ accessToken: string; csrfToken: string }>>('/auth/refresh', { method: 'POST' });
+      const response = await apiRequest<ApiEnvelope<{ accessToken: string; csrfToken: string }>>('/auth/refresh', {
+        method: 'POST',
+        csrfToken: readStoredCsrf(),
+      });
       setAccessToken(response.data.accessToken);
       setCsrfToken(response.data.csrfToken);
+      persistCsrf(response.data.csrfToken);
       await loadProfile(response.data.accessToken);
     } catch {
       setAccessToken(null);
       setCsrfToken(null);
       setProfile(null);
+      persistCsrf(null);
     } finally {
       setLoading(false);
     }
@@ -76,6 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       setAccessToken(response.data.accessToken);
       setCsrfToken(response.data.csrfToken);
+      persistCsrf(response.data.csrfToken);
       return loadProfile(response.data.accessToken);
     },
     async logout() {
@@ -83,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setAccessToken(null);
       setCsrfToken(null);
       setProfile(null);
+      persistCsrf(null);
     },
     async refreshProfile() {
       if (!accessToken) return null;
