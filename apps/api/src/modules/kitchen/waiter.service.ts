@@ -739,14 +739,15 @@ export class WaiterService {
       .filter(Boolean);
     const uniqueCollectionPoints = [...new Set(collectionPoints)];
 
-    // Outstanding stations
-    const outstandingStations = prepTickets
-      .filter((t: any) => t.status !== 'READY' && t.status !== 'COMPLETED' && t.status !== 'CANCELLED')
-      .map((t: any) => ({
-        stationId: t.stationId,
-        stationName: t.station?.name,
-        status: t.status,
-      }));
+    // Outstanding stations (unique station names, matching the service-board contract)
+    const outstandingStations = [
+      ...new Set(
+        prepTickets
+          .filter((t: any) => t.status !== 'READY' && t.status !== 'COMPLETED' && t.status !== 'CANCELLED')
+          .map((t: any) => t.station?.name)
+          .filter(Boolean),
+      ),
+    ];
 
     const canCollect = order.fulfillmentStatus === FulfillmentStatus.READY_FOR_SERVICE ||
       order.fulfillmentStatus === FulfillmentStatus.PARTIALLY_SERVED;

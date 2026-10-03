@@ -477,5 +477,79 @@ describe('WaiterService', () => {
       expect(result).toHaveLength(1);
       expect(result[0].canCollect).toBe(true);
     });
+
+    it('serializes outstanding stations as unique station-name strings', async () => {
+      prisma.order.findMany.mockResolvedValue([
+        {
+          id: 'o2',
+          orderNumber: 102n,
+          orderType: 'DINE_IN',
+          tableId: 'T7',
+          fulfillmentStatus: 'PARTIALLY_READY',
+          version: 2,
+          assignedWaiterUserId: null,
+          waiter: null,
+          readyForServiceAt: null,
+          servedAt: null,
+          createdAt: new Date(),
+          kitchenTickets: [
+            {
+              id: 't1',
+              stationId: 's1',
+              status: 'READY',
+              ticketType: 'PREPARATION',
+              collectionLabelSnapshot: 'Main pass',
+              station: { name: 'Grill' },
+              kitchen: { name: 'Main Kitchen' },
+              lines: [
+                { status: 'READY', isRequired: true, routeType: 'PREPARE', quantity: 1, quantityReady: 1, quantityCollected: 0, quantityServed: 0 },
+              ],
+            },
+            {
+              id: 't2',
+              stationId: 's2',
+              status: 'IN_PROGRESS',
+              ticketType: 'PREPARATION',
+              collectionLabelSnapshot: null,
+              station: { name: 'Hot Line' },
+              kitchen: { name: 'Main Kitchen' },
+              lines: [
+                { status: 'IN_PROGRESS', isRequired: true, routeType: 'PREPARE', quantity: 1, quantityReady: 0, quantityCollected: 0, quantityServed: 0 },
+              ],
+            },
+            {
+              id: 't3',
+              stationId: 's2',
+              status: 'QUEUED',
+              ticketType: 'PREPARATION',
+              collectionLabelSnapshot: null,
+              station: { name: 'Hot Line' },
+              kitchen: { name: 'Main Kitchen' },
+              lines: [],
+            },
+            {
+              id: 't4',
+              stationId: 's3',
+              status: 'COMPLETED',
+              ticketType: 'PREPARATION',
+              collectionLabelSnapshot: null,
+              station: { name: 'Dessert' },
+              kitchen: { name: 'Main Kitchen' },
+              lines: [],
+            },
+          ],
+        },
+      ]);
+
+      const result = await service.getServiceBoard({
+        tenantId: 't1',
+        branchId: 'b1',
+        waiterUserId: 'w1',
+        scope: 'mine',
+      });
+
+      expect(result[0].outstandingStations).toEqual(['Hot Line']);
+      expect(result[0].collectionPoints).toEqual(['Main pass']);
+    });
   });
 });
