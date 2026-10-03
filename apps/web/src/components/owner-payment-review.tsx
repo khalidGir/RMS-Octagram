@@ -6,6 +6,7 @@ import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { useLocale } from '@/components/locale-provider';
 import { labelFor, paymentMethodKeys } from '@/lib/status-labels';
 import { useAuth } from './auth-provider';
+import { useBranch } from './shell/branch-provider';
 import { useOnlineStatus } from '@/hooks';
 
 interface QueuePayment {
@@ -31,10 +32,13 @@ export function OwnerPaymentReview() {
   const { formatCurrency, tr, formatDate } = useLocale();
   const membership = profile?.memberships[0];
   const tenantId = membership?.tenant.id ?? '';
-  const branchId = typeof window === 'undefined' ? '' : window.sessionStorage.getItem('rms-branch-id') ?? membership?.branchAssignments[0]?.branchId ?? '';
+  const { branchId } = useBranch();
   const isOnline = useOnlineStatus();
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<{ branchId: string; id: string } | null>(null);
+  // A selection made on another branch is not valid here, so it never fetches
+  // (or renders) a payment under the wrong branch URL.
+  const selectedId = selected && selected.branchId === branchId ? selected.id : null;
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [rejecting, setRejecting] = useState(false);
@@ -42,6 +46,7 @@ export function OwnerPaymentReview() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmApprove, setConfirmApprove] = useState(false);
+  const proofTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const queue = useQuery({
     queryKey: ['owner-payment-review', tenantId, branchId],
@@ -51,14 +56,16 @@ export function OwnerPaymentReview() {
   });
 
   const detail = useQuery({
-    queryKey: ['owner-payment-detail', selectedId],
-    enabled: Boolean(selectedId && accessToken),
+    queryKey: ['owner-payment-detail', branchId, selectedId],
+    enabled: Boolean(selectedId && accessToken && branchId),
     queryFn: async () => (await apiRequest<ApiEnvelope<PaymentDetail>>(`/branches/${branchId}/payments/${selectedId}`, { accessToken, tenantId })).data,
   });
 
   useEffect(() => {
-    if (!selectedId && queue.data?.[0]) setSelectedId(queue.data[0].id);
-  }, [queue.data, selectedId]);
+    if ((!selected || selected.branchId !== branchId) && queue.data?.[0]) {
+      setSelected({ branchId, id: queue.data[0].id });
+    }
+  }, [queue.data, selected, branchId]);
 
   useEffect(() => {
     setProofUrl(null);
@@ -66,9 +73,8 @@ export function OwnerPaymentReview() {
     setRejecting(false);
     setReason('');
     setConfirmApprove(false);
+    if (proofTimerRef.current) clearTimeout(proofTimerRef.current);
   }, [selectedId]);
-
-  const proofTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadProof = useCallback(async () => {
     if (!selectedId) return;
@@ -99,7 +105,7 @@ export function OwnerPaymentReview() {
         tenantId,
         body: { reviewNote: reviewNote.trim() || undefined },
       });
-      setSelectedId(null);
+      setSelected(null);
       setProofUrl(null);
       setConfirmApprove(false);
       await queue.refetch();
@@ -128,7 +134,7 @@ export function OwnerPaymentReview() {
         tenantId,
         body: { reason: reason.trim() },
       });
-      setSelectedId(null);
+      setSelected(null);
       setProofUrl(null);
       setRejecting(false);
       await queue.refetch();
@@ -175,7 +181,7 @@ export function OwnerPaymentReview() {
             {queue.data.map((item) => (
               <button
                 key={item.id}
-                onClick={() => setSelectedId(item.id)}
+                onClick={() => setSelected({ branchId, id: item.id })}
                 className={`w-full p-5 text-start ${selectedId === item.id ? 'bg-orange-50' : ''}`}
               >
                 <div className="flex justify-between gap-3">
