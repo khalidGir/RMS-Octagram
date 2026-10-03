@@ -5,11 +5,39 @@ import { IsString, IsNotEmpty, IsOptional, IsInt, IsBoolean, IsArray, ArrayNotEm
 // ─── Kitchen Stations ──────────────────────
 
 export class CreateStationDto {
+  @ApiProperty({ description: 'Kitchen this station belongs to', example: 'k-1' })
+  @IsString()
+  @IsNotEmpty()
+  kitchenId!: string;
+
   @ApiProperty({ description: 'Station name (e.g., Grill, Cold Kitchen, Bar)', example: 'Grill' })
   @IsString()
   @IsNotEmpty()
   @Length(1, 100)
   name!: string;
+
+  @ApiPropertyOptional({ description: 'Station code, unique per branch (e.g., GRILL)', example: 'GRILL' })
+  @IsOptional()
+  @IsString()
+  @Length(1, 20)
+  code?: string;
+
+  @ApiPropertyOptional({ description: 'Default preparation time in minutes', example: 10 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  defaultPrepMinutes?: number;
+
+  @ApiPropertyOptional({ description: 'Expeditor station (only one active expo station per branch)', default: false })
+  @IsOptional()
+  @IsBoolean()
+  isExpo?: boolean;
+
+  @ApiPropertyOptional({ description: 'Collection label override shown to waiters for this station' })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  collectionLabelOverride?: string;
 
   @ApiPropertyOptional({ description: 'Display order (lower = first)', default: 0 })
   @IsOptional()
@@ -24,6 +52,29 @@ export class UpdateStationDto {
   @IsString()
   @Length(1, 100)
   name?: string;
+
+  @ApiPropertyOptional({ description: 'Station code, unique per branch' })
+  @IsOptional()
+  @IsString()
+  @Length(1, 20)
+  code?: string;
+
+  @ApiPropertyOptional({ description: 'Default preparation time in minutes' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  defaultPrepMinutes?: number;
+
+  @ApiPropertyOptional({ description: 'Expeditor station flag' })
+  @IsOptional()
+  @IsBoolean()
+  isExpo?: boolean;
+
+  @ApiPropertyOptional({ description: 'Collection label override shown to waiters for this station' })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  collectionLabelOverride?: string;
 
   @ApiPropertyOptional({ description: 'Display order' })
   @IsOptional()

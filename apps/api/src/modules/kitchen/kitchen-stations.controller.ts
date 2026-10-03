@@ -5,12 +5,13 @@ import {
   Patch,
   Delete,
   Param,
+  Query,
   Body,
   Req,
   UseGuards,
   Inject,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiCookieAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { KitchenStationsService } from './kitchen-stations.service';
@@ -40,9 +41,14 @@ export class KitchenStationsController {
   @Get()
   @Roles(TenantRole.OWNER, TenantRole.MANAGER, TenantRole.CASHIER, TenantRole.KITCHEN_STAFF)
   @ApiOperation({ summary: 'List kitchen stations' })
-  async listStations(@Req() req: Request, @Param('branchId') branchId: string) {
+  @ApiQuery({ name: 'kitchenId', required: false, description: 'Only stations belonging to this kitchen' })
+  async listStations(
+    @Req() req: Request,
+    @Param('branchId') branchId: string,
+    @Query('kitchenId') kitchenId?: string,
+  ) {
     const ctx = req.tenantContext as TenantContext;
-    const stations = await this.stationsService.listStations(ctx.tenantId!, branchId);
+    const stations = await this.stationsService.listStations(ctx.tenantId!, branchId, kitchenId);
     return { data: stations };
   }
 
@@ -58,7 +64,12 @@ export class KitchenStationsController {
     const station = await this.stationsService.createStation({
       tenantId: ctx.tenantId!,
       branchId,
+      kitchenId: dto.kitchenId,
       name: dto.name,
+      code: dto.code,
+      defaultPrepMinutes: dto.defaultPrepMinutes,
+      isExpo: dto.isExpo,
+      collectionLabelOverride: dto.collectionLabelOverride,
       displayOrder: dto.displayOrder,
       actorUserId: ctx.userId,
     });
@@ -80,6 +91,10 @@ export class KitchenStationsController {
       branchId,
       stationId,
       name: dto.name,
+      code: dto.code,
+      defaultPrepMinutes: dto.defaultPrepMinutes,
+      isExpo: dto.isExpo,
+      collectionLabelOverride: dto.collectionLabelOverride,
       displayOrder: dto.displayOrder,
       isActive: dto.isActive,
       actorUserId: ctx.userId,

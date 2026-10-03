@@ -65,7 +65,7 @@ export function useStations(kitchenId?: string) {
     queryKey: ['stations', branchId, kitchenId],
     queryFn: () => {
       const params = kitchenId ? `?kitchenId=${kitchenId}` : '';
-      return fetchApi<ApiEnvelope<KitchenStation[]>>(`/branches/${branchId}/stations${params}`, { accessToken, tenantId });
+      return fetchApi<ApiEnvelope<KitchenStation[]>>(`/branches/${branchId}/kitchen-stations${params}`, { accessToken, tenantId });
     },
     select: (d) => d.data,
   });
@@ -113,7 +113,7 @@ export function useCreateStation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { kitchenId: string; name: string; code: string; defaultPrepMinutes?: number; isExpo?: boolean; collectionLabelOverride?: string }) =>
-      fetchApi<ApiEnvelope<KitchenStation>>(`/branches/${branchId}/stations`, {
+      fetchApi<ApiEnvelope<KitchenStation>>(`/branches/${branchId}/kitchen-stations`, {
         accessToken, tenantId, method: 'POST', body: data,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stations', branchId] }),
@@ -125,7 +125,7 @@ export function useUpdateStation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...data }: { id: string; name?: string; code?: string; defaultPrepMinutes?: number; isExpo?: boolean; collectionLabelOverride?: string; displayOrder?: number; isActive?: boolean }) =>
-      fetchApi<ApiEnvelope<KitchenStation>>(`/branches/${branchId}/stations/${id}`, {
+      fetchApi<ApiEnvelope<KitchenStation>>(`/branches/${branchId}/kitchen-stations/${id}`, {
         accessToken, tenantId, method: 'PATCH', body: data,
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stations', branchId] }),
@@ -137,7 +137,7 @@ export function useDeleteStation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (stationId: string) =>
-      fetchApi<ApiEnvelope<void>>(`/branches/${branchId}/stations/${stationId}`, {
+      fetchApi<ApiEnvelope<void>>(`/branches/${branchId}/kitchen-stations/${stationId}`, {
         accessToken, tenantId, method: 'DELETE',
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['stations', branchId] }),

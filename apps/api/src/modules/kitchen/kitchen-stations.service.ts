@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, ConflictException, NotFoundException } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -13,43 +13,78 @@ export class KitchenStationsService {
   async createStation(params: {
     tenantId: string;
     branchId: string;
+    kitchenId: string;
     name: string;
+    code?: string;
+    defaultPrepMinutes?: number;
+    isExpo?: boolean;
+    collectionLabelOverride?: string;
     displayOrder?: number;
     actorUserId: string;
   }) {
-    const { tenantId, branchId, name, displayOrder, actorUserId } = params;
+    const {
+      tenantId, branchId, kitchenId, name, code,
+      defaultPrepMinutes, isExpo, collectionLabelOverride, displayOrder, actorUserId,
+    } = params;
 
-    const station = await this.prisma.$transaction(async (tx) => {
-      const s = await tx.kitchenStation.create({
-        data: {
-          tenantId,
-          branchId,
-          name,
-          displayOrder: displayOrder ?? 0,
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          actorUserId,
-          tenantId,
-          branchId,
-          action: 'KITCHEN_STATION_CREATE',
-          entityType: 'KitchenStation',
-          entityId: s.id,
-          afterJson: { name, displayOrder: displayOrder ?? 0 },
-        },
-      });
-
-      return s;
+    const kitchen = await this.prisma.kitchen.findFirst({
+      where: { id: kitchenId, tenantId, branchId },
     });
+    if (!kitchen) throw new NotFoundException('Kitchen not found');
 
-    return this.serializeStation(station);
+    try {
+      const station = await this.prisma.$transaction(async (tx) => {
+        const s = await tx.kitchenStation.create({
+          data: {
+            tenantId,
+            branchId,
+            kitchenId,
+            name,
+            code: code ?? null,
+            defaultPrepMinutes: defaultPrepMinutes ?? null,
+            isExpo: isExpo ?? false,
+            collectionLabelOverride: collectionLabelOverride ?? null,
+            displayOrder: displayOrder ?? 0,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            actorUserId,
+            tenantId,
+            branchId,
+            action: 'KITCHEN_STATION_CREATE',
+            entityType: 'KitchenStation',
+            entityId: s.id,
+            afterJson: {
+              name,
+              kitchenId,
+              code: code ?? null,
+              defaultPrepMinutes: defaultPrepMinutes ?? null,
+              isExpo: isExpo ?? false,
+              collectionLabelOverride: collectionLabelOverride ?? null,
+              displayOrder: displayOrder ?? 0,
+            },
+          },
+        });
+
+        return s;
+      });
+
+      return this.serializeStation(station);
+    } catch (error) {
+      this.rethrowStationConflict(error);
+    }
   }
 
-  async listStations(tenantId: string, branchId: string) {
+  async listStations(tenantId: string, branchId: string, kitchenId?: string) {
     const stations = await this.prisma.kitchenStation.findMany({
-      where: { tenantId, branchId, isActive: true },
+      where: {
+        tenantId,
+        branchId,
+        isActive: true,
+        ...(kitchenId && { kitchenId }),
+      },
       orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
       include: {
         menuItemAssignments: {
@@ -69,52 +104,75 @@ export class KitchenStationsService {
     branchId: string;
     stationId: string;
     name?: string;
+    code?: string;
+    defaultPrepMinutes?: number;
+    isExpo?: boolean;
+    collectionLabelOverride?: string;
     displayOrder?: number;
     isActive?: boolean;
     actorUserId: string;
   }) {
-    const { tenantId, branchId, stationId, name, displayOrder, isActive, actorUserId } = params;
+    const {
+      tenantId, branchId, stationId, name, code,
+      defaultPrepMinutes, isExpo, collectionLabelOverride, displayOrder, isActive, actorUserId,
+    } = params;
 
     const existing = await this.prisma.kitchenStation.findFirst({
       where: { id: stationId, tenantId, branchId },
     });
     if (!existing) throw new NotFoundException('Station not found');
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const s = await tx.kitchenStation.update({
-        where: { id: stationId },
-        data: {
-          ...(name !== undefined && { name }),
-          ...(displayOrder !== undefined && { displayOrder }),
-          ...(isActive !== undefined && { isActive }),
-        },
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const s = await tx.kitchenStation.update({
+          where: { id: stationId },
+          data: {
+            ...(name !== undefined && { name }),
+            ...(code !== undefined && { code }),
+            ...(defaultPrepMinutes !== undefined && { defaultPrepMinutes }),
+            ...(isExpo !== undefined && { isExpo }),
+            ...(collectionLabelOverride !== undefined && { collectionLabelOverride }),
+            ...(displayOrder !== undefined && { displayOrder }),
+            ...(isActive !== undefined && { isActive }),
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            actorUserId,
+            tenantId,
+            branchId,
+            action: 'KITCHEN_STATION_UPDATE',
+            entityType: 'KitchenStation',
+            entityId: stationId,
+            beforeJson: {
+              name: existing.name,
+              code: existing.code,
+              defaultPrepMinutes: existing.defaultPrepMinutes,
+              isExpo: existing.isExpo,
+              collectionLabelOverride: existing.collectionLabelOverride,
+              displayOrder: existing.displayOrder,
+              isActive: existing.isActive,
+            },
+            afterJson: {
+              name: s.name,
+              code: s.code,
+              defaultPrepMinutes: s.defaultPrepMinutes,
+              isExpo: s.isExpo,
+              collectionLabelOverride: s.collectionLabelOverride,
+              displayOrder: s.displayOrder,
+              isActive: s.isActive,
+            },
+          },
+        });
+
+        return s;
       });
 
-      await tx.auditLog.create({
-        data: {
-          actorUserId,
-          tenantId,
-          branchId,
-          action: 'KITCHEN_STATION_UPDATE',
-          entityType: 'KitchenStation',
-          entityId: stationId,
-          beforeJson: {
-            name: existing.name,
-            displayOrder: existing.displayOrder,
-            isActive: existing.isActive,
-          },
-          afterJson: {
-            name: s.name,
-            displayOrder: s.displayOrder,
-            isActive: s.isActive,
-          },
-        },
-      });
-
-      return s;
-    });
-
-    return this.serializeStation(updated);
+      return this.serializeStation(updated);
+    } catch (error) {
+      this.rethrowStationConflict(error);
+    }
   }
 
   async deleteStation(params: {
@@ -292,9 +350,36 @@ export class KitchenStationsService {
       id: station.id,
       name: station.name,
       kitchenId: station.kitchenId ?? null,
+      code: station.code ?? null,
+      defaultPrepMinutes: station.defaultPrepMinutes ?? null,
+      isExpo: station.isExpo ?? false,
+      collectionLabelOverride: station.collectionLabelOverride ?? null,
       displayOrder: station.displayOrder,
       isActive: station.isActive,
       createdAt: station.createdAt,
     };
+  }
+
+  private isP2002(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code?: string }).code === 'P2002'
+    );
+  }
+
+  // Station uniqueness: code unique per branch (@@unique([branchId, code])) and
+  // one active expo station per branch (partial unique index from migration SQL).
+  private rethrowStationConflict(error: unknown): never {
+    if (this.isP2002(error)) {
+      const meta = (error as { meta?: { target?: unknown } }).meta;
+      const rawTarget = Array.isArray(meta?.target) ? meta.target.join(',') : String(meta?.target ?? '');
+      if (rawTarget.includes('code')) {
+        throw new ConflictException('Station code already exists in this branch');
+      }
+      throw new ConflictException('Only one active expo station is allowed per branch');
+    }
+    throw error;
   }
 }

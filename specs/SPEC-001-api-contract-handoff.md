@@ -370,15 +370,15 @@ Rate limit key: `{name}:{clientIp}:{tenantId}:{userId}`
 
 | Method | Path | Auth | Roles | Body | Response |
 |--------|------|------|-------|------|----------|
-| `GET` | `/api/v1/branches/:branchId/kitchen-stations` | JWT+BranchScope | Any | — | `{ data: station[] }` |
-| `POST` | `/api/v1/branches/:branchId/kitchen-stations` | JWT+BranchScope | OWNER, MANAGER | `{ name, displayOrder? }` | `{ data: station }` |
-| `PATCH` | `/api/v1/branches/:branchId/kitchen-stations/:stationId` | JWT+BranchScope | OWNER, MANAGER | `{ name?, displayOrder?, isActive? }` | `{ data: station }` |
+| `GET` | `/api/v1/branches/:branchId/kitchen-stations` | JWT+BranchScope | Any | Query: `kitchenId?` | `{ data: station[] }` |
+| `POST` | `/api/v1/branches/:branchId/kitchen-stations` | JWT+BranchScope | OWNER, MANAGER | `{ kitchenId, name, code?, defaultPrepMinutes?, isExpo?, collectionLabelOverride?, displayOrder? }` | `{ data: station }` |
+| `PATCH` | `/api/v1/branches/:branchId/kitchen-stations/:stationId` | JWT+BranchScope | OWNER, MANAGER | `{ name?, code?, defaultPrepMinutes?, isExpo?, collectionLabelOverride?, displayOrder?, isActive? }` | `{ data: station }` |
 | `DELETE` | `/api/v1/branches/:branchId/kitchen-stations/:stationId` | JWT+BranchScope | OWNER, MANAGER | — | `{ data: { success: true } }` |
 | `POST` | `/api/v1/branches/:branchId/kitchen-stations/:stationId/menu-items` | JWT+BranchScope | OWNER, MANAGER | `{ menuItemId }` | `{ data: assignment }` |
 | `DELETE` | `/api/v1/branches/:branchId/kitchen-stations/:stationId/menu-items/:menuItemId` | JWT+BranchScope | OWNER, MANAGER | — | `{ data: { success: true } }` |
 | `GET` | `/api/v1/branches/:branchId/kitchen-stations/:stationId/menu-items` | JWT+BranchScope | Any | — | `{ data: menuItem[] }` |
 
-**Note**: Stations MUST belong to a kitchen (`kitchenId` is required for routing to work). The `createStation` API does not accept `kitchenId` — use the Kitchens CRUD first, then create stations. The station's kitchen assignment is implicit through branch + kitchen relationship.
+**Note**: Stations MUST belong to a kitchen (`kitchenId` is required for routing to work). `POST .../kitchen-stations` requires `kitchenId`; the API validates that the kitchen exists within the same tenant and branch (404 otherwise). `station` codes (`code`) are unique per branch and only one active expo station is allowed per branch — violations return 409. `GET .../kitchen-stations?kitchenId=` filters stations to one kitchen.
 
 ### 9.14 Kitchen Tickets
 
