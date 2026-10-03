@@ -9,8 +9,8 @@
   },
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
+    "dev": "node init && turbo dev",
+    "build": "node init && turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
