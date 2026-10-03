@@ -23,6 +23,10 @@ export class FulfillmentPolicyService {
         readyReminderSeconds: null,
         readyEscalationSeconds: null,
         autoCompleteKitchenTicketOnCollected: false,
+        orderAcceptancePolicy: 'CASHIER_CONFIRMATION',
+        assistanceEscalationSeconds: 180,
+        cashAtCounterEnabled: true,
+        cashToWaiterEnabled: true,
       };
     }
 
@@ -39,6 +43,10 @@ export class FulfillmentPolicyService {
     readyReminderSeconds?: number | null;
     readyEscalationSeconds?: number | null;
     autoCompleteKitchenTicketOnCollected?: boolean;
+    orderAcceptancePolicy?: string;
+    assistanceEscalationSeconds?: number;
+    cashAtCounterEnabled?: boolean;
+    cashToWaiterEnabled?: boolean;
     actorUserId: string;
   }) {
     const {
@@ -46,6 +54,8 @@ export class FulfillmentPolicyService {
       serviceMode, expoMode, allowWaiterSelfClaim,
       showUnassignedReadyOrdersToWaiters, readyReminderSeconds,
       readyEscalationSeconds, autoCompleteKitchenTicketOnCollected,
+      orderAcceptancePolicy, assistanceEscalationSeconds,
+      cashAtCounterEnabled, cashToWaiterEnabled,
       actorUserId,
     } = params;
 
@@ -66,6 +76,10 @@ export class FulfillmentPolicyService {
           readyReminderSeconds: readyReminderSeconds ?? null,
           readyEscalationSeconds: readyEscalationSeconds ?? null,
           autoCompleteKitchenTicketOnCollected: autoCompleteKitchenTicketOnCollected ?? false,
+          orderAcceptancePolicy: orderAcceptancePolicy ?? 'CASHIER_CONFIRMATION',
+          assistanceEscalationSeconds: assistanceEscalationSeconds ?? 180,
+          cashAtCounterEnabled: cashAtCounterEnabled ?? true,
+          cashToWaiterEnabled: cashToWaiterEnabled ?? true,
         },
         update: {
           ...(serviceMode !== undefined && { serviceMode }),
@@ -75,6 +89,10 @@ export class FulfillmentPolicyService {
           ...(readyReminderSeconds !== undefined && { readyReminderSeconds }),
           ...(readyEscalationSeconds !== undefined && { readyEscalationSeconds }),
           ...(autoCompleteKitchenTicketOnCollected !== undefined && { autoCompleteKitchenTicketOnCollected }),
+          ...(orderAcceptancePolicy !== undefined && { orderAcceptancePolicy }),
+          ...(assistanceEscalationSeconds !== undefined && { assistanceEscalationSeconds }),
+          ...(cashAtCounterEnabled !== undefined && { cashAtCounterEnabled }),
+          ...(cashToWaiterEnabled !== undefined && { cashToWaiterEnabled }),
         },
       });
 
@@ -108,6 +126,10 @@ export class FulfillmentPolicyService {
       readyReminderSeconds: policy.readyReminderSeconds,
       readyEscalationSeconds: policy.readyEscalationSeconds,
       autoCompleteKitchenTicketOnCollected: policy.autoCompleteKitchenTicketOnCollected,
+      orderAcceptancePolicy: policy.orderAcceptancePolicy,
+      assistanceEscalationSeconds: policy.assistanceEscalationSeconds,
+      cashAtCounterEnabled: policy.cashAtCounterEnabled,
+      cashToWaiterEnabled: policy.cashToWaiterEnabled,
       createdAt: policy.createdAt,
       updatedAt: policy.updatedAt,
     };

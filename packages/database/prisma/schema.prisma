@@ -27,6 +27,8 @@ model User {
   auditLogs       AuditLog[]
   waiterSessions  DiningSession[] @relation("DiningSessionWaiter")
   waiterOrders    Order[] @relation("OrderWaiter")
+  assignedServiceRequests ServiceRequest[] @relation("ServiceRequestAssignee")
+  claimedServiceRequests  ServiceRequest[] @relation("ServiceRequestClaimant")
 
   @@index([email])
   @@index([phoneE164])
@@ -134,6 +136,7 @@ model Branch {
   businessDayCloses BusinessDayClose[]
   kdsDevices        KdsDevice[]
   fulfillmentPolicy BranchFulfillmentPolicy?
+  serviceRequests    ServiceRequest[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
@@ -385,6 +388,7 @@ model RestaurantTable {
   qrTokens      TableQrToken[]
   sessions      DiningSession[]
   orders        Order[]
+  serviceRequests ServiceRequest[]
 
   @@unique([tenantId, branchId, label])
   @@index([tenantId, branchId])
@@ -430,6 +434,7 @@ model DiningSession {
   table                RestaurantTable @relation(fields: [tableId], references: [id])
   orders               Order[]
   assignedWaiter       User?     @relation("DiningSessionWaiter", fields: [assignedWaiterUserId], references: [id])
+  serviceRequests      ServiceRequest[]
 
   @@index([tenantId, branchId])
   @@index([tableId, status])
@@ -472,6 +477,12 @@ model Order {
   servedAt            DateTime?
   completedAt         DateTime?
   cancelledAt         DateTime?
+  acceptedAt          DateTime?
+  acceptedByUserId    String?
+  acceptancePolicySnapshot String?
+  acceptanceChannel   String?
+  cancellationDisposition String?
+  cancellationReason  String?
   version             Int       @default(1)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -487,6 +498,7 @@ model Order {
   sourceRelations    OrderRelation[] @relation("SourceOrder")
   targetRelations    OrderRelation[] @relation("TargetOrder")
   serviceNotifications ServiceNotification[]
+  serviceRequests      ServiceRequest[]
 
   @@unique([tenantId, branchId, orderNumber])
   @@index([tenantId, branchId, status, createdAt(sort: Desc)])
@@ -890,12 +902,52 @@ model BranchFulfillmentPolicy {
   readyReminderSeconds Int?     // CHECK >= 0 via migration SQL
   readyEscalationSeconds Int?   // CHECK >= 0 via migration SQL
   autoCompleteKitchenTicketOnCollected Boolean @default(false)
+  orderAcceptancePolicy                 String    @default("CASHIER_CONFIRMATION")
+  assistanceEscalationSeconds           Int       @default(180)
+  cashAtCounterEnabled                  Boolean   @default(true)
+  cashToWaiterEnabled                   Boolean   @default(true)
   createdAt                             DateTime  @default(now())
   updatedAt                             DateTime  @updatedAt
 
   branch          Branch    @relation(fields: [branchId], references: [id])
 
   @@index([tenantId, branchId])
+}
+
+// ─── Customer service requests ─────────────
+
+model ServiceRequest {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  branchId            String
+  tableId             String
+  diningSessionId     String
+  orderId             String?
+  type                String
+  status              String    @default("OPEN")
+  note                String?
+  assignedWaiterUserId String?
+  claimedByUserId     String?
+  idempotencyKey      String
+  version             Int       @default(1)
+  createdAt           DateTime  @default(now())
+  claimedAt           DateTime?
+  resolvedAt          DateTime?
+  cancelledAt         DateTime?
+  escalatedAt         DateTime?
+  updatedAt           DateTime  @updatedAt
+
+  branch              Branch          @relation(fields: [branchId], references: [id])
+  table               RestaurantTable @relation(fields: [tableId], references: [id])
+  diningSession       DiningSession   @relation(fields: [diningSessionId], references: [id])
+  order               Order?          @relation(fields: [orderId], references: [id])
+  assignedWaiter      User?           @relation("ServiceRequestAssignee", fields: [assignedWaiterUserId], references: [id])
+  claimedBy           User?           @relation("ServiceRequestClaimant", fields: [claimedByUserId], references: [id])
+
+  @@unique([tenantId, branchId, idempotencyKey])
+  @@index([tenantId, branchId, status, createdAt])
+  @@index([tenantId, branchId, assignedWaiterUserId, status])
+  @@index([diningSessionId, type, status])
 }
 
 // ─── Inventory ─────────────────────────────

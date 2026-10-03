@@ -281,6 +281,29 @@ export class ReplaceRoutesDto {
 // ─── Fulfillment Policy ─────────────
 
 export class UpsertFulfillmentPolicyDto {
+  @ApiPropertyOptional({ description: 'How customer orders are accepted', enum: ['AUTO_AFTER_PAYMENT', 'CASHIER_CONFIRMATION', 'WAITER_APPROVAL'], default: 'CASHIER_CONFIRMATION' })
+  @IsOptional()
+  @IsString()
+  @IsIn(['AUTO_AFTER_PAYMENT', 'CASHIER_CONFIRMATION', 'WAITER_APPROVAL'])
+  orderAcceptancePolicy?: string;
+
+  @ApiPropertyOptional({ description: 'Seconds before an unresolved assistance request escalates', default: 180 })
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  @Max(3600)
+  assistanceEscalationSeconds?: number;
+
+  @ApiPropertyOptional({ description: 'Allow customers to choose cash at the counter', default: true })
+  @IsOptional()
+  @IsBoolean()
+  cashAtCounterEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Allow customers to choose cash paid to a waiter', default: true })
+  @IsOptional()
+  @IsBoolean()
+  cashToWaiterEnabled?: boolean;
+
   @ApiPropertyOptional({ description: 'Service mode', enum: ['ALL_AT_ONCE', 'PARTIAL_ALLOWED'], default: 'ALL_AT_ONCE' })
   @IsOptional()
   @IsString()
