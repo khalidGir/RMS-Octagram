@@ -116,4 +116,9 @@ export const ordering = {
   closeCart: 'أغلق السلة',
   addSomething: 'أضف شيئًا لذيذًا.',
   addItem: 'أضف {item}',
+  selectionRange: 'اختر {min}–{max}',
+  selectionMinimum: 'اختر {min} على الأقل',
+  modifierSelectionError: '{group}: اختر عددًا صالحًا من الخيارات',
+  specialInstructions: 'تعليمات خاصة',
+  addConfiguredItem: 'أضف إلى الطلب · {price}',
 } as const;

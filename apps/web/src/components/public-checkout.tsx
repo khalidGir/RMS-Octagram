@@ -15,7 +15,7 @@ interface StoredCart {
     availableOrderTypes?: string[];
     availablePaymentMethods: string[];
   };
-  lines: Array<{ variantId: string; name: string; basePriceMinor: string; quantity: number }>;
+  lines: Array<{ lineKey: string; variantId: string; name: string; variantName: string; basePriceMinor: string; quantity: number; modifierOptionIds: string[]; modifierNames: string[]; notes: string }>;
   quotedSubtotal: string;
 }
 
@@ -56,7 +56,7 @@ export function PublicCheckout({ expectedEntry }: { expectedEntry: StoredCart['e
     setSubmitting(true);
     setError(null);
     try {
-      const lines = cart.lines.map((line) => ({ variantId: line.variantId, quantity: line.quantity, modifiers: [] }));
+      const lines = cart.lines.map((line) => ({ variantId: line.variantId, quantity: line.quantity, modifierOptionIds: line.modifierOptionIds ?? [], notes: line.notes || undefined }));
       let created: CreatedOrder;
       if (cart.entry.kind === 'pickup') {
         if (!customerName.trim() || !customerPhone.trim() || !pickupAt) throw new Error(tr('validation.requiredCheckout'));
@@ -92,5 +92,5 @@ export function PublicCheckout({ expectedEntry }: { expectedEntry: StoredCart['e
     {pickup && <div className="mt-6 grid gap-4"><label className="text-sm font-bold">{tr('ordering.name')}<input required value={customerName} onChange={(e) => setCustomerName(e.target.value)} maxLength={200} className="mt-2 min-h-12 w-full rounded-xl border border-line px-3" /></label><label className="text-sm font-bold">{tr('ordering.phone')}<input required value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} maxLength={20} className="mt-2 min-h-12 w-full rounded-xl border border-line px-3" /></label><label className="text-sm font-bold">{tr('ordering.pickupTime')}<input required type="datetime-local" value={pickupAt} onChange={(e) => setPickupAt(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-line px-3" /></label></div>}
     <fieldset className="mt-6"><legend className="font-black">{tr('ordering.paymentMethod')}</legend><div className="mt-3 space-y-3">{(['CASH','BANK_TRANSFER','TELEBIRR'] as const).filter((method) => methods.includes(method)).map((method) => <label key={method} className={`flex min-h-14 items-center rounded-xl border px-4 font-bold ${paymentMethod === method ? 'border-brand bg-orange-50' : 'border-line'}`}><input type="radio" name="payment" checked={paymentMethod === method} onChange={() => setPaymentMethod(method)} className="me-3" />{method === 'CASH' ? tr('ordering.payCash') : method === 'TELEBIRR' ? tr('ordering.payTelebirr') : tr('ordering.payBank')}</label>)}</div></fieldset>
     <label className="mt-5 block text-sm font-bold">{tr('ordering.orderNotes')}<textarea value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} className="mt-2 min-h-24 w-full rounded-xl border border-line p-3" /></label><button disabled={submitting || methods.length === 0} className="mt-5 min-h-14 w-full rounded-xl bg-brand px-5 font-black text-white disabled:opacity-50">{submitting ? tr('ordering.submitting') : tr('ordering.placeOrder')}</button></section>
-    <aside className="h-fit rounded-2xl border border-line bg-white p-5 shadow-card"><h2 className="text-xl font-black">{tr('ordering.yourOrder')}</h2>{cart.lines.map((line) => <div key={line.variantId} className="mt-4 flex justify-between border-b border-line pb-4 text-sm"><span><b>{line.quantity} × {line.name}</b></span><b>{formatCurrency(BigInt(line.basePriceMinor) * BigInt(line.quantity))}</b></div>)}<div className="mt-4 flex justify-between"><span>{tr('ordering.subtotalVat')}</span><b>{formatCurrency(subtotal)}</b></div><p className="mt-3 text-xs text-ink-muted">{tr('ordering.vatNote')}</p></aside></form></main>;
+    <aside className="h-fit rounded-2xl border border-line bg-white p-5 shadow-card"><h2 className="text-xl font-black">{tr('ordering.yourOrder')}</h2>{cart.lines.map((line) => <div key={line.lineKey ?? line.variantId} className="mt-4 flex justify-between gap-3 border-b border-line pb-4 text-sm"><span><b>{line.quantity} × {line.name}</b>{line.variantName && <small className="mt-1 block text-ink-muted">{line.variantName}</small>}{line.modifierNames?.length > 0 && <small className="mt-1 block text-ink-muted">{line.modifierNames.join(', ')}</small>}{line.notes && <small className="mt-1 block italic text-ink-muted">{line.notes}</small>}</span><b>{formatCurrency(BigInt(line.basePriceMinor) * BigInt(line.quantity))}</b></div>)}<div className="mt-4 flex justify-between"><span>{tr('ordering.subtotalVat')}</span><b>{formatCurrency(subtotal)}</b></div><p className="mt-3 text-xs text-ink-muted">{tr('ordering.vatNote')}</p></aside></form></main>;
 }

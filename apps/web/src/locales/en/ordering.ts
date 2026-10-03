@@ -104,4 +104,9 @@ export const ordering = {
   closeCart: 'Close cart',
   addSomething: 'Add something delicious.',
   addItem: 'Add {item}',
+  selectionRange: 'Select {min}–{max}',
+  selectionMinimum: 'Select at least {min}',
+  modifierSelectionError: '{group}: choose a valid number of options',
+  specialInstructions: 'Special instructions',
+  addConfiguredItem: 'Add to order · {price}',
 } as const;

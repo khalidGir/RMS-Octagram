@@ -104,4 +104,9 @@ export const ordering = {
   closeCart: 'ግር ዝጋ',
   addSomething: 'ጥሩ ነገር ይጨምሩ።',
   addItem: 'ጨምር {item}',
+  selectionRange: '{min}–{max} ይምረጡ',
+  selectionMinimum: 'ቢያንስ {min} ይምረጡ',
+  modifierSelectionError: '{group}: ትክክለኛ የአማራጮች ብዛት ይምረጡ',
+  specialInstructions: 'ልዩ መመሪያዎች',
+  addConfiguredItem: 'ወደ ትዕዛዝ ጨምር · {price}',
 } as const;
