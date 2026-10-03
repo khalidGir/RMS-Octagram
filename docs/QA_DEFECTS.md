@@ -143,3 +143,28 @@ no longer evenly divisible.
 - [x] `formatEtbMinor` rounds fractional input instead of crashing the page
 - [x] Unit tests cover fractional number and fractional string inputs
 - [x] Dashboard and Reports render normally on staging again
+
+---
+
+## QA-006 — No way to reveal a typed password
+
+- **Status:** Fixed (this release)
+- **Reported:** 2026-10-02 - staging login review
+- **Severity:** Medium (typing errors on touch devices go unnoticed until submit fails)
+- **Area:** Web app - shared `TextField` (login, create-tenant password fields)
+
+### Description
+
+Password fields rendered as a plain masked input with no visibility toggle, so
+users could not check what they typed before submitting. The fix lives in the
+shared `TextField`: any field with `type="password"` now shows an eye toggle
+inside the input (login, Owner password and Confirm password get it
+automatically, as will any future password field).
+
+### Acceptance criteria
+
+- [x] Eye toggle inside the password input (44px touch target)
+- [x] Toggles between masked and plain text, button label flips Show/Hide password
+- [x] No toggle for non-password fields, disabled or read-only fields
+- [x] Does not submit the form (`type="button"`)
+- [x] Unit tests cover presence, toggle and absence cases
