@@ -503,3 +503,65 @@ export class AssignStationToDeviceDto {
   @Min(0)
   displayOrder?: number;
 }
+
+// ------ Service Requests ------
+
+export class CreateServiceRequestDto {
+  @ApiProperty({ description: 'Raw table QR token from the table QR code' })
+  @IsString()
+  @IsNotEmpty()
+  qrToken!: string;
+
+  @ApiProperty({
+    description: 'Assistance type',
+    enum: ['CALL_WAITER', 'REQUEST_BILL', 'OTHER_ASSISTANCE'],
+    example: 'CALL_WAITER',
+  })
+  @IsIn(['CALL_WAITER', 'REQUEST_BILL', 'OTHER_ASSISTANCE'])
+  type!: string;
+
+  @ApiPropertyOptional({ description: 'Optional customer note', maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @Length(1, 500)
+  note?: string;
+
+  @ApiPropertyOptional({ description: 'Client idempotency key for safe retries', maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  idempotencyKey?: string;
+}
+
+export class PublicServiceRequestsStatusDto {
+  @ApiProperty({ description: 'Raw table QR token from the table QR code' })
+  @IsString()
+  @IsNotEmpty()
+  qrToken!: string;
+}
+
+export class ServiceRequestActionDto {
+  @ApiProperty({ description: 'Expected version for optimistic concurrency', example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class ServiceRequestListQueryDto {
+  @ApiPropertyOptional({
+    description: 'Filter by request status (defaults to open/claimed/escalated)',
+    enum: ['OPEN', 'CLAIMED', 'RESOLVED', 'CANCELLED', 'ESCALATED'],
+  })
+  @IsOptional()
+  @IsIn(['OPEN', 'CLAIMED', 'RESOLVED', 'CANCELLED', 'ESCALATED'])
+  status?: string;
+
+  @ApiPropertyOptional({ description: 'Max results (default 50, max 100)', default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}

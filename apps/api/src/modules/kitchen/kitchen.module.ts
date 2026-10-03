@@ -11,6 +11,7 @@ import { KdsDevicesService } from './kds-devices.service';
 import { ServiceNotificationService } from './service-notification.service';
 import { ExpoService } from './expo.service';
 import { WaiterService } from './waiter.service';
+import { ServiceRequestService } from './service-request.service';
 import { FulfillmentEscalationService } from './fulfillment-escalation.service';
 import { KitchenStationsController } from './kitchen-stations.controller';
 import { KitchenTicketsController } from './kitchen-tickets.controller';
@@ -20,6 +21,8 @@ import { FulfillmentPolicyController } from './fulfillment-policy.controller';
 import { KdsDevicesController } from './kds-devices.controller';
 import { ExpoController } from './expo.controller';
 import { WaiterController } from './waiter.controller';
+import { ServiceRequestsController } from './service-requests.controller';
+import { PublicServiceRequestsController } from './public-service-requests.controller';
 import { ServiceNotificationsController } from './service-notifications.controller';
 import { KdsGateway } from './kds.gateway';
 import { FeaturesModule } from '../features/features.module';
@@ -35,6 +38,8 @@ import { FeaturesModule } from '../features/features.module';
     KdsDevicesController,
     ExpoController,
     WaiterController,
+    ServiceRequestsController,
+    PublicServiceRequestsController,
     ServiceNotificationsController,
   ],
   providers: [
@@ -49,6 +54,7 @@ import { FeaturesModule } from '../features/features.module';
     ServiceNotificationService,
     ExpoService,
     WaiterService,
+    ServiceRequestService,
     FulfillmentEscalationService,
     KdsGateway,
   ],
@@ -64,6 +70,7 @@ import { FeaturesModule } from '../features/features.module';
     ServiceNotificationService,
     ExpoService,
     WaiterService,
+    ServiceRequestService,
     FulfillmentEscalationService,
     KdsGateway,
   ],

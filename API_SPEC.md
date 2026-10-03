@@ -349,6 +349,19 @@ Support context is carried in a secure server-validated session/header binding a
 - Polling fallback is 20-30 seconds with backoff/jitter and authoritative refetch after reconnect.
 - Staff mutation endpoints return no optimistic success when server acknowledgement is unavailable.
 
+### Table assistance service requests
+
+| Method | Path | Role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/public/service-requests` | Customer with table QR | Raise Call waiter/Request bill; tenant, branch and table resolve server-side from the QR token. Returns `{ request, created, alreadyOpen }`. |
+| `POST` | `/public/service-requests/status` | Customer with table QR | Active assistance requests for the table (state restore); no internal staff identifiers exposed. |
+| `GET` | `/branches/:branchId/service-requests` | Owner/Manager/Waiter | List active requests (open/claimed/escalated); overdue escalation applied on read. |
+| `POST` | `/branches/:branchId/service-requests/:id/claim` | Owner/Manager/Waiter | Claim an open/escalated request; `expectedVersion` required; duplicate claim by the same waiter is idempotent. |
+| `POST` | `/branches/:branchId/service-requests/:id/resolve` | Owner/Manager/Waiter | Resolve a claimed request; a waiter may resolve only their own claim; `expectedVersion` required. |
+| `POST` | `/branches/:branchId/service-requests/:id/cancel` | Owner/Manager/Waiter | Cancel an active request; a waiter may cancel only their own or assigned request; `expectedVersion` required. |
+
+A request requires the table's open dining session, which is opened only by a confirmed dine-in order; scanning or drafting a cart never occupies a table. The session's assigned waiter is inherited at creation. One open request per type per session is enforced by a partial unique index; concurrent duplicates return the existing request with `alreadyOpen: true`, and idempotency-key replays return the same row. Cashier and kitchen roles are denied. Escalation moves requests open longer than the branch `assistanceEscalationSeconds` threshold (default 180 seconds) to `ESCALATED` on the 30-second escalation poll.
+
 ### New stable errors
 
 - `PUBLIC_CONTEXT_ORDER_TYPE_DENIED`
@@ -361,5 +374,13 @@ Support context is carried in a secure server-validated session/header binding a
 - `BUSINESS_DAY_ALREADY_CLOSED`
 - `SUPPORT_CONTEXT_REQUIRED`
 - `SUPPORT_OPERATION_DENIED`
+- `NO_ACTIVE_SESSION`
+- `VERSION_CONFLICT`
+- `REQUEST_NOT_CLAIMABLE`
+- `REQUEST_ALREADY_CLAIMED`
+- `REQUEST_NOT_RESOLVABLE`
+- `REQUEST_NOT_CANCELLABLE`
+- `REQUEST_ASSIGNED_OTHER`
+- `REQUEST_NOT_YOURS`
 - `TRANSLATION_FALLBACK_USED` is metadata, not an error.
 

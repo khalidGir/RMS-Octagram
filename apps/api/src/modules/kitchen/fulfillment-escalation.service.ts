@@ -6,6 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ServiceNotificationService } from './service-notification.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { KdsGateway } from './kds.gateway';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { ServiceRequestService } from './service-request.service';
 
 const ESCALATION_POLL_MS = 30_000; // Check every 30 seconds
 
@@ -24,6 +26,7 @@ export class FulfillmentEscalationService implements OnModuleInit, OnModuleDestr
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ServiceNotificationService) private readonly notificationService: ServiceNotificationService,
     @Inject(KdsGateway) private readonly kdsGateway: KdsGateway,
+    @Inject(ServiceRequestService) private readonly serviceRequestService: ServiceRequestService,
   ) {}
 
   onModuleInit() {
@@ -53,6 +56,9 @@ export class FulfillmentEscalationService implements OnModuleInit, OnModuleDestr
    */
   async checkEscalations() {
     try {
+      // Escalate overdue table assistance requests (call waiter / request bill).
+      await this.serviceRequestService.escalateAllOverdue();
+
       // Find branches with active fulfillment policies that have escalation configured
       const policies = await this.prisma.branchFulfillmentPolicy.findMany({
         where: {
