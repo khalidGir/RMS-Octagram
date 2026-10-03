@@ -68,4 +68,13 @@ export const pos = {
   },
   updateItem: 'تحديث العنصر',
   addToOrder: 'أضف إلى الطلب',
+  editEyebrow: 'تعديل الطلب',
+  editTitle: 'طلب #{number}',
+  editBack: 'العودة إلى الطلب',
+  editSave: 'حفظ التغييرات',
+  editSaving: 'جارٍ الحفظ…',
+  editLoadFailed: 'تعذّر تحميل الطلب للتعديل.',
+  editVariantMissing: 'أحد أصناف هذا الطلب لم يعد موجودًا في القائمة، لذا لا يمكن تعديله من هنا.',
+  editVersionConflict: 'تغيّر الطلب في مكان آخر. تم تحميل أحدث نسخة — راجع واحفظ مرة أخرى.',
+  editSaveFailed: 'تعذّر حفظ تغييرات الطلب.',
 } as const;

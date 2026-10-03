@@ -56,4 +56,13 @@ export const pos = {
   allowsMax: { one: '{group} allows at most {count} selections', other: '{group} allows at most {count} selections' },
   updateItem: 'Update item',
   addToOrder: 'Add to order',
+  editEyebrow: 'Edit order',
+  editTitle: 'Order #{number}',
+  editBack: 'Back to order',
+  editSave: 'Save changes',
+  editSaving: 'Saving…',
+  editLoadFailed: 'Could not load the order for editing.',
+  editVariantMissing: 'An item on this order is no longer on the menu, so it cannot be edited here.',
+  editVersionConflict: 'The order changed elsewhere. The latest version was loaded — review and save again.',
+  editSaveFailed: 'Could not save the order changes.',
 } as const;

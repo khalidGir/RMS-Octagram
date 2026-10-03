@@ -3,11 +3,12 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { apiRequest } from '@/lib/api-client';
+import { apiRequest, ApiError } from '@/lib/api-client';
 import { useLocale, type MessageKey } from '@/components/locale-provider';
 import { labelFor, orderStatusKeys } from '@/lib/status-labels';
 import { StatusChip } from '@/components/ui/status-chip';
 import { Banner } from '@/components/ui/banner';
+import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui';
 import { FulfillmentTimeline } from '@/components/order-fulfillment-timeline';
 
 type OrderStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'IN_PROGRESS' | 'READY' | 'COMPLETED' | 'CANCELLED' | 'VOIDED';
@@ -69,6 +70,9 @@ interface OrderDetailResponse {
   data: Order;
 }
 
+const EDITABLE_STATUSES = ['DRAFT', 'PENDING_PAYMENT', 'PENDING_CONFIRMATION'];
+const MANAGE_ROLES = ['OWNER', 'MANAGER', 'CASHIER'];
+
 const statusVariant: Record<string, 'idle' | 'active' | 'success' | 'warning' | 'danger' | 'info'> = {
   DRAFT: 'idle',
   PENDING_PAYMENT: 'warning',
@@ -94,6 +98,10 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const tenantId = profile?.memberships?.[0]?.tenant.id;
 
@@ -122,6 +130,33 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   useEffect(() => {
     fetchOrder();
   }, [fetchOrder]);
+
+  async function submitCancel() {
+    if (!order || cancelBusy) return;
+    setCancelBusy(true);
+    setCancelError(null);
+    try {
+      await apiRequest(`/orders/${order.id}/cancel`, {
+        method: 'POST',
+        accessToken,
+        csrfToken,
+        tenantId,
+        body: { reason: cancelReason.trim() || undefined, expectedVersion: order.version },
+      });
+      setCancelOpen(false);
+      setCancelReason('');
+      await fetchOrder();
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        setCancelError(tr('orders.detailVersionConflict'));
+        await fetchOrder();
+      } else {
+        setCancelError(err instanceof ApiError ? err.message : tr('orders.detailCancelFailed'));
+      }
+    } finally {
+      setCancelBusy(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -218,6 +253,33 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             </div>
 
             <div className="mt-5 border-t border-line pt-5 space-y-3">
+              {(() => {
+                const role = profile?.memberships?.[0]?.role;
+                const showActions =
+                  role !== undefined && MANAGE_ROLES.includes(role) && EDITABLE_STATUSES.includes(order.status);
+                if (!showActions) return null;
+                return (
+                  <div className="flex flex-wrap gap-2" data-testid="order-actions">
+                    <Link
+                      href={`/pos?edit=${order.id}`}
+                      className="grid min-h-11 flex-1 place-items-center rounded-xl bg-dark px-4 text-sm font-black text-white"
+                    >
+                      {tr('orders.detailActionEdit')}
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCancelError(null);
+                        setCancelReason('');
+                        setCancelOpen(true);
+                      }}
+                      className="min-h-11 flex-1 rounded-xl border border-red-200 px-4 text-sm font-black text-red-700 transition-colors hover:bg-red-50"
+                    >
+                      {tr('orders.detailActionCancel')}
+                    </button>
+                  </div>
+                );
+              })()}
               <div className="flex justify-between text-sm">
                 <span className="text-ink-muted">{tr('orders.detailSubtotal')}</span>
                 <span className="font-bold tabular-nums">{formatCurrency(Number(order.subtotalMinor))}</span>
@@ -274,6 +336,44 @@ export function OrderDetail({ orderId }: { orderId: string }) {
           <FulfillmentTimeline orderId={orderId} />
         </div>
       </div>
+
+      {cancelOpen && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !cancelBusy) setCancelOpen(false);
+          }}
+        >
+          <DialogContent aria-label={tr('orders.detailCancelTitle')}>
+            <DialogHeader>
+              <DialogTitle>{tr('orders.detailCancelTitle')}</DialogTitle>
+              <DialogDescription>{tr('orders.detailCancelBody')}</DialogDescription>
+            </DialogHeader>
+            <label className="mt-2 block text-sm font-bold">
+              {tr('orders.detailCancelReason')}
+              <textarea
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                maxLength={500}
+                className="mt-2 min-h-20 w-full rounded-xl border border-line p-3 font-normal"
+              />
+            </label>
+            {cancelError && (
+              <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm font-bold text-red-800">
+                {cancelError}
+              </p>
+            )}
+            <DialogFooter className="mt-4 flex justify-end gap-2">
+              <Button variant="secondary" onClick={() => setCancelOpen(false)} disabled={cancelBusy}>
+                {tr('common.cancel')}
+              </Button>
+              <Button variant="danger" onClick={() => void submitCancel()} disabled={cancelBusy}>
+                {cancelBusy ? tr('orders.detailCancelPending') : tr('orders.detailCancelConfirm')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiRequest, newIdempotencyKey, type ApiEnvelope } from '@/lib/api-client';
 import { normalizePublicMenu } from '@/lib/public-menu';
@@ -36,6 +37,27 @@ interface CreatedOrder {
   version: number;
 }
 
+interface EditOrderLineModifier {
+  modifierOptionId: string | null;
+}
+
+interface EditOrderLine {
+  id: string;
+  variantId: string | null;
+  quantity: number;
+  notes: string | null;
+  modifiers: EditOrderLineModifier[];
+}
+
+interface EditOrder {
+  id: string;
+  orderNumber: string;
+  status: string;
+  version: number;
+  notes: string | null;
+  lines: EditOrderLine[];
+}
+
 function makeLineKey(variantId: string, modifierSelections: Record<string, string[]>, notes: string): string {
   const modParts = Object.entries(modifierSelections)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -63,6 +85,9 @@ function findCartLineForVariant(cart: CartLine[], variantId: string): CartLine |
 export function PosWorkspace() {
   const { accessToken, csrfToken, profile } = useAuth();
   const { formatCurrency, tr } = useLocale();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const editOrderId = searchParams.get('edit');
   const membership = profile?.memberships[0];
   const tenantId = membership?.tenant.id ?? '';
   const branchId = typeof window === 'undefined' ? '' : window.sessionStorage.getItem('rms-branch-id') ?? membership?.branchAssignments[0]?.branchId ?? '';
@@ -78,9 +103,12 @@ export function PosWorkspace() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [staleDetail, setStaleDetail] = useState<StalePriceDetail | null>(null);
+  const [editVersion, setEditVersion] = useState<number | null>(null);
 
   const orderKey = useRef(newIdempotencyKey());
   const paymentKey = useRef(newIdempotencyKey());
+  const editKey = useRef(newIdempotencyKey());
+  const initializedEditRef = useRef<string | null>(null);
 
   const [modifierModal, setModifierModal] = useState<{
     item: Item;
@@ -105,6 +133,64 @@ export function PosWorkspace() {
     enabled: Boolean(accessToken && tenantId && branchId),
     queryFn: async () => (await apiRequest<ApiEnvelope<Shift | null>>(`/branches/${branchId}/shifts/current`, { accessToken, tenantId })).data,
   });
+
+  const editQuery = useQuery({
+    queryKey: ['pos-edit-order', editOrderId],
+    enabled: Boolean(editOrderId && accessToken && tenantId),
+    queryFn: async () =>
+      (await apiRequest<ApiEnvelope<EditOrder>>(`/orders/${editOrderId}`, { accessToken, csrfToken, tenantId })).data,
+    staleTime: 0,
+  });
+
+  // Load an existing order into the cart when opened in edit mode (?edit=<orderId>).
+  // The cart is initialised exactly once per order so later refetches (for example
+  // after a VERSION_CONFLICT) only refresh the optimistic-lock version.
+  useEffect(() => {
+    if (!editOrderId || !editQuery.data) return;
+    if (initializedEditRef.current === editOrderId) {
+      setEditVersion(editQuery.data.version);
+      return;
+    }
+    const categories = menuQuery.data?.categories;
+    if (!categories) return;
+
+    const allItems = categories.flatMap((group) => group.items);
+    const nextCart: CartLine[] = [];
+    for (const line of editQuery.data.lines) {
+      const item = line.variantId
+        ? allItems.find((candidate) => candidate.variants.some((variant) => variant.id === line.variantId))
+        : undefined;
+      const variantObj = item?.variants.find((variant) => variant.id === line.variantId);
+      if (!item || !variantObj) {
+        initializedEditRef.current = editOrderId;
+        setCart([]);
+        setMessage(tr('pos.editVariantMissing'));
+        return;
+      }
+      const optionIds = line.modifiers
+        .map((modifier) => modifier.modifierOptionId)
+        .filter((optionId): optionId is string => Boolean(optionId));
+      const selectedModifiers: Record<string, string[]> = {};
+      for (const optionId of optionIds) {
+        const group = item.modifierGroups.find((candidate) => candidate.options.some((option) => option.id === optionId));
+        if (group) {
+          selectedModifiers[group.id] = [...(selectedModifiers[group.id] ?? []), optionId];
+        }
+      }
+      nextCart.push({
+        lineKey: makeLineKey(variantObj.id, selectedModifiers, line.notes ?? ''),
+        item,
+        variant: variantObj,
+        quantity: line.quantity,
+        selectedModifiers,
+        notes: line.notes ?? '',
+      });
+    }
+    initializedEditRef.current = editOrderId;
+    setCart(nextCart);
+    setNotes(editQuery.data.notes ?? '');
+    setEditVersion(editQuery.data.version);
+  }, [editOrderId, editQuery.data, menuQuery.data, tr]);
 
   const categories = menuQuery.data?.categories ?? [];
   const items = useMemo(
@@ -227,6 +313,51 @@ export function PosWorkspace() {
     }
   }
 
+  async function saveEdit() {
+    if (!editOrderId || !cart.length || editVersion === null || !isOnline) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await apiRequest(`/orders/${editOrderId}`, {
+        method: 'PATCH',
+        accessToken,
+        csrfToken,
+        tenantId,
+        body: {
+          lines: cart.map((line) => ({
+            variantId: line.variant.id,
+            quantity: line.quantity,
+            modifierOptionIds: Object.values(line.selectedModifiers).flat(),
+            notes: line.notes || undefined,
+          })),
+          notes: notes || undefined,
+          expectedVersion: editVersion,
+          quotedTotal: cartSubtotal.toString(),
+          idempotencyKey: editKey.current,
+        },
+      });
+      router.push(`/orders/${editOrderId}`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        const details = error.details as StalePriceDetail | undefined;
+        if (details?.code === 'PRICE_CHANGED') {
+          setStaleDetail(details);
+          setMessage(tr('pos.priceChanged'));
+          void menuQuery.refetch();
+        } else if (details?.code === 'VERSION_CONFLICT') {
+          setMessage(tr('pos.editVersionConflict'));
+          void editQuery.refetch();
+        } else {
+          setMessage(error.message);
+        }
+      } else {
+        setMessage(error instanceof ApiError ? error.message : tr('pos.editSaveFailed'));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function confirmCash() {
     if (!pending || !isOnline) return;
     if (!shiftQuery.data) return setMessage(tr('pos.openShiftFirst'));
@@ -265,18 +396,34 @@ export function PosWorkspace() {
     <div className="mx-auto max-w-[1500px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-wider text-brand">{tr('pos.eyebrow')}</p>
-          <h1 className="mt-2 text-3xl font-black">{tr('pos.title')}</h1>
+          <p className="text-xs font-black uppercase tracking-wider text-brand">{editOrderId ? tr('pos.editEyebrow') : tr('pos.eyebrow')}</p>
+          <h1 className="text-3xl font-black">{editOrderId ? tr('pos.editTitle', { number: editQuery.data?.orderNumber ?? '' }) : tr('pos.title')}</h1>
           <p className="mt-1 text-sm text-ink-muted">
             {shiftQuery.data ? tr('pos.shiftActive') : tr('pos.shiftUnavailable')}
           </p>
         </div>
-        {!shiftQuery.data && (
-          <a href="/shifts" className="grid min-h-11 place-items-center rounded-xl bg-dark px-5 font-black text-white">
-            {tr('pos.openShift')}
-          </a>
+        {editOrderId ? (
+          <button
+            type="button"
+            onClick={() => router.push(`/orders/${editOrderId}`)}
+            className="grid min-h-11 place-items-center rounded-xl border border-line bg-white px-5 font-black"
+          >
+            {tr('pos.editBack')}
+          </button>
+        ) : (
+          !shiftQuery.data && (
+            <a href="/shifts" className="grid min-h-11 place-items-center rounded-xl bg-dark px-5 font-black text-white">
+              {tr('pos.openShift')}
+            </a>
+          )
         )}
       </header>
+
+      {editOrderId && editQuery.isError && (
+        <div role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-900">
+          {tr('pos.editLoadFailed')}
+        </div>
+      )}
 
       {message && (
         <div role="alert" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">
@@ -484,7 +631,15 @@ export function PosWorkspace() {
             </div>
           )}
 
-          {!pending ? (
+          {editOrderId ? (
+            <button
+              onClick={() => void saveEdit()}
+              disabled={busy || !cart.length || editVersion === null || !isOnline}
+              className="mt-4 min-h-12 w-full rounded-xl bg-dark font-black text-white disabled:opacity-50"
+            >
+              {busy ? tr('pos.editSaving') : tr('pos.editSave')}
+            </button>
+          ) : !pending ? (
             <button
               onClick={createOrder}
               disabled={busy || !cart.length || !isOnline}

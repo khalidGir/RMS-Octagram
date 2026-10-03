@@ -56,4 +56,13 @@ export const pos = {
   allowsMax: { one: '{group} እንደ {count} ምርጫ መፍቀድ አይችልም', other: '{group} እንደ {count} ምርጫ መፍቀድ አይችልም' },
   updateItem: 'እቃውን አዘምን',
   addToOrder: 'ወደ ትዕዛዝ ጨምር',
+  editEyebrow: 'ትዕዛዝ አስተካክል',
+  editTitle: 'ትዕዛዝ #{number}',
+  editBack: 'ወደ ትዕዛዝ ተመለስ',
+  editSave: 'ለውጦችን አስቀምጥ',
+  editSaving: 'በማስቀመጥ ላይ…',
+  editLoadFailed: 'ትዕዛዙን ለማስተካከል መጫን አልተቻለም።',
+  editVariantMissing: 'በዚህ ትዕዛዝ ላይ ያለው እቃ አሁን ከምናሩ ጋር የለም፣ ስለዚህ ከዚህ ሊስተካከል አይችልም።',
+  editVersionConflict: 'ትዕዛዙ በሌላቦታ ተቀይሯል። የመጨረሻው ቅርጽ ተጭናል — ይገምግሙ እና እንደገና ያስቀምቱ።',
+  editSaveFailed: 'የትዕዛዝ ለውጦችን መቀመጥ አልተቻለም።',
 } as const;
