@@ -1,9 +1,11 @@
 'use client';
 
 import { useOnlineStatus } from '@/hooks';
+import { useLocale } from '@/components/locale-provider';
 
 export function ConnectivityIndicator() {
   const online = useOnlineStatus();
+  const { tr } = useLocale();
   return (
     <span
       className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold ${
@@ -13,7 +15,7 @@ export function ConnectivityIndicator() {
       aria-live="polite"
     >
       <span className={`size-2 rounded-full ${online ? 'bg-emerald-500' : 'bg-red-500'}`} />
-      {online ? 'Systems online' : 'Offline'}
+      {online ? tr('common.systemsOnline') : tr('common.offline')}
     </span>
   );
 }

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { normalizeEthiopianPhone, isValidEthiopianPhone } from '@rms/contracts';
 import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
+import { useLocale, type MessageKey } from '@/components/locale-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -38,6 +39,14 @@ function roleLabel(role: string): string {
   return role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const roleKeys: Record<string, MessageKey> = {
+  OWNER: 'team.roleOwner',
+  MANAGER: 'team.roleManager',
+  CASHIER: 'team.roleCashier',
+  KITCHEN_STAFF: 'team.roleKitchenStaff',
+  WAITER: 'team.roleWaiter',
+};
+
 function statusColor(status: string): string {
   switch (status) {
     case 'ACTIVE': return 'bg-emerald-50 text-emerald-700';
@@ -54,6 +63,7 @@ function statusColor(status: string): string {
 
 export function TeamManagement() {
   const { accessToken, csrfToken, profile } = useAuth();
+  const { tr } = useLocale();
   const membership = profile?.memberships[0];
   const tenantId = membership?.tenant.id ?? '';
   const [tab, setTab] = useState('team');
@@ -81,24 +91,24 @@ export function TeamManagement() {
   });
 
   if (!membership || !['OWNER', 'MANAGER'].includes(membership.role)) {
-    return <p role="alert">Permission denied.</p>;
+    return <p role="alert">{tr('team.permissionDenied')}</p>;
   }
 
   return (
     <>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">People &amp; locations</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Team &amp; branches</h1>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">{tr('team.eyebrow')}</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{tr('team.pageTitle')}</h1>
           <p className="mt-2 text-sm text-ink-muted">
-            Invite staff, assign roles, and manage branch access.
+            {tr('team.pageDescription')}
           </p>
         </div>
         <button
           onClick={() => { setNotice(null); setShowInvite(true); }}
           className="min-h-11 rounded-xl bg-dark px-5 text-sm font-bold text-white shadow-sm transition hover:bg-dark-muted"
         >
-          + Invite member
+          {tr('team.inviteBtn')}
         </button>
       </div>
 
@@ -109,20 +119,20 @@ export function TeamManagement() {
       )}
 
       {(members.isLoading || branches.isLoading) && (
-        <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading team…</p>
+        <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('team.loading')}</p>
       )}
 
       {(members.isError || branches.isError) && (
         <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">
-          Could not load team data. Check the API connection and try again.
+          {tr('team.loadError')}
         </div>
       )}
 
       {!members.isLoading && !members.isError && (
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="team">Team ({members.data?.length ?? 0})</TabsTrigger>
-            <TabsTrigger value="branches">Branches ({branches.data?.length ?? 0})</TabsTrigger>
+            <TabsTrigger value="team">{tr('team.teamTab', { count: members.data?.length ?? 0 })}</TabsTrigger>
+            <TabsTrigger value="branches">{tr('team.branchesTab', { count: branches.data?.length ?? 0 })}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="team">
@@ -163,7 +173,7 @@ export function TeamManagement() {
           onCreated={async () => {
             setShowInvite(false);
             await members.refetch();
-            setNotice('Invitation sent.');
+            setNotice(tr('team.inviteSent'));
           }}
         />
       )}
@@ -194,14 +204,15 @@ function TeamList({
   onNotice: (msg: string | null) => void;
   onInvalidate: () => void;
 }) {
+  const { tr } = useLocale();
   const [editing, setEditing] = useState<Member | null>(null);
 
   if (members.length === 0) {
     return (
       <div className="mt-4 grid min-h-72 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
         <div>
-          <p className="text-lg font-black">No team members</p>
-          <p className="mt-2 text-sm text-ink-muted">Invite your first team member to get started.</p>
+          <p className="text-lg font-black">{tr('team.emptyTitle')}</p>
+          <p className="mt-2 text-sm text-ink-muted">{tr('team.emptyHint')}</p>
         </div>
       </div>
     );
@@ -210,26 +221,26 @@ function TeamList({
   return (
     <>
       <div className="mt-4 overflow-x-auto rounded-2xl border border-black/[.07] bg-white shadow-sm">
-        <table className="w-full min-w-[700px] text-left">
+        <table className="w-full min-w-[700px] text-start">
           <thead>
             <tr className="text-xs uppercase tracking-wider text-ink-muted">
-              <th className="px-5 py-4">Member</th>
-              <th className="px-5 py-4">Role</th>
-              <th className="px-5 py-4">Branch access</th>
-              <th className="px-5 py-4">Status</th>
+              <th className="px-5 py-4">{tr('team.thMember')}</th>
+              <th className="px-5 py-4">{tr('team.thRole')}</th>
+              <th className="px-5 py-4">{tr('team.branchAccess')}</th>
+              <th className="px-5 py-4">{tr('team.thStatus')}</th>
               <th className="px-5 py-4" />
             </tr>
           </thead>
           <tbody>
             {members.map((m) => {
-              const branchNames = m.branchAssignments.map((a) => a.branch.name).join(', ') || 'All branches';
+              const branchNames = m.branchAssignments.map((a) => a.branch.name).join(', ') || tr('team.allBranches');
               return (
                 <tr className="border-t border-line text-sm" key={m.id}>
                   <td className="px-5 py-5">
                     <p className="font-black">{m.user.displayName}</p>
                     <p className="text-xs text-ink-muted">{m.user.phone ?? '—'}</p>
                   </td>
-                  <td className="px-5 py-5">{roleLabel(m.role)}</td>
+                  <td className="px-5 py-5">{roleKeys[m.role] ? tr(roleKeys[m.role]) : roleLabel(m.role)}</td>
                   <td className="px-5 py-5 text-ink-muted">{branchNames}</td>
                   <td className="px-5 py-5">
                     <span className={`rounded-full px-2 py-1 text-[10px] font-black ${statusColor(m.status)}`}>
@@ -242,7 +253,7 @@ function TeamList({
                         onClick={() => setEditing(m)}
                         className="font-black text-brand"
                       >
-                        Manage
+                        {tr('team.manageBtn')}
                       </button>
                     )}
                   </td>
@@ -263,7 +274,7 @@ function TeamList({
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);
-            onNotice('Member updated.');
+            onNotice(tr('team.memberUpdated'));
             onInvalidate();
           }}
         />
@@ -293,6 +304,7 @@ function BranchesList({
   onNotice: (msg: string | null) => void;
   onInvalidate: () => void;
 }) {
+  const { tr } = useLocale();
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
 
@@ -300,8 +312,8 @@ function BranchesList({
     return (
       <div className="mt-4 grid min-h-72 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
         <div>
-          <p className="text-lg font-black">No branches</p>
-          <p className="mt-2 text-sm text-ink-muted">Create your first branch to organize tables and staff.</p>
+          <p className="text-lg font-black">{tr('team.noBranchesTitle')}</p>
+          <p className="mt-2 text-sm text-ink-muted">{tr('team.noBranchesHint')}</p>
         </div>
       </div>
     );
@@ -312,21 +324,21 @@ function BranchesList({
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         {branches.map((b) => (
           <div key={b.id} className="rounded-2xl border border-black/[.07] bg-white p-6 shadow-sm">
-            <p className="text-xs font-black text-brand">BRANCH</p>
+            <p className="text-xs font-black text-brand">{tr('team.branchBadge')}</p>
             <h2 className="mt-2 text-xl font-black">{b.name}</h2>
             <p className="mt-2 text-sm text-ink-muted">/{b.slug}</p>
             <div className="mt-4 flex items-center justify-between">
               <span className={`rounded-full px-2 py-1 text-[10px] font-black ${
                 b.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
               }`}>
-                {b.isActive ? 'ACTIVE' : 'INACTIVE'}
+                {b.isActive ? tr('team.activeBadge') : tr('team.inactiveBadge')}
               </span>
               {isOwner && (
                 <button
                   onClick={() => setEditing(b)}
                   className="text-sm font-black text-brand"
                 >
-                  Edit
+                  {tr('team.editBtn')}
                 </button>
               )}
             </div>
@@ -343,7 +355,7 @@ function BranchesList({
           onCreated={async () => {
             setShowCreate(false);
             await onInvalidate();
-            onNotice('Branch created.');
+            onNotice(tr('team.branchCreated'));
           }}
         />
       )}
@@ -357,7 +369,7 @@ function BranchesList({
           onSaved={async () => {
             setEditing(null);
             onInvalidate();
-            onNotice('Branch updated.');
+            onNotice(tr('team.branchUpdated'));
           }}
         />
       )}
@@ -391,6 +403,7 @@ function InviteDialog({
   const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   const availableRoles = callerRole === 'OWNER'
     ? [...ROLES]
@@ -399,10 +412,10 @@ function InviteDialog({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = phone.trim();
-    if (!trimmed) return setError('Enter a phone number.');
-    if (!isValidEthiopianPhone(trimmed)) return setError('Enter a valid Ethiopian mobile number (e.g. 0911 234 567).');
+    if (!trimmed) return setError(tr('team.enterPhone'));
+    if (!isValidEthiopianPhone(trimmed)) return setError(tr('team.invalidPhone'));
     const normalizedPhone = normalizeEthiopianPhone(trimmed);
-    if (!normalizedPhone) return setError('Enter a valid Ethiopian mobile number (e.g. 0911 234 567).');
+    if (!normalizedPhone) return setError(tr('team.invalidPhone'));
     setBusy(true);
     setError(null);
     try {
@@ -419,7 +432,7 @@ function InviteDialog({
       });
       await onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not send invitation.');
+      setError(err instanceof ApiError ? err.message : tr('team.inviteError'));
     } finally {
       setBusy(false);
     }
@@ -433,11 +446,11 @@ function InviteDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg" aria-label="Invite team member">
-        <DialogTitle>Invite team member</DialogTitle>
+      <DialogContent className="max-w-lg" aria-label={tr('team.inviteTitle')}>
+        <DialogTitle>{tr('team.inviteTitle')}</DialogTitle>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <label className="text-sm font-black">
-            Phone number
+            {tr('team.phoneLabel')}
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -450,13 +463,13 @@ function InviteDialog({
             />
           </label>
           <label className="text-sm font-black">
-            Role
-            <div className="mt-2"><Select value={role} onValueChange={setRole}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent>{availableRoles.map((r) => <SelectItem value={r} key={r}>{roleLabel(r)}</SelectItem>)}</SelectContent></Select></div>
+            {tr('team.thRole')}
+            <div className="mt-2"><Select value={role} onValueChange={setRole}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent>{availableRoles.map((r) => <SelectItem value={r} key={r}>{roleKeys[r] ? tr(roleKeys[r]) : roleLabel(r)}</SelectItem>)}</SelectContent></Select></div>
           </label>
           {branches.length > 0 && (
             <div>
-              <p className="text-sm font-black mb-2">Branch access</p>
-              <p className="text-xs text-ink-muted mb-3">Leave unchecked for all-branch access.</p>
+              <p className="text-sm font-black mb-2">{tr('team.branchAccess')}</p>
+              <p className="text-xs text-ink-muted mb-3">{tr('team.allBranchHint')}</p>
               <div className="space-y-2">
                 {branches.map((b) => (
                   <label key={b.id} className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3 text-sm font-bold">
@@ -479,10 +492,10 @@ function InviteDialog({
           )}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy || !phone.trim()} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-              {busy ? 'Sending…' : 'Send invitation'}
+              {busy ? tr('team.sending') : tr('team.sendInvitation')}
             </button>
           </div>
         </form>
@@ -519,6 +532,7 @@ function EditMemberDialog({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -541,7 +555,7 @@ function EditMemberDialog({
       });
       await onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update member.');
+      setError(err instanceof ApiError ? err.message : tr('team.updateMemberError'));
     } finally {
       setBusy(false);
     }
@@ -555,23 +569,23 @@ function EditMemberDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-lg" aria-label={`Manage ${member.user.displayName}`}>
-        <DialogTitle>Manage {member.user.displayName}</DialogTitle>
+      <DialogContent className="max-w-lg" aria-label={tr('team.manageMember', { name: member.user.displayName })}>
+        <DialogTitle>{tr('team.manageMember', { name: member.user.displayName })}</DialogTitle>
         <p className="text-sm text-ink-muted">{member.user.phone ?? '—'}</p>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <div className="grid grid-cols-2 gap-4">
             <label className="text-sm font-black">
-              Role
-              <div className="mt-2"><Select value={role} onValueChange={setRole}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map((r) => <SelectItem value={r} key={r}>{roleLabel(r)}</SelectItem>)}</SelectContent></Select></div>
+              {tr('team.thRole')}
+              <div className="mt-2"><Select value={role} onValueChange={setRole}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map((r) => <SelectItem value={r} key={r}>{roleKeys[r] ? tr(roleKeys[r]) : roleLabel(r)}</SelectItem>)}</SelectContent></Select></div>
             </label>
             <label className="text-sm font-black">
-              Status
-              <div className="mt-2"><Select value={status} onValueChange={setStatus}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">Active</SelectItem><SelectItem value="SUSPENDED">Suspended</SelectItem><SelectItem value="REVOKED">Revoked</SelectItem></SelectContent></Select></div>
+              {tr('team.thStatus')}
+              <div className="mt-2"><Select value={status} onValueChange={setStatus}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ACTIVE">{tr('team.statusSelectActive')}</SelectItem><SelectItem value="SUSPENDED">{tr('team.statusSelectSuspended')}</SelectItem><SelectItem value="REVOKED">{tr('team.statusSelectRevoked')}</SelectItem></SelectContent></Select></div>
             </label>
           </div>
           {branches.length > 0 && (
             <div>
-              <p className="text-sm font-black mb-2">Branch assignments</p>
+              <p className="text-sm font-black mb-2">{tr('team.branchAssignments')}</p>
               <div className="space-y-2">
                 {branches.map((b) => (
                   <label key={b.id} className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3 text-sm font-bold">
@@ -594,10 +608,10 @@ function EditMemberDialog({
           )}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-              {busy ? 'Saving…' : 'Save changes'}
+              {busy ? tr('team.saving') : tr('team.saveChanges')}
             </button>
           </div>
         </form>
@@ -627,6 +641,7 @@ function CreateBranchDialog({
   const [slug, setSlug] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   function autoSlug(value: string) {
     setSlug(value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''));
@@ -636,9 +651,9 @@ function CreateBranchDialog({
     e.preventDefault();
     const trimmedName = name.trim();
     const trimmedSlug = slug.trim();
-    if (!trimmedName) return setError('Enter a branch name.');
-    if (!trimmedSlug) return setError('Enter a URL slug.');
-    if (!/^[a-z0-9-]+$/.test(trimmedSlug)) return setError('Slug must be lowercase alphanumeric with hyphens only.');
+    if (!trimmedName) return setError(tr('team.enterBranchName'));
+    if (!trimmedSlug) return setError(tr('team.enterSlug'));
+    if (!/^[a-z0-9-]+$/.test(trimmedSlug)) return setError(tr('team.slugRule'));
     setBusy(true);
     setError(null);
     try {
@@ -651,7 +666,7 @@ function CreateBranchDialog({
       });
       await onCreated();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create branch.');
+      setError(err instanceof ApiError ? err.message : tr('team.createBranchError'));
     } finally {
       setBusy(false);
     }
@@ -659,22 +674,22 @@ function CreateBranchDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md" aria-label="Create branch">
-        <DialogTitle>Create branch</DialogTitle>
+      <DialogContent className="max-w-md" aria-label={tr('team.createBranch')}>
+        <DialogTitle>{tr('team.createBranch')}</DialogTitle>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <label className="text-sm font-black">
-            Branch name
+            {tr('team.branchNameLabel')}
             <input
               value={name}
               onChange={(e) => { setName(e.target.value); autoSlug(e.target.value); }}
               maxLength={200}
-              placeholder="e.g. Bole Main"
+              placeholder={tr('team.branchNamePlaceholder')}
               className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-4 font-normal outline-none focus:ring-2 focus:ring-brand/20"
               autoFocus
             />
           </label>
           <label className="text-sm font-black">
-            URL slug
+            {tr('team.slugLabel')}
             <input
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
@@ -691,10 +706,10 @@ function CreateBranchDialog({
           )}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy || !name.trim() || !slug.trim()} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-              {busy ? 'Creating…' : 'Create branch'}
+              {busy ? tr('team.creating') : tr('team.createBranch')}
             </button>
           </div>
         </form>
@@ -726,11 +741,12 @@ function EditBranchDialog({
   const [isActive, setIsActive] = useState(branch.isActive);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
-    if (!trimmed) return setError('Enter a branch name.');
+    if (!trimmed) return setError(tr('team.enterBranchName'));
     setBusy(true);
     setError(null);
     try {
@@ -743,7 +759,7 @@ function EditBranchDialog({
       });
       await onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update branch.');
+      setError(err instanceof ApiError ? err.message : tr('team.updateBranchError'));
     } finally {
       setBusy(false);
     }
@@ -751,11 +767,11 @@ function EditBranchDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md" aria-label={`Edit branch ${branch.name}`}>
-        <DialogTitle>Edit branch</DialogTitle>
+      <DialogContent className="max-w-md" aria-label={tr('team.editBranchAria', { name: branch.name })}>
+        <DialogTitle>{tr('team.editBranchTitle')}</DialogTitle>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <label className="text-sm font-black">
-            Branch name
+            {tr('team.branchNameLabel')}
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -765,8 +781,8 @@ function EditBranchDialog({
           </label>
           <label className="flex items-center justify-between rounded-xl border border-line bg-white px-4 py-3 text-sm font-black">
             <span>
-              <span className="block">Active</span>
-              <span className="mt-1 block text-xs font-normal text-ink-muted">Inactive branches are hidden from POS.</span>
+              <span className="block">{tr('team.activeLabel')}</span>
+              <span className="mt-1 block text-xs font-normal text-ink-muted">{tr('team.inactiveHint')}</span>
             </span>
             <input
               type="checkbox"
@@ -782,10 +798,10 @@ function EditBranchDialog({
           )}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy || !name.trim()} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-              {busy ? 'Saving…' : 'Save'}
+              {busy ? tr('team.saving') : tr('team.saveBtn')}
             </button>
           </div>
         </form>

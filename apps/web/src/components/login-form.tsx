@@ -7,6 +7,7 @@ import { normalizeEthiopianPhone } from '@rms/contracts';
 import { ApiError } from '@/lib/api-client';
 import { useAuth, type StaffProfile } from './auth-provider';
 import { Button, TextField } from '@/components/ui';
+import { useLocale } from './locale-provider';
 
 function landingPage(profile: StaffProfile): Route {
   if (profile.platformRole === 'SUPER_ADMIN') return '/platform';
@@ -18,6 +19,7 @@ function landingPage(profile: StaffProfile): Route {
 }
 
 export function LoginForm() {
+  const { tr } = useLocale();
   const { login } = useAuth();
   const router = useRouter();
   const [phone, setPhone] = useState('');
@@ -30,7 +32,7 @@ export function LoginForm() {
     setError(null);
     const normalizedPhone = normalizeEthiopianPhone(phone);
     if (!normalizedPhone) {
-      setError('Enter a valid Ethiopian mobile number (e.g. 0911 234 567).');
+      setError(tr('validation.invalidPhone'));
       return;
     }
     setSubmitting(true);
@@ -44,7 +46,7 @@ export function LoginForm() {
       }
       router.replace(landingPage(profile));
     } catch (reason) {
-      setError(reason instanceof ApiError ? reason.message : 'Sign-in failed. Check your connection and try again.');
+      setError(reason instanceof ApiError ? reason.message : tr('validation.signInFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -53,10 +55,10 @@ export function LoginForm() {
   return (
     <form className="mt-8 space-y-5" onSubmit={submit} noValidate>
       {error && <div role="alert" className="rounded-card border border-danger/20 bg-danger-surface p-3 text-sm font-semibold text-danger">{error}</div>}
-      <TextField required label="Phone number" type="tel" inputMode="tel" autoComplete="tel" placeholder="0911 234 567" value={phone} onChange={(event) => setPhone(event.target.value)} className="min-h-12" />
-      <TextField required label="Password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12" />
+      <TextField required label={tr('authentication.phone')} type="tel" inputMode="tel" autoComplete="tel" placeholder="0911 234 567" value={phone} onChange={(event) => setPhone(event.target.value)} className="min-h-12" />
+      <TextField required label={tr('authentication.password')} type="password" autoComplete="current-password" revealLabel={tr('authentication.showPassword')} hideLabel={tr('authentication.hidePassword')} value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12" />
       <Button type="submit" size="lg" loading={submitting} disabled={!phone || !password} className="w-full">
-        Sign in to RestaurantMS
+        {tr('authentication.signIn')}
       </Button>
     </form>
   );

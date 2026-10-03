@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { apiRequest } from '@/lib/api-client';
-import { formatEtbMinor } from '@/lib/money';
+import { useLocale, type MessageKey } from '@/components/locale-provider';
+import { labelFor, orderStatusKeys } from '@/lib/status-labels';
 import { StatusChip } from '@/components/ui/status-chip';
 import { Banner } from '@/components/ui/banner';
 import { FulfillmentTimeline } from '@/components/order-fulfillment-timeline';
@@ -80,25 +81,16 @@ const statusVariant: Record<string, 'idle' | 'active' | 'success' | 'warning' | 
   VOIDED: 'danger',
 };
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
-const ORDER_TYPE_LABELS: Record<string, string> = {
-  DINE_IN: 'Dine in',
-  TAKEAWAY: 'Takeaway',
-  PICKUP: 'Pickup',
-  POS: 'POS',
+const ORDER_TYPE_KEYS: Record<string, MessageKey> = {
+  DINE_IN: 'orders.detailTypeDineIn',
+  TAKEAWAY: 'orders.detailTypeTakeaway',
+  PICKUP: 'orders.detailTypePickup',
+  POS: 'orders.detailTypePos',
 };
 
 export function OrderDetail({ orderId }: { orderId: string }) {
   const { accessToken, csrfToken, profile } = useAuth();
+  const { formatCurrency, tr, formatDate } = useLocale();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,11 +109,15 @@ export function OrderDetail({ orderId }: { orderId: string }) {
       });
       setOrder(res.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load order');
+      setError(err instanceof Error ? err.message : tr('orders.detailLoadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [orderId, accessToken, csrfToken, tenantId]);
+  }, [orderId, accessToken, csrfToken, tenantId, tr]);
+
+  const typeLabel = (raw: string) => (ORDER_TYPE_KEYS[raw] ? tr(ORDER_TYPE_KEYS[raw]) : raw);
+  const dateFmt = (value: string) =>
+    formatDate(value, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
 
   useEffect(() => {
     fetchOrder();
@@ -130,7 +126,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   if (loading) {
     return (
       <div className="grid min-h-64 place-items-center">
-        <p className="text-sm text-ink-muted animate-pulse">Loading order…</p>
+        <p className="text-sm text-ink-muted animate-pulse">{tr('orders.detailLoading')}</p>
       </div>
     );
   }
@@ -138,9 +134,9 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   if (error) {
     return (
       <div>
-        <Link href="/orders" className="text-sm font-black text-brand">← All orders</Link>
+        <Link href="/orders" className="text-sm font-black text-brand">{tr('orders.detailBack')}</Link>
         <div className="mt-6">
-          <Banner variant="danger" title="Error loading order">{error}</Banner>
+          <Banner variant="danger" title={tr('orders.detailErrorTitle')}>{error}</Banner>
         </div>
       </div>
     );
@@ -153,27 +149,27 @@ export function OrderDetail({ orderId }: { orderId: string }) {
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[.18em] text-brand">
-            Order #{order.orderNumber}
+            {tr('orders.detailOrderNumber', { number: order.orderNumber })}
           </p>
           <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
-            {order.customerName || ORDER_TYPE_LABELS[order.orderType] || order.orderType}
+            {order.customerName || typeLabel(order.orderType)}
           </h1>
           <p className="mt-2 text-sm text-ink-muted">
-            {ORDER_TYPE_LABELS[order.orderType] || order.orderType}
+            {typeLabel(order.orderType)}
             {order.customerName && ` · ${order.customerName}`}
-            {` · ${formatDate(order.createdAt)}`}
+            {` · ${dateFmt(order.createdAt)}`}
           </p>
         </div>
-        <Link href="/orders" className="text-sm font-black text-brand">← All orders</Link>
+        <Link href="/orders" className="text-sm font-black text-brand">{tr('orders.detailBack')}</Link>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]">
         {/* Left: Order items */}
         <div className="rounded-panel border border-line bg-white shadow-card p-6">
-          <h2 className="text-lg font-black">Order items</h2>
+          <h2 className="text-lg font-black">{tr('orders.detailItemsTitle')}</h2>
 
           {order.lines.length === 0 && (
-            <p className="mt-4 text-sm text-ink-muted">No items in this order.</p>
+            <p className="mt-4 text-sm text-ink-muted">{tr('orders.detailEmptyItems')}</p>
           )}
 
           {order.lines.map((line) => (
@@ -195,7 +191,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
                         <p key={mod.id} className="text-xs text-ink-muted">
                           + {mod.nameSnapshot}
                           {Number(mod.unitPriceDeltaMinor) > 0 && (
-                            <> ({formatEtbMinor(Number(mod.unitPriceDeltaMinor))})</>
+                            <> ({formatCurrency(Number(mod.unitPriceDeltaMinor))})</>
                           )}
                         </p>
                       ))}
@@ -203,7 +199,7 @@ export function OrderDetail({ orderId }: { orderId: string }) {
                   )}
                 </div>
                 <p className="text-sm font-black tabular-nums whitespace-nowrap">
-                  {formatEtbMinor(Number(line.lineTotalMinor))}
+                  {formatCurrency(Number(line.lineTotalMinor))}
                 </p>
               </div>
             </div>
@@ -213,40 +209,40 @@ export function OrderDetail({ orderId }: { orderId: string }) {
         {/* Right: Status + Summary */}
         <div className="space-y-5">
           <div className="rounded-panel border border-line bg-white shadow-card p-6">
-            <p className="text-xs font-black text-brand">ORDER STATUS</p>
+            <p className="text-xs font-black text-brand">{tr('orders.detailStatusEyebrow')}</p>
             <div className="mt-2 flex items-center gap-3">
-              <h2 className="text-2xl font-black">{order.status.replace('_', ' ')}</h2>
+              <h2 className="text-2xl font-black">{labelFor(orderStatusKeys, order.status, tr)}</h2>
               <StatusChip status={statusVariant[order.status] || 'idle'}>
-                {order.status.replace('_', ' ')}
+                {labelFor(orderStatusKeys, order.status, tr)}
               </StatusChip>
             </div>
 
             <div className="mt-5 border-t border-line pt-5 space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-ink-muted">Subtotal</span>
-                <span className="font-bold tabular-nums">{formatEtbMinor(Number(order.subtotalMinor))}</span>
+                <span className="text-ink-muted">{tr('orders.detailSubtotal')}</span>
+                <span className="font-bold tabular-nums">{formatCurrency(Number(order.subtotalMinor))}</span>
               </div>
               {Number(order.taxMinor) > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-ink-muted">Tax</span>
-                  <span className="font-bold tabular-nums">{formatEtbMinor(Number(order.taxMinor))}</span>
+                  <span className="text-ink-muted">{tr('orders.detailTax')}</span>
+                  <span className="font-bold tabular-nums">{formatCurrency(Number(order.taxMinor))}</span>
                 </div>
               )}
               {Number(order.discountMinor) > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-ink-muted">Discount</span>
-                  <span className="font-bold text-danger tabular-nums">-{formatEtbMinor(Number(order.discountMinor))}</span>
+                  <span className="text-ink-muted">{tr('orders.detailDiscount')}</span>
+                  <span className="font-bold text-danger tabular-nums">-{formatCurrency(Number(order.discountMinor))}</span>
                 </div>
               )}
               <div className="flex justify-between text-xl font-black border-t border-line pt-3">
-                <span>Total</span>
-                <span className="tabular-nums">{formatEtbMinor(Number(order.totalMinor))}</span>
+                <span>{tr('orders.detailTotal')}</span>
+                <span className="tabular-nums">{formatCurrency(Number(order.totalMinor))}</span>
               </div>
             </div>
 
             {order.notes && (
               <div className="mt-5 rounded-xl bg-surface-warm p-4">
-                <p className="text-xs font-black text-ink-muted">Notes</p>
+                <p className="text-xs font-black text-ink-muted">{tr('orders.detailNotes')}</p>
                 <p className="mt-1 text-sm">{order.notes}</p>
               </div>
             )}
@@ -255,17 +251,17 @@ export function OrderDetail({ orderId }: { orderId: string }) {
           {/* Status history */}
           {order.statusHistory.length > 0 && (
             <div className="rounded-panel border border-line bg-white shadow-card p-6">
-              <h3 className="text-sm font-black">Status history</h3>
+              <h3 className="text-sm font-black">{tr('orders.detailStatusHistory')}</h3>
               <div className="mt-4 space-y-3">
                 {order.statusHistory.map((entry) => (
                   <div key={entry.id} className="flex items-start gap-3 text-sm">
                     <div className="mt-1 size-2 shrink-0 rounded-full bg-brand" />
                     <div>
                       <p>
-                        {entry.fromStatus ? `${entry.fromStatus.replace('_', ' ')} → ` : ''}
-                        <span className="font-bold">{entry.toStatus.replace('_', ' ')}</span>
+                        {entry.fromStatus ? `${labelFor(orderStatusKeys, entry.fromStatus, tr)} → ` : ''}
+                        <span className="font-bold">{labelFor(orderStatusKeys, entry.toStatus, tr)}</span>
                       </p>
-                      <p className="text-xs text-ink-muted">{formatDate(entry.createdAt)}</p>
+                      <p className="text-xs text-ink-muted">{dateFmt(entry.createdAt)}</p>
                       {entry.reason && <p className="text-xs text-ink-muted">{entry.reason}</p>}
                     </div>
                   </div>

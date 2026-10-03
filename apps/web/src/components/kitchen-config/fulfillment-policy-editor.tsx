@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import { useFulfillmentPolicy, useUpdateFulfillmentPolicy } from '@/lib/use-kitchen-config';
 import { Button, TextField, Select, SelectTrigger, SelectContent, SelectItem, SelectValue, Switch, Card } from '@/components/ui';
+import { useLocale } from '@/components/locale-provider';
 import type { ServiceMode, ExpoMode } from '@/lib/fulfillment-types';
 
 export function FulfillmentPolicyEditor() {
   const { data: policy, isLoading } = useFulfillmentPolicy();
   const updatePolicy = useUpdateFulfillmentPolicy();
+  const { tr } = useLocale();
 
   const [serviceMode, setServiceMode] = useState(policy?.serviceMode ?? 'ALL_AT_ONCE');
   const [expoMode, setExpoMode] = useState(policy?.expoMode ?? 'NONE');
@@ -22,13 +24,13 @@ export function FulfillmentPolicyEditor() {
   const [busy, setBusy] = useState(false);
 
   if (isLoading) {
-    return <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading policy...</p>;
+    return <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('kitchen.loadingPolicy')}</p>;
   }
 
   if (!policy) {
     return (
       <div className="grid min-h-48 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
-        <p className="text-sm text-ink-muted">No fulfillment policy found for this branch.</p>
+        <p className="text-sm text-ink-muted">{tr('kitchen.noPolicy')}</p>
       </div>
     );
   }
@@ -49,7 +51,7 @@ export function FulfillmentPolicyEditor() {
       });
       setSuccess(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not update policy.');
+      setError(err instanceof Error ? err.message : tr('kitchen.updatePolicyFailed'));
     } finally {
       setBusy(false);
     }
@@ -58,71 +60,71 @@ export function FulfillmentPolicyEditor() {
   return (
     <form onSubmit={handleSave} className="space-y-6">
       <Card className="p-6">
-        <h3 className="text-sm font-black">Service mode</h3>
-        <p className="mt-1 text-xs text-ink-muted">Control how orders are fulfilled across stations.</p>
+        <h3 className="text-sm font-black">{tr('kitchen.serviceMode')}</h3>
+        <p className="mt-1 text-xs text-ink-muted">{tr('kitchen.serviceModeHint')}</p>
         <div className="mt-4">
-          <label className="text-sm font-black">Mode</label>
+          <label className="text-sm font-black">{tr('kitchen.mode')}</label>
           <Select value={serviceMode} onValueChange={(v) => setServiceMode(v as ServiceMode)}>
             <SelectTrigger className="mt-2">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="ALL_AT_ONCE">All at once — all station tickets created when order is confirmed</SelectItem>
-              <SelectItem value="STAGED">Staged — tickets created in sequence based on routing</SelectItem>
+              <SelectItem value="ALL_AT_ONCE">{tr('kitchen.serviceAllAtOnce')}</SelectItem>
+              <SelectItem value="STAGED">{tr('kitchen.serviceStaged')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-sm font-black">Expo mode</h3>
-        <p className="mt-1 text-xs text-ink-muted">Control whether orders require expo release before service.</p>
+        <h3 className="text-sm font-black">{tr('kitchen.expoMode')}</h3>
+        <p className="mt-1 text-xs text-ink-muted">{tr('kitchen.expoModeHint')}</p>
         <div className="mt-4">
-          <label className="text-sm font-black">Mode</label>
+          <label className="text-sm font-black">{tr('kitchen.mode')}</label>
           <Select value={expoMode} onValueChange={(v) => setExpoMode(v as ExpoMode)}>
             <SelectTrigger className="mt-2">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="NONE">None — orders go directly to waiters when ready</SelectItem>
-              <SelectItem value="MANDATORY">Mandatory — all orders must be released by expo</SelectItem>
-              <SelectItem value="OPTIONAL">Optional — expo can release, but not required</SelectItem>
+              <SelectItem value="NONE">{tr('kitchen.expoNone')}</SelectItem>
+              <SelectItem value="MANDATORY">{tr('kitchen.expoMandatory')}</SelectItem>
+              <SelectItem value="OPTIONAL">{tr('kitchen.expoOptional')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-sm font-black">Waiter settings</h3>
+        <h3 className="text-sm font-black">{tr('kitchen.waiterSettings')}</h3>
         <div className="mt-4 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-black">Allow waiter self-claim</p>
-              <p className="text-xs text-ink-muted">Waiters can claim unassigned ready orders</p>
+              <p className="text-sm font-black">{tr('kitchen.allowSelfClaim')}</p>
+              <p className="text-xs text-ink-muted">{tr('kitchen.allowSelfClaimHint')}</p>
             </div>
-            <Switch label="Allow waiter self-claim" checked={allowSelfClaim} onCheckedChange={setAllowSelfClaim} />
+            <Switch label={tr('kitchen.allowSelfClaim')} checked={allowSelfClaim} onCheckedChange={setAllowSelfClaim} />
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-black">Show unassigned orders</p>
-              <p className="text-xs text-ink-muted">Display unassigned ready orders to all waiters</p>
+              <p className="text-sm font-black">{tr('kitchen.showUnassigned')}</p>
+              <p className="text-xs text-ink-muted">{tr('kitchen.showUnassignedHint')}</p>
             </div>
-            <Switch label="Show unassigned orders" checked={showUnassigned} onCheckedChange={setShowUnassigned} />
+            <Switch label={tr('kitchen.showUnassigned')} checked={showUnassigned} onCheckedChange={setShowUnassigned} />
           </div>
         </div>
       </Card>
 
       <Card className="p-6">
-        <h3 className="text-sm font-black">Timing</h3>
+        <h3 className="text-sm font-black">{tr('kitchen.timing')}</h3>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <TextField
-            label="Ready reminder (seconds)"
+            label={tr('kitchen.readyReminder')}
             value={reminderSec}
             onChange={(e) => setReminderSec(e.target.value)}
             type="number"
           />
           <TextField
-            label="Ready escalation (seconds)"
+            label={tr('kitchen.readyEscalation')}
             value={escalationSec}
             onChange={(e) => setEscalationSec(e.target.value)}
             type="number"
@@ -133,18 +135,18 @@ export function FulfillmentPolicyEditor() {
       <Card className="p-6">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-black">Auto-complete on collect</p>
-            <p className="text-xs text-ink-muted">Automatically mark kitchen ticket as completed when all lines are collected</p>
+            <p className="text-sm font-black">{tr('kitchen.autoComplete')}</p>
+            <p className="text-xs text-ink-muted">{tr('kitchen.autoCompleteHint')}</p>
           </div>
-          <Switch label="Auto-complete on collect" checked={autoComplete} onCheckedChange={setAutoComplete} />
+          <Switch label={tr('kitchen.autoComplete')} checked={autoComplete} onCheckedChange={setAutoComplete} />
         </div>
       </Card>
 
       {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">{error}</div>}
-      {success && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm font-bold text-green-800">Policy updated successfully.</div>}
+      {success && <div role="status" className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm font-bold text-green-800">{tr('kitchen.policySaved')}</div>}
 
       <div className="flex justify-end">
-        <Button type="submit" disabled={busy}>{busy ? 'Saving...' : 'Save policy'}</Button>
+        <Button type="submit" disabled={busy}>{busy ? tr('kitchen.saving') : tr('kitchen.savePolicy')}</Button>
       </div>
     </form>
   );

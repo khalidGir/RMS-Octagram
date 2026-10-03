@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ApiError, apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
+import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
+import { useLocale } from '@/components/locale-provider';
+import { labelFor, paymentMethodKeys } from '@/lib/status-labels';
 import { useAuth } from './auth-provider';
 import { useOnlineStatus } from '@/hooks';
 
@@ -26,6 +28,7 @@ interface PaymentDetail extends QueuePayment {
 
 export function OwnerPaymentReview() {
   const { accessToken, csrfToken, profile } = useAuth();
+  const { formatCurrency, tr, formatDate } = useLocale();
   const membership = profile?.memberships[0];
   const tenantId = membership?.tenant.id ?? '';
   const branchId = typeof window === 'undefined' ? '' : window.sessionStorage.getItem('rms-branch-id') ?? membership?.branchAssignments[0]?.branchId ?? '';
@@ -76,7 +79,7 @@ export function OwnerPaymentReview() {
       if (proofTimerRef.current) clearTimeout(proofTimerRef.current);
       proofTimerRef.current = setTimeout(() => setProofUrl(null), Math.max(1, response.data.expiresIn - 5) * 1000);
     } catch (error) {
-      setMessage(error instanceof ApiError ? error.message : 'Proof is unavailable.');
+      setMessage(error instanceof ApiError ? error.message : tr('payments.proofUnavailable'));
     }
   }, [selectedId, accessToken, tenantId, branchId]);
 
@@ -100,13 +103,13 @@ export function OwnerPaymentReview() {
       setProofUrl(null);
       setConfirmApprove(false);
       await queue.refetch();
-      setMessage('Payment verified. The order was released to the kitchen and stock was posted once.');
+      setMessage(tr('payments.verifiedMsg'));
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         await Promise.all([queue.refetch(), detail.refetch()]);
-        setMessage('Another Owner already changed this payment. The current authoritative state has been refreshed.');
+        setMessage(tr('payments.conflictMsg'));
       } else {
-        setMessage(error instanceof ApiError ? error.message : 'The decision was not saved.');
+        setMessage(error instanceof ApiError ? error.message : tr('payments.decisionNotSaved'));
       }
     } finally {
       setBusy(false);
@@ -129,32 +132,32 @@ export function OwnerPaymentReview() {
       setProofUrl(null);
       setRejecting(false);
       await queue.refetch();
-      setMessage('Payment rejected. The customer will see safe guidance to ask staff.');
+      setMessage(tr('payments.rejectedMsg'));
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
         await Promise.all([queue.refetch(), detail.refetch()]);
-        setMessage('Another Owner already changed this payment. The current authoritative state has been refreshed.');
+        setMessage(tr('payments.conflictMsg'));
       } else {
-        setMessage(error instanceof ApiError ? error.message : 'The decision was not saved.');
+        setMessage(error instanceof ApiError ? error.message : tr('payments.decisionNotSaved'));
       }
     } finally {
       setBusy(false);
     }
   }
 
-  if (membership?.role !== 'OWNER') return <State title="Permission denied" detail="Only the restaurant Owner can review transfer proofs." />;
-  if (queue.isLoading) return <State title="Loading payment reviews…" detail="Retrieving the current Owner queue." />;
-  if (queue.isError) return <State title="Review queue unavailable" detail="Check the connection and retry." retry={() => void queue.refetch()} />;
+  if (membership?.role !== 'OWNER') return <State title={tr('payments.permissionTitle')} detail={tr('payments.permissionDetail')} />;
+  if (queue.isLoading) return <State title={tr('payments.loadingTitle')} detail={tr('payments.loadingDetail')} />;
+  if (queue.isError) return <State title={tr('payments.queueErrorTitle')} detail={tr('payments.queueErrorDetail')} retry={() => void queue.refetch()} />;
 
   const payment = detail.data;
 
   return (
     <>
       <header className="mb-7">
-        <p className="text-xs font-black uppercase tracking-wider text-brand">Owner only</p>
-        <h1 className="mt-2 text-3xl font-black">Transfer payment review</h1>
+        <p className="text-xs font-black uppercase tracking-wider text-brand">{tr('payments.ownerEyebrow')}</p>
+        <h1 className="mt-2 text-3xl font-black">{tr('payments.pageTitle')}</h1>
         <p className="mt-2 max-w-2xl text-sm text-ink-muted">
-          A screenshot is evidence to inspect, not external account verification. Approval releases the kitchen and posts stock once.
+          {tr('payments.pageDescription')}
         </p>
       </header>
 
@@ -165,7 +168,7 @@ export function OwnerPaymentReview() {
       )}
 
       {!queue.data?.length ? (
-        <State title="No payments awaiting review" detail="New Bank and Telebirr submissions will appear here." />
+        <State title={tr('payments.emptyTitle')} detail={tr('payments.emptyDetail')} />
       ) : (
         <div className="grid gap-5 xl:grid-cols-[360px_1fr]">
           <aside className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white shadow-card">
@@ -173,15 +176,15 @@ export function OwnerPaymentReview() {
               <button
                 key={item.id}
                 onClick={() => setSelectedId(item.id)}
-                className={`w-full p-5 text-left ${selectedId === item.id ? 'bg-orange-50' : ''}`}
+                className={`w-full p-5 text-start ${selectedId === item.id ? 'bg-orange-50' : ''}`}
               >
                 <div className="flex justify-between gap-3">
-                  <b>Order #{item.order?.orderNumber}</b>
-                  <span className="text-xs font-black text-amber-800">{item.method.replace('_', ' ')}</span>
+                  <b>{tr('payments.orderNumberPrefix', { n: item.order?.orderNumber ?? '' })}</b>
+                  <span className="text-xs font-black text-amber-800">{labelFor(paymentMethodKeys, item.method, tr)}</span>
                 </div>
-                <p className="mt-2 text-lg font-black">{formatEtbMinor(item.amountMinor)}</p>
+                <p className="mt-2 text-lg font-black">{formatCurrency(item.amountMinor)}</p>
                 <p className="mt-1 text-xs text-ink-muted">
-                  {item.order?.customerName ?? 'Customer'} · {new Date(item.submittedAt ?? item.createdAt).toLocaleString()}
+                  {item.order?.customerName ?? tr('payments.customerFallback')} · {formatDate(item.submittedAt ?? item.createdAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })}
                 </p>
               </button>
             ))}
@@ -189,18 +192,18 @@ export function OwnerPaymentReview() {
 
           <section className="rounded-2xl border border-line bg-white p-6 shadow-card">
             {detail.isLoading || !payment ? (
-              <p className="text-sm text-ink-muted">Loading payment details…</p>
+              <p className="text-sm text-ink-muted">{tr('payments.loadingDetails')}</p>
             ) : (
               <>
                 <div className="flex flex-wrap justify-between gap-3">
                   <div>
-                    <p className="text-xs font-black text-brand">ORDER #{payment.order?.orderNumber}</p>
-                    <h2 className="mt-1 text-2xl font-black">{formatEtbMinor(payment.amountMinor)}</h2>
+                    <p className="text-xs font-black text-brand">{tr('payments.orderPrefixUpper', { n: payment.order?.orderNumber ?? '' })}</p>
+                    <h2 className="mt-1 text-2xl font-black">{formatCurrency(payment.amountMinor)}</h2>
                     <p className="mt-1 text-sm text-ink-muted">
-                      {payment.method.replace('_', ' ')} · submitted {new Date(payment.submittedAt ?? payment.createdAt).toLocaleString()}
+                      {labelFor(paymentMethodKeys, payment.method, tr)} · {tr('payments.submittedSuffix', { date: formatDate(payment.submittedAt ?? payment.createdAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) })}
                     </p>
                   </div>
-                  <span className="h-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">Awaiting review</span>
+                  <span className="h-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">{tr('payments.awaitingReview')}</span>
                 </div>
 
                 <div className="mt-5">
@@ -209,26 +212,26 @@ export function OwnerPaymentReview() {
                     disabled={proofUrl !== null}
                     className="min-h-10 rounded-xl border border-line bg-white px-4 text-sm font-bold hover:bg-gray-50"
                   >
-                    {proofUrl ? 'Loading proof…' : 'View payment proof'}
+                    {proofUrl ? tr('payments.loadingProof') : tr('payments.viewProof')}
                   </button>
                   {proofUrl && (
                     <div className="mt-3">
                       <img
                         src={proofUrl}
-                        alt="Payment proof screenshot"
+                        alt={tr('payments.proofAlt')}
                         className="max-h-96 rounded-xl border border-line object-contain"
                       />
-                      <p className="mt-2 text-xs text-ink-muted">Proof URL expires automatically. Never save or cache this image.</p>
+                      <p className="mt-2 text-xs text-ink-muted">{tr('payments.proofExpiryNote')}</p>
                     </div>
                   )}
                 </div>
 
                 <div className="mt-5">
-                  <label className="text-xs font-bold text-ink-muted">Review note (optional)</label>
+                  <label className="text-xs font-bold text-ink-muted">{tr('payments.reviewNote')}</label>
                   <textarea
                     value={reviewNote}
                     onChange={(e) => setReviewNote(e.target.value.slice(0, 500))}
-                    placeholder="Private note about this verification…"
+                    placeholder={tr('payments.reviewNotePlaceholder')}
                     rows={2}
                     className="mt-1 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm"
                   />
@@ -242,23 +245,23 @@ export function OwnerPaymentReview() {
                         disabled={busy || !isOnline}
                         className="min-h-11 rounded-xl bg-emerald-600 px-6 font-black text-white disabled:opacity-50"
                       >
-                        Verify payment
+                        {tr('payments.verifyPayment')}
                       </button>
                       <button
                         onClick={() => setRejecting(true)}
                         disabled={busy}
                         className="min-h-11 rounded-xl border border-red-200 bg-white px-6 font-bold text-red-700 hover:bg-red-50"
                       >
-                        Reject
+                        {tr('payments.reject')}
                       </button>
                     </>
                   ) : (
                     <div className="w-full">
-                      <label className="text-xs font-bold text-red-700">Rejection reason (required)</label>
+                      <label className="text-xs font-bold text-red-700">{tr('payments.rejectionReason')}</label>
                       <input
                         value={reason}
                         onChange={(e) => setReason(e.target.value.slice(0, 255))}
-                        placeholder="Why this payment is rejected…"
+                        placeholder={tr('payments.rejectionPlaceholder')}
                         className="mt-1 w-full rounded-xl border border-red-200 bg-white px-3 py-2 text-sm"
                         autoFocus
                       />
@@ -268,14 +271,14 @@ export function OwnerPaymentReview() {
                           disabled={busy || !reason.trim() || !isOnline}
                           className="min-h-10 rounded-xl bg-red-600 px-4 text-sm font-black text-white disabled:opacity-50"
                         >
-                          Confirm rejection
+                          {tr('payments.confirmRejection')}
                         </button>
                         <button
                           onClick={() => { setRejecting(false); setReason(''); }}
                           disabled={busy}
                           className="min-h-10 rounded-xl border border-line bg-white px-4 text-sm font-bold"
                         >
-                          Cancel
+                          {tr('common.cancel')}
                         </button>
                       </div>
                     </div>
@@ -291,7 +294,7 @@ export function OwnerPaymentReview() {
         <ApproveDialog
           orderNumber={payment.order?.orderNumber ?? '?'}
           method={payment.method}
-          amount={formatEtbMinor(payment.amountMinor)}
+          amount={formatCurrency(payment.amountMinor)}
           busy={busy}
           isOnline={isOnline}
           onConfirm={performApprove}
@@ -319,6 +322,7 @@ function ApproveDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { tr } = useLocale();
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -372,16 +376,16 @@ function ApproveDialog({
   }, [onCancel]);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40" role="dialog" aria-modal="true" aria-label="Confirm payment verification">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40" role="dialog" aria-modal="true" aria-label={tr('payments.confirmApproveAria')}>
       <div ref={dialogRef} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
-        <h2 className="text-xl font-black">Verify payment</h2>
+        <h2 className="text-xl font-black">{tr('payments.approveTitle')}</h2>
         <div className="mt-4 space-y-2 text-sm">
-          <p><span className="font-bold text-ink-muted">Order:</span> #{orderNumber}</p>
-          <p><span className="font-bold text-ink-muted">Method:</span> {method.replace('_', ' ')}</p>
-          <p><span className="font-bold text-ink-muted">Amount:</span> <span className="font-black">{amount}</span></p>
+          <p><span className="font-bold text-ink-muted">{tr('payments.orderLabel')}</span> #{orderNumber}</p>
+          <p><span className="font-bold text-ink-muted">{tr('payments.methodLabel')}</span> {labelFor(paymentMethodKeys, method, tr)}</p>
+          <p><span className="font-bold text-ink-muted">{tr('payments.amountLabel')}</span> <span className="font-black">{amount}</span></p>
         </div>
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">
-          A screenshot is evidence to inspect, not external account verification. Confirming releases the kitchen and posts inventory once. This action cannot be undone.
+          {tr('payments.approveWarning')}
         </div>
         <div className="mt-5 flex gap-2">
           <button
@@ -390,14 +394,14 @@ function ApproveDialog({
             disabled={busy}
             className="min-h-11 flex-1 rounded-xl border border-line bg-white font-bold"
           >
-            Cancel
+            {tr('common.cancel')}
           </button>
           <button
             onClick={onConfirm}
             disabled={busy || !isOnline}
             className="min-h-11 flex-1 rounded-xl bg-emerald-600 font-black text-white disabled:opacity-50"
           >
-            {busy ? 'Verifying…' : 'Confirm verification'}
+            {busy ? tr('payments.verifying') : tr('payments.confirmVerification')}
           </button>
         </div>
       </div>
@@ -406,6 +410,7 @@ function ApproveDialog({
 }
 
 function State({ title, detail, retry }: { title: string; detail: string; retry?: () => void }) {
+  const { tr } = useLocale();
   return (
     <section className="grid min-h-64 place-items-center rounded-2xl border border-line bg-white p-6 text-center">
       <div>
@@ -413,7 +418,7 @@ function State({ title, detail, retry }: { title: string; detail: string; retry?
         <p className="mt-2 text-sm text-ink-muted">{detail}</p>
         {retry && (
           <button onClick={retry} className="mt-4 min-h-11 rounded-xl bg-dark px-5 font-black text-white">
-            Try again
+            {tr('common.tryAgain')}
           </button>
         )}
       </div>

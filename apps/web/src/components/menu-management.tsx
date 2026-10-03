@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError, apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
+import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
+import { useLocale } from '@/components/locale-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -81,6 +82,7 @@ function CategoryManager({
   tenantId: string;
 }) {
   const queryClient = useQueryClient();
+  const { tr } = useLocale();
   const [expanded, setExpanded] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState('');
@@ -138,11 +140,11 @@ function CategoryManager({
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex min-h-14 w-full items-center justify-between px-5 text-left"
+        className="flex min-h-14 w-full items-center justify-between px-5 text-start"
         aria-expanded={expanded}
       >
-        <span className="text-sm font-black">Categories ({categories.length})</span>
-        <span className="text-xs font-bold text-ink-muted">{expanded ? 'Hide' : 'Show'}</span>
+        <span className="text-sm font-black">{tr('menu.categoriesCount', { count: categories.length })}</span>
+        <span className="text-xs font-bold text-ink-muted">{expanded ? tr('menu.hide') : tr('menu.show')}</span>
       </button>
       {expanded && (
         <div className="border-t border-line px-5 pb-5 pt-4">
@@ -154,27 +156,27 @@ function CategoryManager({
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     className="min-h-10 flex-1 rounded-lg border border-line px-3 text-sm font-bold"
-                    aria-label="Category name"
+                    aria-label={tr('menu.categoryNameAria')}
                   />
                   <input
                     value={editDesc}
                     onChange={(e) => setEditDesc(e.target.value)}
-                    placeholder="Description"
+                    placeholder={tr('menu.descriptionPlaceholder')}
                     className="min-h-10 flex-1 rounded-lg border border-line px-3 text-sm"
-                    aria-label="Category description"
+                    aria-label={tr('menu.categoryDescAria')}
                   />
                   <button
                     onClick={() => updateMutation.mutate(cat.id)}
                     disabled={updateMutation.isPending || !editName.trim()}
                     className="min-h-10 rounded-lg bg-brand px-3 text-xs font-bold text-white disabled:opacity-50"
                   >
-                    Save
+                    {tr('menu.save')}
                   </button>
                   <button
                     onClick={() => setEditingId(null)}
                     className="min-h-10 rounded-lg border border-line px-3 text-xs font-bold"
                   >
-                    Cancel
+                    {tr('common.cancel')}
                   </button>
                 </div>
               ) : (
@@ -182,7 +184,7 @@ function CategoryManager({
                   <div className="flex-1">
                     <span className="text-sm font-bold">{cat.name}</span>
                     {cat.description && (
-                      <span className="ml-2 text-xs text-ink-muted">{cat.description}</span>
+                      <span className="ms-2 text-xs text-ink-muted">{cat.description}</span>
                     )}
                   </div>
                   <span
@@ -196,13 +198,13 @@ function CategoryManager({
                     }}
                     className="min-h-9 rounded-lg border border-line px-2 text-xs font-bold"
                   >
-                    Edit
+                    {tr('menu.edit')}
                   </button>
                   <button
                     onClick={() => setDeleteId(cat.id)}
                     className="min-h-9 rounded-lg border border-red-200 px-2 text-xs font-bold text-red-700"
                   >
-                    Delete
+                    {tr('menu.delete')}
                   </button>
                 </>
               )}
@@ -213,30 +215,30 @@ function CategoryManager({
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="Category name"
+                placeholder={tr('menu.categoryNameAria')}
                 className="min-h-10 flex-1 rounded-lg border border-line px-3 text-sm font-bold"
                 autoFocus
-                aria-label="New category name"
+                aria-label={tr('menu.newCategoryNameAria')}
               />
               <input
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
-                placeholder="Description (optional)"
+                placeholder={tr('menu.descriptionOptional')}
                 className="min-h-10 flex-1 rounded-lg border border-line px-3 text-sm"
-                aria-label="New category description"
+                aria-label={tr('menu.newCategoryDescAria')}
               />
               <button
                 onClick={() => createMutation.mutate()}
                 disabled={createMutation.isPending || !newName.trim()}
                 className="min-h-10 rounded-lg bg-brand px-3 text-xs font-bold text-white disabled:opacity-50"
               >
-                Add
+                {tr('menu.add')}
               </button>
               <button
                 onClick={() => { setAdding(false); setNewName(''); setNewDesc(''); }}
                 className="min-h-10 rounded-lg border border-line px-3 text-xs font-bold"
               >
-                Cancel
+                {tr('common.cancel')}
               </button>
             </div>
           ) : (
@@ -244,31 +246,31 @@ function CategoryManager({
               onClick={() => setAdding(true)}
               className="mt-3 min-h-10 rounded-lg border border-dashed border-line px-4 text-xs font-bold text-ink-muted hover:border-brand hover:text-brand"
             >
-              + Add category
+              {tr('menu.addCategory')}
             </button>
           )}
         </div>
       )}
       {deleteId && (
         <Dialog open onOpenChange={(o) => { if (!o) setDeleteId(null); }}>
-          <DialogContent className="max-w-sm" aria-label="Delete category">
-            <DialogTitle>Delete category</DialogTitle>
+          <DialogContent className="max-w-sm" aria-label={tr('menu.deleteCategory')}>
+            <DialogTitle>{tr('menu.deleteCategory')}</DialogTitle>
             <p className="mt-2 text-sm text-ink-muted">
-              Items in this category will become uncategorized. This cannot be undone.
+              {tr('menu.deleteCategoryBody')}
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 onClick={() => setDeleteId(null)}
                 className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold"
               >
-                Cancel
+                {tr('common.cancel')}
               </button>
               <button
                 onClick={() => deleteMutation.mutate(deleteId)}
                 disabled={deleteMutation.isPending}
                 className="min-h-10 rounded-lg bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-50"
               >
-                {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
+                {deleteMutation.isPending ? tr('menu.deleting') : tr('menu.delete')}
               </button>
             </div>
           </DialogContent>
@@ -296,6 +298,7 @@ function AvailabilityToggle({
   tenantId: string;
 }) {
   const queryClient = useQueryClient();
+  const { tr } = useLocale();
   const isAvailable = item.branchAvailability?.some(
     (b) => b.branchId === branchId && b.isAvailable,
   ) ?? false;
@@ -322,7 +325,7 @@ function AvailabilityToggle({
       disabled={toggleMutation.isPending}
       role="switch"
       aria-checked={isAvailable}
-      aria-label={`${isAvailable ? 'Remove from' : 'Add to'} this branch`}
+      aria-label={isAvailable ? tr('menu.removeFromBranch') : tr('menu.addToBranch')}
       className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
         isAvailable ? 'bg-brand' : 'bg-slate-300'
       } disabled:opacity-50`}
@@ -366,6 +369,7 @@ function CreateMenuItemDialog({
   const [available, setAvailable] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   useEffect(() => {
     nameRef.current?.focus();
@@ -375,9 +379,9 @@ function CreateMenuItemDialog({
     event.preventDefault();
     const trimmedName = name.trim();
     const basePriceMinor = priceToMinor(price);
-    if (!trimmedName) return setError('Enter the menu item name.');
+    if (!trimmedName) return setError(tr('menu.enterName'));
     if (basePriceMinor === null)
-      return setError('Enter a valid ETB price with no more than two decimal places.');
+      return setError(tr('menu.enterPrice'));
     setBusy(true);
     setError(null);
     try {
@@ -410,7 +414,7 @@ function CreateMenuItemDialog({
         });
       await onCreated(trimmedName);
     } catch (reason) {
-      setError(reason instanceof ApiError ? reason.message : 'The menu item could not be created.');
+      setError(reason instanceof ApiError ? reason.message : tr('menu.createFailed'));
     } finally {
       setBusy(false);
     }
@@ -418,41 +422,41 @@ function CreateMenuItemDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-xl" aria-label="Add menu item">
+      <DialogContent className="max-w-xl" aria-label={tr('menu.addMenuItemAria')}>
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[.18em] text-brand">Catalog</p>
-          <DialogTitle className="mt-2 text-2xl font-black">Add menu item</DialogTitle>
-          <p className="mt-1 text-sm text-ink-muted">Create the dish and its default selling price.</p>
+          <p className="text-[10px] font-black uppercase tracking-[.18em] text-brand">{tr('menu.catalogEyebrow')}</p>
+          <DialogTitle className="mt-2 text-2xl font-black">{tr('menu.addMenuItem')}</DialogTitle>
+          <p className="mt-1 text-sm text-ink-muted">{tr('menu.addMenuItemDesc')}</p>
         </div>
         <form onSubmit={submit} className="mt-6 grid gap-4">
           <label className="text-sm font-black">
-            Item name
+            {tr('menu.itemName')}
             <input
               ref={nameRef}
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={200}
-              placeholder="e.g. Doro Wot"
+              placeholder={tr('menu.itemNamePlaceholder')}
               className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-4 font-normal outline-none focus:ring-2 focus:ring-brand/20"
             />
           </label>
           <label className="text-sm font-black">
-            Description <span className="font-normal text-ink-muted">(optional)</span>
+            {tr('menu.descriptionLabel')} <span className="font-normal text-ink-muted">{tr('menu.optionalSuffix')}</span>
             <textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={3}
-              placeholder="Short description for staff and customers"
+              placeholder={tr('menu.descPlaceholder')}
               className="mt-2 w-full rounded-xl border border-line bg-white p-4 font-normal outline-none focus:ring-2 focus:ring-brand/20"
             />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="text-sm font-black">
-              Category
-              <div className="mt-2"><Select value={categoryId || 'uncategorized'} onValueChange={(value) => setCategoryId(value === 'uncategorized' ? '' : value)}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="uncategorized">Uncategorized</SelectItem>{categories.map((category) => <SelectItem value={category.id} key={category.id}>{category.name}</SelectItem>)}</SelectContent></Select></div>
+              {tr('menu.category')}
+              <div className="mt-2"><Select value={categoryId || 'uncategorized'} onValueChange={(value) => setCategoryId(value === 'uncategorized' ? '' : value)}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="uncategorized">{tr('menu.uncategorized')}</SelectItem>{categories.map((category) => <SelectItem value={category.id} key={category.id}>{category.name}</SelectItem>)}</SelectContent></Select></div>
             </label>
             <label className="text-sm font-black">
-              Price (ETB)
+              {tr('menu.priceEtb')}
               <input
                 value={price}
                 onChange={(event) => setPrice(event.target.value)}
@@ -463,19 +467,19 @@ function CreateMenuItemDialog({
             </label>
           </div>
           <label className="text-sm font-black">
-            SKU <span className="font-normal text-ink-muted">(optional)</span>
+            {tr('menu.sku')} <span className="font-normal text-ink-muted">{tr('menu.optionalSuffix')}</span>
             <input
               value={sku}
               onChange={(event) => setSku(event.target.value)}
-              placeholder="e.g. FOOD-001"
+              placeholder={tr('menu.skuPlaceholder')}
               className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-4 font-normal outline-none focus:ring-2 focus:ring-brand/20"
             />
           </label>
           <label className="flex min-h-14 cursor-pointer items-center justify-between rounded-xl border border-line bg-white px-4 text-sm font-black">
             <span>
-              <span className="block">Available at this branch</span>
+              <span className="block">{tr('menu.availableAtBranch')}</span>
               <span className="mt-1 block text-xs font-normal text-ink-muted">
-                Show this item in POS and customer menus.
+                {tr('menu.availableHint')}
               </span>
             </span>
             <input
@@ -492,10 +496,10 @@ function CreateMenuItemDialog({
           )}
           <div className="mt-2 flex justify-end gap-3 border-t border-line pt-5">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-11 rounded-xl border border-line bg-white px-5 font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy} className="min-h-11 rounded-xl bg-dark px-6 font-black text-white disabled:opacity-50">
-              {busy ? 'Adding…' : 'Add menu item'}
+              {busy ? tr('menu.adding') : tr('menu.addMenuItem')}
             </button>
           </div>
         </form>
@@ -532,6 +536,7 @@ function ItemDetailDialog({
   const [categoryId, setCategoryId] = useState(item.category?.id ?? '');
   const [sku, setSku] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['catalog-items', tenantId] });
 
@@ -550,7 +555,7 @@ function ItemDetailDialog({
         },
       }),
     onSuccess: async () => { await invalidate(); onClose(); },
-    onError: (err: unknown) => setError(err instanceof ApiError ? err.message : 'Update failed.'),
+    onError: (err: unknown) => setError(err instanceof ApiError ? err.message : tr('menu.updateFailed')),
   });
 
   const toggleActiveMutation = useMutation({
@@ -573,23 +578,23 @@ function ItemDetailDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-label={`Edit ${item.name}`}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-label={tr('menu.editItemAria', { name: item.name })}>
         <div>
-          <p className="text-[10px] font-black uppercase tracking-[.18em] text-brand">Catalog</p>
+          <p className="text-[10px] font-black uppercase tracking-[.18em] text-brand">{tr('menu.catalogEyebrow')}</p>
           <DialogTitle className="mt-2 text-2xl font-black">{item.name}</DialogTitle>
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="mt-5">
           <TabsList>
-            <TabsTrigger value="details">Details</TabsTrigger>
-            <TabsTrigger value="variants">Variants ({item.variants.length})</TabsTrigger>
-            <TabsTrigger value="modifiers">Modifiers ({item.modifierGroups?.length ?? 0})</TabsTrigger>
+            <TabsTrigger value="details">{tr('menu.detailsTab')}</TabsTrigger>
+            <TabsTrigger value="variants">{tr('menu.variantsCount', { count: item.variants.length })}</TabsTrigger>
+            <TabsTrigger value="modifiers">{tr('menu.modifiersCount', { count: item.modifierGroups?.length ?? 0 })}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="details">
             <div className="mt-4 grid gap-4">
               <label className="text-sm font-black">
-                Item name
+                {tr('menu.itemName')}
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -597,7 +602,7 @@ function ItemDetailDialog({
                 />
               </label>
               <label className="text-sm font-black">
-                Description
+                {tr('menu.descriptionLabel')}
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -607,30 +612,30 @@ function ItemDetailDialog({
               </label>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="text-sm font-black">
-                  Category
-                  <div className="mt-2"><Select value={categoryId || 'uncategorized'} onValueChange={(value) => setCategoryId(value === 'uncategorized' ? '' : value)}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="uncategorized">Uncategorized</SelectItem>{categories.map((c) => <SelectItem value={c.id} key={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+                  {tr('menu.category')}
+                  <div className="mt-2"><Select value={categoryId || 'uncategorized'} onValueChange={(value) => setCategoryId(value === 'uncategorized' ? '' : value)}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="uncategorized">{tr('menu.uncategorized')}</SelectItem>{categories.map((c) => <SelectItem value={c.id} key={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
                 </label>
                 <label className="text-sm font-black">
-                  SKU
+                  {tr('menu.sku')}
                   <input
                     value={sku}
                     onChange={(e) => setSku(e.target.value)}
-                    placeholder="Optional"
+                    placeholder={tr('menu.optional')}
                     className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-4 font-normal"
                   />
                 </label>
               </div>
               <div className="flex items-center justify-between rounded-xl border border-line bg-white px-4 py-3">
                 <div>
-                  <p className="text-sm font-black">{item.isActive ? 'Active' : 'Inactive'}</p>
-                  <p className="text-xs text-ink-muted">Inactive items are hidden from POS.</p>
+                  <p className="text-sm font-black">{item.isActive ? tr('status.active') : tr('status.inactive')}</p>
+                  <p className="text-xs text-ink-muted">{tr('menu.inactiveHint')}</p>
                 </div>
                 <button
                   onClick={() => toggleActiveMutation.mutate()}
                   disabled={toggleActiveMutation.isPending}
                   role="switch"
                   aria-checked={item.isActive}
-                  aria-label="Toggle item active status"
+                  aria-label={tr('menu.toggleActiveAria')}
                   className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
                     item.isActive ? 'bg-brand' : 'bg-slate-300'
                   } disabled:opacity-50`}
@@ -643,8 +648,8 @@ function ItemDetailDialog({
               {branchId && (
                 <div className="flex items-center justify-between rounded-xl border border-line bg-white px-4 py-3">
                   <div>
-                    <p className="text-sm font-black">Available at this branch</p>
-                    <p className="text-xs text-ink-muted">Control POS visibility for this branch.</p>
+                    <p className="text-sm font-black">{tr('menu.availableAtBranch')}</p>
+                    <p className="text-xs text-ink-muted">{tr('menu.branchVisibilityHint')}</p>
                   </div>
                   <AvailabilityToggle
                     item={item}
@@ -685,22 +690,22 @@ function ItemDetailDialog({
 
         <div className="mt-5 flex items-center justify-between border-t border-line pt-4">
           <button
-            onClick={() => { if (confirm('Delete this menu item? This cannot be undone.')) deleteItemMutation.mutate(); }}
+            onClick={() => { if (confirm(tr('menu.deleteItemConfirm'))) deleteItemMutation.mutate(); }}
             disabled={deleteItemMutation.isPending}
             className="min-h-10 rounded-lg border border-red-200 px-3 text-xs font-bold text-red-700 hover:bg-red-50 disabled:opacity-50"
           >
-            Delete item
+            {tr('menu.deleteItem')}
           </button>
           <div className="flex gap-2">
             <button onClick={onClose} className="min-h-11 rounded-xl border border-line bg-white px-5 font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button
               onClick={() => updateItemMutation.mutate()}
               disabled={updateItemMutation.isPending || !name.trim()}
               className="min-h-11 rounded-xl bg-dark px-6 font-black text-white disabled:opacity-50"
             >
-              {updateItemMutation.isPending ? 'Saving…' : 'Save changes'}
+              {updateItemMutation.isPending ? tr('menu.saving') : tr('menu.saveChanges')}
             </button>
           </div>
         </div>
@@ -724,6 +729,7 @@ function VariantsPanel({
   csrfToken: string | null;
   tenantId: string;
 }) {
+  const { formatCurrency, tr } = useLocale();
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -772,7 +778,7 @@ function VariantsPanel({
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 className="min-h-10 flex-1 rounded-lg border border-line px-3 text-sm font-bold"
-                aria-label="Variant name"
+                aria-label={tr('menu.variantNameAria')}
               />
               <input
                 value={formPrice}
@@ -780,17 +786,17 @@ function VariantsPanel({
                 inputMode="decimal"
                 placeholder="ETB"
                 className="min-h-10 w-28 rounded-lg border border-line px-3 text-sm tabular-nums"
-                aria-label="Variant price ETB"
+                aria-label={tr('menu.variantPriceAria')}
               />
               <button
                 onClick={() => updateMutation.mutate(v.id)}
                 disabled={updateMutation.isPending || !formName.trim()}
                 className="min-h-10 rounded-lg bg-brand px-3 text-xs font-bold text-white disabled:opacity-50"
               >
-                Save
+                {tr('menu.save')}
               </button>
               <button onClick={() => setEditId(null)} className="min-h-10 rounded-lg border border-line px-3 text-xs font-bold">
-                Cancel
+                {tr('common.cancel')}
               </button>
             </>
           ) : (
@@ -798,25 +804,25 @@ function VariantsPanel({
               <div className="flex-1">
                 <span className="text-sm font-bold">{v.name}</span>
                 {v.isDefault && (
-                  <span className="ml-2 rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-black text-brand">
-                    DEFAULT
+                  <span className="ms-2 rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-black text-brand">
+                    {tr('menu.defaultBadge')}
                   </span>
                 )}
               </div>
-              <span className="text-sm font-bold tabular-nums">{formatEtbMinor(v.basePriceMinor)}</span>
+              <span className="text-sm font-bold tabular-nums">{formatCurrency(v.basePriceMinor)}</span>
               <button
                 onClick={() => { setEditId(v.id); setFormName(v.name); setFormPrice(''); }}
                 className="min-h-9 rounded-lg border border-line px-2 text-xs font-bold"
               >
-                Edit
+                {tr('menu.edit')}
               </button>
               {!v.isDefault && (
                 <button
-                  onClick={() => { if (confirm('Delete this variant?')) deleteMutation.mutate(v.id); }}
+                  onClick={() => { if (confirm(tr('menu.deleteVariantConfirm'))) deleteMutation.mutate(v.id); }}
                   disabled={deleteMutation.isPending}
                   className="min-h-9 rounded-lg border border-red-200 px-2 text-xs font-bold text-red-700"
                 >
-                  Delete
+                  {tr('menu.delete')}
                 </button>
               )}
             </>
@@ -828,10 +834,10 @@ function VariantsPanel({
           <input
             value={formName}
             onChange={(e) => setFormName(e.target.value)}
-            placeholder="Variant name (e.g. Large)"
+            placeholder={tr('menu.newVariantNamePlaceholder')}
             className="min-h-10 flex-1 rounded-lg border border-line px-3 text-sm font-bold"
             autoFocus
-            aria-label="New variant name"
+            aria-label={tr('menu.newVariantNameAria')}
           />
           <input
             value={formPrice}
@@ -839,20 +845,20 @@ function VariantsPanel({
             inputMode="decimal"
             placeholder="ETB"
             className="min-h-10 w-28 rounded-lg border border-line px-3 text-sm tabular-nums"
-            aria-label="New variant price"
+            aria-label={tr('menu.newVariantPriceAria')}
           />
           <button
             onClick={() => createMutation.mutate()}
             disabled={createMutation.isPending || !formName.trim() || priceToMinor(formPrice) === null}
             className="min-h-10 rounded-lg bg-brand px-3 text-xs font-bold text-white disabled:opacity-50"
           >
-            Add
+            {tr('menu.add')}
           </button>
           <button
             onClick={() => { setAdding(false); setFormName(''); setFormPrice(''); }}
             className="min-h-10 rounded-lg border border-line px-3 text-xs font-bold"
           >
-            Cancel
+            {tr('common.cancel')}
           </button>
         </div>
       ) : (
@@ -860,7 +866,7 @@ function VariantsPanel({
           onClick={() => setAdding(true)}
           className="min-h-10 rounded-lg border border-dashed border-line px-4 text-xs font-bold text-ink-muted hover:border-brand hover:text-brand"
         >
-          + Add variant
+          {tr('menu.addVariant')}
         </button>
       )}
     </div>
@@ -882,6 +888,7 @@ function ModifierGroupsPanel({
   csrfToken: string | null;
   tenantId: string;
 }) {
+  const { formatCurrency, tr } = useLocale();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -935,12 +942,12 @@ function ModifierGroupsPanel({
             <div>
               <span className="text-sm font-bold">{mg.name}</span>
               {mg.isRequired && (
-                <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">
-                  REQUIRED
+                <span className="ms-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">
+                  {tr('menu.requiredBadge')}
                 </span>
               )}
             </div>
-            <span className="text-xs text-ink-muted">{mg.options?.length ?? 0} options</span>
+            <span className="text-xs text-ink-muted">{tr('menu.optionsCount', { count: mg.options?.length ?? 0 })}</span>
           </div>
           {(mg.options ?? []).length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
@@ -951,7 +958,7 @@ function ModifierGroupsPanel({
                 >
                   {opt.name}
                   {opt.priceDeltaMinor !== '0' && (
-                    <span className="text-brand">+{formatEtbMinor(opt.priceDeltaMinor)}</span>
+                    <span className="text-brand">+{formatCurrency(opt.priceDeltaMinor)}</span>
                   )}
                 </span>
               ))}
@@ -964,10 +971,10 @@ function ModifierGroupsPanel({
           <input
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
-            placeholder="Group name (e.g. Size, Toppings)"
+            placeholder={tr('menu.groupPlaceholder')}
             className="min-h-10 w-full rounded-lg border border-line px-3 text-sm font-bold"
             autoFocus
-            aria-label="Modifier group name"
+            aria-label={tr('menu.groupNameAria')}
           />
           <label className="flex items-center gap-2 text-sm font-bold">
             <input
@@ -976,25 +983,25 @@ function ModifierGroupsPanel({
               onChange={(e) => setIsRequired(e.target.checked)}
               className="size-4 accent-brand"
             />
-            Required
+            {tr('menu.required')}
           </label>
           <div className="border-t border-line pt-3">
-            <p className="text-xs font-bold text-ink-muted mb-2">First option (optional)</p>
+            <p className="text-xs font-bold text-ink-muted mb-2">{tr('menu.firstOption')}</p>
             <div className="flex gap-2">
               <input
                 value={newOptionName}
                 onChange={(e) => setNewOptionName(e.target.value)}
-                placeholder="Option name"
+                placeholder={tr('menu.optionNamePlaceholder')}
                 className="min-h-10 flex-1 rounded-lg border border-line px-3 text-sm"
-                aria-label="First modifier option name"
+                aria-label={tr('menu.firstOptionNameAria')}
               />
               <input
                 value={newOptionPrice}
                 onChange={(e) => setNewOptionPrice(e.target.value)}
                 inputMode="decimal"
-                placeholder="Price delta ETB"
+                placeholder={tr('menu.priceDeltaPlaceholder')}
                 className="min-h-10 w-32 rounded-lg border border-line px-3 text-sm tabular-nums"
-                aria-label="First modifier option price delta"
+                aria-label={tr('menu.firstOptionPriceAria')}
               />
             </div>
           </div>
@@ -1003,14 +1010,14 @@ function ModifierGroupsPanel({
               onClick={() => { setShowCreate(false); setGroupName(''); setIsRequired(false); setNewOptionName(''); setNewOptionPrice(''); }}
               className="min-h-10 rounded-lg border border-line px-3 text-xs font-bold"
             >
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button
               onClick={() => createGroupMutation.mutate()}
               disabled={createGroupMutation.isPending || !groupName.trim()}
               className="min-h-10 rounded-lg bg-dark px-4 text-xs font-bold text-white disabled:opacity-50"
             >
-              {createGroupMutation.isPending ? 'Creating…' : 'Create group'}
+              {createGroupMutation.isPending ? tr('menu.creating') : tr('menu.createGroup')}
             </button>
           </div>
         </div>
@@ -1019,7 +1026,7 @@ function ModifierGroupsPanel({
           onClick={() => setShowCreate(true)}
           className="min-h-10 rounded-lg border border-dashed border-line px-4 text-xs font-bold text-ink-muted hover:border-brand hover:text-brand"
         >
-          + Add modifier group
+          {tr('menu.addModifierGroup')}
         </button>
       )}
     </div>
@@ -1032,6 +1039,7 @@ function ModifierGroupsPanel({
 
 export function MenuManagement() {
   const { accessToken, csrfToken, profile } = useAuth();
+  const { formatCurrency, tr } = useLocale();
   const membership = profile?.memberships[0];
   const tenantId = membership?.tenant.id ?? '';
   const branchId =
@@ -1058,24 +1066,24 @@ export function MenuManagement() {
   });
 
   if (!membership || !['OWNER', 'MANAGER'].includes(membership.role)) {
-    return <p role="alert">Permission denied.</p>;
+    return <p role="alert">{tr('menu.permissionDenied')}</p>;
   }
 
   return (
     <>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">Catalog</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Menu management</h1>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">{tr('menu.catalogEyebrow')}</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{tr('menu.pageTitle')}</h1>
           <p className="mt-2 text-sm text-ink-muted">
-            Manage dishes, prices, categories, and availability.
+            {tr('menu.pageDescription')}
           </p>
         </div>
         <button
           onClick={() => { setNotice(null); setShowCreate(true); }}
           className="min-h-11 rounded-xl bg-dark px-5 text-sm font-bold text-white shadow-sm transition hover:bg-dark-muted"
         >
-          + Add menu item
+          {tr('menu.addItemBtn')}
         </button>
       </div>
 
@@ -1085,11 +1093,11 @@ export function MenuManagement() {
         </div>
       )}
       {(items.isLoading || categories.isLoading) && (
-        <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading catalog…</p>
+        <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('menu.loadingCatalog')}</p>
       )}
       {(items.isError || categories.isError) && (
         <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">
-          The catalog could not be loaded. Check the API connection and try again.
+          {tr('menu.catalogError')}
         </div>
       )}
 
@@ -1105,8 +1113,8 @@ export function MenuManagement() {
           {(items.data?.length ?? 0) === 0 ? (
             <div className="mt-4 grid min-h-72 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
               <div>
-                <p className="text-lg font-black">Your menu is empty</p>
-                <p className="mt-2 text-sm text-ink-muted">Add your first dish to start taking orders.</p>
+                <p className="text-lg font-black">{tr('menu.emptyTitle')}</p>
+                <p className="mt-2 text-sm text-ink-muted">{tr('menu.emptyHint')}</p>
               </div>
             </div>
           ) : (
@@ -1127,7 +1135,7 @@ export function MenuManagement() {
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedItem(item); } }}
-                    aria-label={`Edit ${item.name}`}
+                    aria-label={tr('menu.editItemAria', { name: item.name })}
                   >
                     <div className="mb-5 grid h-24 place-items-center rounded-xl bg-gradient-to-br from-brand to-dark text-2xl font-black text-white">
                       {initials}
@@ -1143,13 +1151,13 @@ export function MenuManagement() {
                       />
                     </div>
                     <p className="mt-2 text-sm font-bold text-brand">
-                      {variant ? formatEtbMinor(variant.basePriceMinor) : 'Price not set'}
+                      {variant ? formatCurrency(variant.basePriceMinor) : tr('menu.priceNotSet')}
                     </p>
                     <p className="mt-1 text-sm text-ink-muted">
-                      {item.category?.name ?? 'Uncategorized'}
+                      {item.category?.name ?? tr('menu.uncategorized')}
                     </p>
                     <div className="mt-5 flex items-center justify-between border-t border-line pt-4 text-xs font-bold text-ink-muted">
-                      <span>{item.isActive ? 'Active' : 'Inactive'}</span>
+                      <span>{item.isActive ? tr('status.active') : tr('status.inactive')}</span>
                       <span className={`size-2 rounded-full ${item.isActive ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                     </div>
                   </article>
@@ -1171,7 +1179,7 @@ export function MenuManagement() {
           onCreated={async (name) => {
             setShowCreate(false);
             await items.refetch();
-            setNotice(`${name} was added to the menu.`);
+            setNotice(tr('menu.addedNotice', { name }));
           }}
         />
       )}

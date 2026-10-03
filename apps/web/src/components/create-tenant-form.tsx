@@ -7,13 +7,14 @@ import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/text-field';
 import { Banner } from '@/components/ui/banner';
 import { PageHeader } from '@/components/ui/page-header';
+import { useLocale } from '@/components/locale-provider';
 import { createTenant } from '@/lib/platform-api';
 
-const PASSWORD_HINT = 'At least 8 characters with an uppercase letter, a lowercase letter, and a digit.';
 const PASSWORD_RE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,128}$/;
 
 export function CreateTenantForm() {
   const { accessToken, csrfToken } = useAuth();
+  const { tr } = useLocale();
   const router = useRouter();
 
   const [name, setName] = useState('');
@@ -28,10 +29,10 @@ export function CreateTenantForm() {
 
   function validate(): boolean {
     const next: Record<string, string> = {};
-    if (!name.trim()) next.name = 'Restaurant name is required';
-    if (!ownerPhone.trim()) next.ownerPhone = 'Owner phone is required';
-    if (!PASSWORD_RE.test(ownerPassword)) next.ownerPassword = PASSWORD_HINT;
-    if (confirmPassword !== ownerPassword) next.confirm = 'Passwords do not match';
+    if (!name.trim()) next.name = tr('platform.nameRequired');
+    if (!ownerPhone.trim()) next.ownerPhone = tr('platform.phoneRequired');
+    if (!PASSWORD_RE.test(ownerPassword)) next.ownerPassword = tr('platform.passwordHint');
+    if (confirmPassword !== ownerPassword) next.confirm = tr('platform.passwordMismatch');
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -56,7 +57,7 @@ export function CreateTenantForm() {
       );
       router.push(`/platform/tenants/${result.tenant.id}`);
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Could not create the restaurant. Please try again.');
+      setFormError(err instanceof Error ? err.message : tr('platform.createError'));
       setSubmitting(false);
     }
   }
@@ -64,13 +65,13 @@ export function CreateTenantForm() {
   return (
     <div className="mx-auto max-w-[760px]">
       <PageHeader
-        eyebrow="Platform"
-        title="New restaurant"
-        description="Provision a tenant account and its first owner."
+        eyebrow={tr('platform.eyebrow')}
+        title={tr('platform.newRestaurantTitle')}
+        description={tr('platform.newRestaurantDesc')}
       />
 
       {formError && (
-        <Banner variant="danger" title="Could not create restaurant" onDismiss={() => setFormError(null)} className="mt-5">
+        <Banner variant="danger" title={tr('platform.createBannerTitle')} onDismiss={() => setFormError(null)} className="mt-5">
           {formError}
         </Banner>
       )}
@@ -81,36 +82,36 @@ export function CreateTenantForm() {
       >
         <div className="sm:col-span-2">
           <TextField
-            label="Restaurant name"
+            label={tr('platform.nameLabel')}
             value={name}
             onChange={(e) => setName(e.target.value)}
             error={errors.name}
-            placeholder="Buna House"
+            placeholder={tr('platform.namePlaceholder')}
             autoComplete="organization"
           />
         </div>
 
         <TextField
-          label="Slug (optional)"
+          label={tr('platform.slugLabel')}
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
           error={errors.slug}
-          hint="Leave empty to generate it from the name."
+          hint={tr('platform.slugHint')}
           placeholder="buna-house"
         />
 
         <TextField
-          label="Owner name (optional)"
+          label={tr('platform.ownerNameLabel')}
           value={ownerName}
           onChange={(e) => setOwnerName(e.target.value)}
           error={errors.ownerName}
-          hint="Leave empty to use Owner plus the last 4 phone digits."
-          placeholder="Abebe Kebede"
+          hint={tr('platform.ownerNameHint')}
+          placeholder={tr('platform.ownerNamePlaceholder')}
           autoComplete="name"
         />
 
         <TextField
-          label="Owner phone"
+          label={tr('platform.phoneLabel')}
           value={ownerPhone}
           onChange={(e) => setOwnerPhone(e.target.value)}
           error={errors.ownerPhone}
@@ -120,18 +121,18 @@ export function CreateTenantForm() {
         />
 
         <TextField
-          label="Owner password"
+          label={tr('platform.passwordLabel')}
           type="password"
           value={ownerPassword}
           onChange={(e) => setOwnerPassword(e.target.value)}
           error={errors.ownerPassword}
-          hint={PASSWORD_HINT}
+          hint={tr('platform.passwordHint')}
           autoComplete="new-password"
         />
 
         <div className="sm:col-span-2">
           <TextField
-            label="Confirm password"
+            label={tr('platform.confirmLabel')}
             type="password"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
@@ -142,10 +143,10 @@ export function CreateTenantForm() {
 
         <div className="flex justify-end gap-3 pt-2 sm:col-span-2">
           <Button type="button" variant="secondary" onClick={() => router.push('/platform')}>
-            Cancel
+            {tr('common.cancel')}
           </Button>
           <Button type="submit" loading={submitting}>
-            Create restaurant
+            {tr('platform.createBtn')}
           </Button>
         </div>
       </form>

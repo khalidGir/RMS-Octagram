@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
+import { useRouter } from 'next/navigation';
+import type { Route } from 'next';
+import { apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { normalizePublicMenu } from '@/lib/public-menu';
 import { useLocale } from './locale-provider';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { LanguagePicker } from './language-picker';
 
 interface PublicMenuItem {
   id: string;
@@ -58,7 +60,8 @@ async function loadEntry(entry: Entry): Promise<{ menu: PublicMenu; context: Pic
 }
 
 export function PublicOrderMenu({ entry }: { entry: Entry }) {
-  const { locale, setLocale, t } = useLocale();
+  const { tr, formatCurrency } = useLocale();
+  const router = useRouter();
   const [categoryId, setCategoryId] = useState<string>('');
   const [cart, setCart] = useState<CartLine[]>([]);
   const query = useQuery({ queryKey: ['public-entry', entry], queryFn: () => loadEntry(entry), retry: 1 });
@@ -85,11 +88,11 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
     if (!query.data || cart.length === 0) return;
     const payload = { entry, context: query.data.context, lines: cart, quotedSubtotal: subtotal.toString() };
     window.sessionStorage.setItem('rms-public-cart', JSON.stringify(payload));
-    window.location.assign(entry.kind === 'pickup' ? `/r/${encodeURIComponent(entry.publicSlug)}/checkout` : `/o/${encodeURIComponent(entry.token)}/checkout`);
+    router.push((entry.kind === 'pickup' ? `/r/${encodeURIComponent(entry.publicSlug)}/checkout` : `/o/${encodeURIComponent(entry.token)}/checkout`) as Route);
   }
 
-  if (query.isLoading) return <PublicState title="Loading menu…" detail="Checking current prices and availability." />;
-  if (query.isError || !query.data) return <PublicState title={t.unavailable} detail="Please ask restaurant staff for a current ordering link." retry={() => void query.refetch()} />;
+  if (query.isLoading) return <PublicState title={tr('ordering.loadingMenu')} detail={tr('ordering.loadingMenuDetail')} />;
+  if (query.isError || !query.data) return <PublicState title={tr('ordering.unavailable')} detail={tr('ordering.linkHelp')} retry={() => void query.refetch()} retryLabel={tr('common.tryAgain')} />;
 
   const context = query.data.context;
   const isPickup = entry.kind === 'pickup';
@@ -101,19 +104,19 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
       <header className="sticky top-0 z-30 border-b border-line bg-white/95 backdrop-blur">
         <div className="mx-auto flex min-h-[68px] max-w-6xl items-center gap-3 px-4">
           <div><p className="font-black">{query.data.menu.tenant.name}</p><p className="text-xs text-ink-muted">{query.data.menu.branch.name}</p></div>
-          <div className="ms-auto w-32"><span className="sr-only">{t.language}</span><Select value={locale} onValueChange={(value) => setLocale(value as 'en' | 'am' | 'ar')}><SelectTrigger aria-label={t.language}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="en">English</SelectItem><SelectItem value="am">አማርኛ</SelectItem><SelectItem value="ar">العربية</SelectItem></SelectContent></Select></div>
+          <LanguagePicker compact className="ms-auto" />
         </div>
       </header>
       <section className="bg-dark-muted px-4 py-9 text-white">
         <div className="mx-auto max-w-6xl">
-          <p className="text-xs font-black uppercase tracking-[.16em] text-accent-gold">{isPickup ? 'Pickup pre-order' : `Table ${tableLabel}`}</p>
-          <h1 className="mt-3 text-4xl font-black tracking-[-.045em]">Choose your meal</h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">{isPickup ? 'Order ahead for pickup. Payment is available by bank transfer or Telebirr.' : 'Order for this table or choose takeaway using the options configured by the restaurant.'}</p>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-accent-gold">{isPickup ? tr('ordering.pickupPreorder') : tr('ordering.table', { table: tableLabel ?? '' })}</p>
+          <h1 className="mt-3 text-4xl font-black tracking-[-.045em]">{tr('ordering.chooseMeal')}</h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">{isPickup ? tr('ordering.pickupIntro') : tr('ordering.tableIntro')}</p>
         </div>
       </section>
-      {disabled ? <PublicState title="Pickup ordering is unavailable." detail="Please contact the restaurant directly." /> : (
+      {disabled ? <PublicState title={tr('ordering.pickupUnavailable')} detail={tr('ordering.contactRestaurant')} /> : (
         <div className="mx-auto max-w-6xl px-4">
-          <nav aria-label="Menu categories" className="hide-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-4">
+          <nav aria-label={tr('ordering.menuCategories')} className="hide-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 py-4">
             {query.data.menu.categories.map((item) => <button key={item.id} onClick={() => setCategoryId(item.id)} className={`min-h-11 shrink-0 rounded-full px-4 text-sm font-bold ${item.id === category?.id ? 'bg-brand text-white' : 'border border-line bg-white'}`}>{item.name}</button>)}
           </nav>
           {category?.items.length ? <section className="grid gap-4 pb-6 sm:grid-cols-2" aria-labelledby="menu-heading">
@@ -121,16 +124,16 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
             {category.items.map((item) => {
               const variant = item.variants.find((candidate) => candidate.isDefault) ?? item.variants[0];
               const needsOptions = item.modifierGroups.some((group) => group.isRequired || group.minSelections > 0);
-              return <article key={item.id} className="flex min-h-44 flex-col rounded-2xl border border-line bg-white p-5 shadow-card"><h3 className="text-lg font-black">{item.name}</h3><p className="mt-2 flex-1 text-sm leading-6 text-ink-muted">{item.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="font-black text-brand">{variant ? formatEtbMinor(variant.basePriceMinor) : 'Unavailable'}</span><button disabled={!variant || needsOptions} onClick={() => add(item)} className="min-h-11 rounded-xl bg-dark px-4 text-sm font-black text-white disabled:bg-stone-300">{needsOptions ? 'Choose options' : 'Add'}</button></div></article>;
+              return <article key={item.id} className="flex min-h-44 flex-col rounded-2xl border border-line bg-white p-5 shadow-card"><h3 className="text-lg font-black">{item.name}</h3><p className="mt-2 flex-1 text-sm leading-6 text-ink-muted">{item.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="font-black text-brand">{variant ? formatCurrency(variant.basePriceMinor) : tr('ordering.itemUnavailable')}</span><button disabled={!variant || needsOptions} onClick={() => add(item)} className="min-h-11 rounded-xl bg-dark px-4 text-sm font-black text-white disabled:bg-stone-300">{needsOptions ? tr('ordering.chooseOptions') : tr('ordering.add')}</button></div></article>;
             })}
-          </section> : <PublicState title="No items available" detail="Please check again later." />}
+          </section> : <PublicState title={tr('ordering.noItems')} detail={tr('ordering.checkLater')} />}
         </div>
       )}
-      {count > 0 && <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white p-3"><button onClick={continueOrder} className="mx-auto flex min-h-14 w-full max-w-3xl items-center justify-between rounded-2xl bg-brand px-5 font-black text-white"><span>Review order · {count} {count === 1 ? 'item' : 'items'}</span><span dir="ltr">{formatEtbMinor(subtotal)}</span></button></div>}
+      {count > 0 && <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white p-3"><button onClick={continueOrder} className="mx-auto flex min-h-14 w-full max-w-3xl items-center justify-between rounded-2xl bg-brand px-5 font-black text-white"><span>{tr('ordering.reviewOrderCount', { count })}</span><span dir="ltr">{formatCurrency(subtotal)}</span></button></div>}
     </main>
   );
 }
 
-function PublicState({ title, detail, retry }: { title: string; detail: string; retry?: () => void }) {
-  return <section className="mx-auto grid min-h-72 max-w-xl place-items-center px-5 text-center"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-2 text-sm leading-6 text-ink-muted">{detail}</p>{retry && <button onClick={retry} className="mt-5 min-h-11 rounded-xl bg-dark px-5 font-black text-white">Try again</button>}</div></section>;
+function PublicState({ title, detail, retry, retryLabel = 'Try again' }: { title: string; detail: string; retry?: () => void; retryLabel?: string }) {
+  return <section className="mx-auto grid min-h-72 max-w-xl place-items-center px-5 text-center"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-2 text-sm leading-6 text-ink-muted">{detail}</p>{retry && <button onClick={retry} className="mt-5 min-h-11 rounded-xl bg-dark px-5 font-black text-white">{retryLabel}</button>}</div></section>;
 }

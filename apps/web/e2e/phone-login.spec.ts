@@ -27,7 +27,7 @@ test.describe('Phone-first login form', () => {
     await page.goto('/login');
     await page.locator('input[type="tel"]').fill('12345');
     await page.locator('input[type="password"]').fill('whatever');
-    await page.getByRole('button', { name: /sign in to rms/i }).click();
+    await page.getByRole('button', { name: /sign in to restaurantms/i }).click();
     await expect(page.getByText(/enter a valid ethiopian mobile number/i)).toBeVisible();
     await expect(page).toHaveURL(/\/login/);
   });
@@ -41,16 +41,16 @@ test.describe('Phone-first login form', () => {
     await page.keyboard.type(seed.owner.password);
     await page.keyboard.press('Enter');
     await page.waitForURL((url) => url.pathname === '/dashboard', { timeout: 15_000 });
-    await expect(page.locator('aside nav')).toBeVisible();
+    await expect(page.locator('aside nav').first()).toBeVisible();
   });
 
   test('seeded owner signs in through the real UI', async ({ page, seed }) => {
     await page.goto('/login');
     await page.locator('input[type="tel"]').fill(seed.owner.phone);
     await page.locator('input[type="password"]').fill(seed.owner.password);
-    await page.getByRole('button', { name: /sign in to rms/i }).click();
+    await page.getByRole('button', { name: /sign in to restaurantms/i }).click();
     await page.waitForURL((url) => url.pathname === '/dashboard', { timeout: 15_000 });
-    await expect(page.locator('aside nav')).toBeVisible();
+    await expect(page.locator('aside nav').first()).toBeVisible();
   });
 });
 

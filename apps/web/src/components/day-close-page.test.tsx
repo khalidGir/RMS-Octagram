@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render as baseRender, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { LocaleProvider } from '@/components/locale-provider';
 import { DayClosePage } from './day-close-page';
 import { apiRequest } from '@/lib/api-client';
 import type * as ApiClient from '@/lib/api-client';
+
+const render = (ui: React.ReactElement) => baseRender(<LocaleProvider>{ui}</LocaleProvider>);
 
 vi.mock('@/lib/api-client', async (importOriginal) => {
   const actual = (await importOriginal()) as typeof ApiClient;

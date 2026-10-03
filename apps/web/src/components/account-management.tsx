@@ -5,9 +5,13 @@ import { useAuth } from '@/components/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, PageHeader, Switch, TextField } from '@/components/ui';
+import { LanguagePicker } from '@/components/language-picker';
+import { useLocale, type MessageKey } from '@/components/locale-provider';
+import { roleKeys } from '@/components/shell/nav-config';
 
 export function AccountManagement() {
   const { profile, loading } = useAuth();
+  const { tr } = useLocale();
   const [displayName, setDisplayName] = useState(profile?.displayName ?? '');
   const [phone, setPhone] = useState(profile?.phone ?? '');
   const [saved, setSaved] = useState(false);
@@ -43,40 +47,44 @@ export function AccountManagement() {
 
   return (
     <div className="page-shell">
-      <PageHeader eyebrow="Personal settings" title="Account & notifications" description="Manage your profile and choose which operational updates reach you." />
+      <PageHeader eyebrow={tr('navigation.accountEyebrow')} title={tr('navigation.accountTitle')} description={tr('navigation.accountDescription')} />
 
       <section className="mt-7 grid gap-5 xl:grid-cols-2">
         <Card className="rounded-panel p-6 sm:p-7">
-          <h2 className="text-lg font-semibold">Profile</h2>
+          <h2 className="text-lg font-semibold">{tr('navigation.profile')}</h2>
           <div className="mt-5 space-y-4">
-            <TextField label="Display name" value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-            <TextField label="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" inputMode="tel" autoComplete="tel" placeholder="0911 234 567" />
+            <TextField label={tr('navigation.displayName')} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            <TextField label={tr('authentication.phone')} value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" inputMode="tel" autoComplete="tel" placeholder="0911 234 567" />
             {membership && (
               <div className="rounded-card bg-surface-subtle p-4 text-sm">
-                <p className="font-semibold">{membership.role.replaceAll('_', ' ')}</p>
-                <p className="mt-1 text-ink-muted">{membership.tenant.name} workspace</p>
+                <p className="font-semibold">{tr(roleKeys[membership.role])}</p>
+                <p className="mt-1 text-ink-muted">{tr('navigation.workspaceOf', { tenant: membership.tenant.name })}</p>
               </div>
             )}
-            <Button onClick={handleSave}>{saved ? 'Saved!' : 'Save profile'}</Button>
+            <div className="flex items-center justify-between rounded-card bg-surface-subtle p-4 text-sm">
+              <span className="font-semibold">{tr('common.language')}</span>
+              <LanguagePicker compact />
+            </div>
+            <Button onClick={handleSave}>{saved ? tr('navigation.saved') : tr('navigation.saveProfile')}</Button>
           </div>
         </Card>
 
         <Card className="rounded-panel p-6 sm:p-7">
-          <h2 className="text-lg font-semibold">Notifications</h2>
+          <h2 className="text-lg font-semibold">{tr('navigation.notifications')}</h2>
           <div className="mt-5 space-y-1">
             {([
-              ['paymentProofs', 'Payment proofs', 'Get notified when manual transfers need verification'],
-              ['lowStock', 'Low stock alerts', 'Alert when inventory drops below threshold'],
-              ['orderDelays', 'Order delays', 'Notification for orders exceeding prep time'],
-              ['dailySummary', 'Daily summary', 'End-of-day revenue and order summary'],
-            ] as const).map(([key, label, desc]) => (
+              ['paymentProofs', 'navigation.notifPaymentProofs', 'navigation.notifPaymentProofsDesc'],
+              ['lowStock', 'navigation.notifLowStock', 'navigation.notifLowStockDesc'],
+              ['orderDelays', 'navigation.notifOrderDelays', 'navigation.notifOrderDelaysDesc'],
+              ['dailySummary', 'navigation.notifDailySummary', 'navigation.notifDailySummaryDesc'],
+            ] as const).map(([key, labelKey, descKey]) => (
               <div key={key} className="flex items-center justify-between gap-5 border-b border-border py-4 text-sm last:border-0">
                 <div>
-                  <p className="font-semibold">{label}</p>
-                  <p className="mt-0.5 text-xs text-ink-muted">{desc}</p>
+                  <p className="font-semibold">{tr(labelKey as MessageKey)}</p>
+                  <p className="mt-0.5 text-xs text-ink-muted">{tr(descKey as MessageKey)}</p>
                 </div>
                 <Switch
-                  label={`Toggle ${label}`}
+                  label={tr('navigation.toggleNotification', { label: tr(labelKey as MessageKey) })}
                   checked={notifications[key]}
                   onCheckedChange={(checked) => setNotifications((prev) => ({ ...prev, [key]: checked }))}
                   className="[&+label]:sr-only"

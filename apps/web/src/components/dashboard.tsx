@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useBranch } from '@/components/shell/branch-provider';
-import { formatEtbMinor } from '@/lib/money';
+import { useLocale, type MessageKey } from '@/components/locale-provider';
 import { Skeleton } from '@/components/ui/skeleton';
 import { AlertTriangle, ArrowUpRight, BarChart3, Boxes, ChefHat, CreditCard, Plus, ReceiptText } from 'lucide-react';
 import { Card, PageHeader } from '@/components/ui';
@@ -24,26 +24,18 @@ import {
 
 const RANK_TONES = ['bg-brand', 'bg-success', 'bg-warning', 'bg-info', 'bg-dark-muted'];
 
-function timeGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+type Tr = (key: MessageKey, variables?: Record<string, string | number>) => string;
 
-function dayLabel(): string {
-  return new Date().toLocaleDateString('en-ET', { weekday: 'long', day: 'numeric', month: 'long' });
-}
-
-function percentChange(today: number, yesterday: number): string {
-  if (yesterday === 0) return today > 0 ? '+100%' : 'No change';
+function percentChange(today: number, yesterday: number, tr: Tr): string {
+  if (yesterday === 0) return today > 0 ? '+100%' : tr('dashboard.noChange');
   const pct = ((today - yesterday) / yesterday) * 100;
   const sign = pct >= 0 ? '+' : '';
-  return `${sign}${pct.toFixed(1)}% from yesterday`;
+  return tr('dashboard.pctVsYesterday', { pct: `${sign}${pct.toFixed(1)}` });
 }
 
 export function Dashboard() {
   const { accessToken, csrfToken, profile } = useAuth();
+  const { formatCurrency, tr, formatDate } = useLocale();
   const { branchId, branches } = useBranch();
   const tenantId = profile?.memberships?.[0]?.tenant.id;
 
@@ -71,11 +63,11 @@ export function Dashboard() {
       setBestSellers(bestRes.items);
       setLowStock(lowRes.items);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      setError(err instanceof Error ? err.message : tr('dashboard.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [branchId, accessToken, csrfToken, tenantId]);
+  }, [branchId, accessToken, csrfToken, tenantId, tr]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -94,7 +86,10 @@ export function Dashboard() {
   const todayOrderCount = orderStats?.totalOrders ?? 0;
   const pendingReviews = lowStock.length;
 
-  const userName = profile?.displayName?.split(' ')[0] ?? 'there';
+  const userName = profile?.displayName?.split(' ')[0] ?? tr('dashboard.nameFallback');
+  const hour = new Date().getHours();
+  const titleKey: MessageKey =
+    hour < 12 ? 'dashboard.greetingMorning' : hour < 17 ? 'dashboard.greetingAfternoon' : 'dashboard.greetingEvening';
 
   if (loading) return <DashboardSkeleton />;
 
@@ -102,9 +97,9 @@ export function Dashboard() {
     return (
       <div className="grid min-h-[55vh] place-items-center">
         <div className="max-w-sm rounded-panel border border-line bg-white p-8 text-center shadow-card">
-          <p className="text-lg font-extrabold">Dashboard unavailable</p>
+          <p className="text-lg font-extrabold">{tr('dashboard.unavailable')}</p>
           <p className="mt-2 text-sm text-ink-muted">{error}</p>
-          <button onClick={() => void fetchAll()} className="mt-5 min-h-11 rounded-control bg-brand px-5 font-bold text-white">Try again</button>
+          <button onClick={() => void fetchAll()} className="mt-5 min-h-11 rounded-control bg-brand px-5 font-bold text-white">{tr('common.tryAgain')}</button>
         </div>
       </div>
     );
@@ -112,32 +107,32 @@ export function Dashboard() {
 
   return (
     <div className="page-shell">
-      <PageHeader eyebrow={dayLabel()} title={`${timeGreeting()}, ${userName}.`} description="A clear view of today’s service, sales, and operational attention points." actions={branches.length > 1 ? (
+      <PageHeader eyebrow={formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' })} title={tr(titleKey, { name: userName })} description={tr('dashboard.description')} actions={branches.length > 1 ? (
           <div className="flex items-center gap-3 rounded-card border border-line bg-white px-4 py-3 shadow-card text-sm">
-            <span className="text-xs font-semibold text-ink-muted">Viewing</span>
+            <span className="text-xs font-semibold text-ink-muted">{tr('dashboard.viewing')}</span>
             <span className="font-semibold">{branches.find((b) => b.id === branchId)?.name ?? '—'}</span>
           </div>
         ) : undefined} />
 
-      <section className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Today's metrics">
-        <MetricCard label="Today's revenue" value={formatEtbMinor(todayRevenue)} detail={percentChange(todayRevenue, yesterdayRevenue)} direction={todayRevenue >= yesterdayRevenue ? 'up' : 'attention'} icon={<ArrowUpRight />} />
-        <MetricCard label="Orders today" value={String(todayOrderCount)} detail={`${orderStats?.completedOrders ?? 0} completed`} direction="neutral" icon={<ReceiptText />} />
-        <MetricCard label="Avg. order value" value={orderStats ? formatEtbMinor(Number(orderStats.avgOrderMinor)) : '—'} detail={`${orderStats?.cancelledOrders ?? 0} cancelled`} direction="neutral" icon={<BarChart3 />} />
-        <MetricCard label="Low stock alerts" value={String(pendingReviews)} detail={pendingReviews > 0 ? 'Items running low' : 'All stocked'} direction={pendingReviews > 0 ? 'attention' : 'neutral'} icon={<AlertTriangle />} />
+      <section className="mt-7 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={tr('dashboard.metricsRegion')}>
+        <MetricCard label={tr('dashboard.metricRevenue')} value={formatCurrency(todayRevenue)} detail={percentChange(todayRevenue, yesterdayRevenue, tr)} direction={todayRevenue >= yesterdayRevenue ? 'up' : 'attention'} icon={<ArrowUpRight />} />
+        <MetricCard label={tr('dashboard.metricOrders')} value={String(todayOrderCount)} detail={tr('dashboard.completedSuffix', { count: orderStats?.completedOrders ?? 0 })} direction="neutral" icon={<ReceiptText />} />
+        <MetricCard label={tr('dashboard.metricAvgValue')} value={orderStats ? formatCurrency(Number(orderStats.avgOrderMinor)) : '—'} detail={tr('dashboard.cancelledSuffix', { count: orderStats?.cancelledOrders ?? 0 })} direction="neutral" icon={<BarChart3 />} />
+        <MetricCard label={tr('dashboard.metricLowStock')} value={String(pendingReviews)} detail={pendingReviews > 0 ? tr('status.stockItemsRunningLow') : tr('status.stockAllStocked')} direction={pendingReviews > 0 ? 'attention' : 'neutral'} icon={<AlertTriangle />} />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[1.7fr_1fr]">
         <Card className="overflow-hidden rounded-panel">
           <div className="flex items-center justify-between border-b border-line px-5 py-5 sm:px-6">
             <div>
-              <h2 className="text-lg font-black">Revenue trend</h2>
-              <p className="mt-1 text-xs text-ink-muted">Last 2 days comparison</p>
+              <h2 className="text-lg font-black">{tr('dashboard.revenueTrend')}</h2>
+              <p className="mt-1 text-xs text-ink-muted">{tr('dashboard.last2Days')}</p>
             </div>
-            <Link href="/reports" className="min-h-10 rounded-control border border-line px-4 text-xs font-extrabold hover:bg-muted">Full report</Link>
+            <Link href="/reports" className="min-h-10 rounded-control border border-line px-4 text-xs font-extrabold hover:bg-muted">{tr('dashboard.fullReport')}</Link>
           </div>
           <div className="p-5 sm:p-6">
             {revenue.length === 0 ? (
-              <p className="text-sm text-ink-muted">No revenue data for the selected period.</p>
+              <p className="text-sm text-ink-muted">{tr('dashboard.noRevenue')}</p>
             ) : (
               <div className="space-y-3">
                 {revenue.map((day) => (
@@ -148,8 +143,8 @@ export function Dashboard() {
                         <div className="h-full rounded-lg bg-brand transition-all" style={{ width: `${Math.min(100, (Number(day.revenueMinor) / Math.max(1, yesterdayRevenue || 1)) * 100)}%` }} />
                       </div>
                     </div>
-                    <span className="w-24 text-right text-sm font-black">{formatEtbMinor(Number(day.revenueMinor))}</span>
-                    <span className="w-16 text-right text-xs text-ink-muted">{day.orderCount} orders</span>
+                    <span className="w-24 text-end text-sm font-black">{formatCurrency(Number(day.revenueMinor))}</span>
+                    <span className="w-16 text-end text-xs text-ink-muted">{tr('dashboard.ordersCount', { count: day.orderCount })}</span>
                   </div>
                 ))}
               </div>
@@ -161,32 +156,32 @@ export function Dashboard() {
           <Link href="/kitchen" className="rounded-panel bg-dark p-6 text-white shadow-float block hover:opacity-95 transition-opacity">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs font-bold text-white/50">Quick action</p>
-                <h2 className="mt-1 text-xl font-black">Kitchen display</h2>
+                <p className="text-xs font-bold text-white/50">{tr('dashboard.quickAction')}</p>
+                <h2 className="mt-1 text-xl font-black">{tr('navigation.navKitchenDisplay')}</h2>
               </div>
               <span className="grid size-11 place-items-center rounded-xl bg-white/10"><ChefHat size={21} aria-hidden="true" /></span>
             </div>
-            <p className="mt-4 text-sm text-white/70">View live kitchen queue and bump tickets.</p>
-            <div className="mt-6 min-h-11 w-full rounded-control bg-white text-center text-sm font-black text-dark leading-[2.75rem]">Open kitchen display</div>
+            <p className="mt-4 text-sm text-white/70">{tr('dashboard.kitchenPitch')}</p>
+            <div className="mt-6 min-h-11 w-full rounded-control bg-white text-center text-sm font-black text-dark leading-[2.75rem]">{tr('dashboard.openKitchen')}</div>
           </Link>
 
           <article className="rounded-panel border border-line bg-white p-6 shadow-card">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-black">Popular today</h2>
-              <Link href="/reports" className="text-xs font-black text-brand">Full report</Link>
+              <h2 className="text-lg font-black">{tr('dashboard.popularToday')}</h2>
+              <Link href="/reports" className="text-xs font-black text-brand">{tr('dashboard.fullReport')}</Link>
             </div>
             <div className="mt-5 space-y-4">
               {bestSellers.length === 0 ? (
-                <p className="text-sm text-ink-muted">No sales data yet today.</p>
+                <p className="text-sm text-ink-muted">{tr('dashboard.noSalesYet')}</p>
               ) : (
                 bestSellers.map((item, index) => (
                   <div key={item.variantId} className="flex items-center gap-3">
                     <span className={`grid size-9 place-items-center rounded-xl text-xs font-semibold text-white ${RANK_TONES[index % RANK_TONES.length]}`}>{index + 1}</span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-extrabold">{item.itemName}</span>
-                      <span className="text-xs text-ink-muted">{item.totalQuantity} sold</span>
+                      <span className="text-xs text-ink-muted">{tr('dashboard.soldSuffix', { count: item.totalQuantity })}</span>
                     </span>
-                    <span className="text-xs font-black">{formatEtbMinor(Number(item.totalRevenueMinor))}</span>
+                    <span className="text-xs font-black">{formatCurrency(Number(item.totalRevenueMinor))}</span>
                   </div>
                 ))
               )}
@@ -196,25 +191,25 @@ export function Dashboard() {
       </section>
 
       <section className="mt-5 grid gap-3 sm:grid-cols-3">
-        <Link href="/pos" className="flex min-h-20 items-center gap-4 rounded-card border border-line bg-white px-5 text-left shadow-card hover:-translate-y-0.5 transition-transform">
+        <Link href="/pos" className="flex min-h-20 items-center gap-4 rounded-card border border-line bg-white px-5 text-start shadow-card hover:-translate-y-0.5 transition-transform">
           <span className="grid size-11 place-items-center rounded-xl bg-brand text-white"><Plus size={20} aria-hidden="true" /></span>
           <span>
-            <span className="block text-sm font-black">Start POS order</span>
-            <span className="mt-1 block text-xs text-ink-muted">Create a counter or table order</span>
+            <span className="block text-sm font-black">{tr('dashboard.startPos')}</span>
+            <span className="mt-1 block text-xs text-ink-muted">{tr('dashboard.startPosHint')}</span>
           </span>
         </Link>
-        <Link href="/payments" className="flex min-h-20 items-center gap-4 rounded-card border border-line bg-white px-5 text-left shadow-card hover:-translate-y-0.5 transition-transform">
+        <Link href="/payments" className="flex min-h-20 items-center gap-4 rounded-card border border-line bg-white px-5 text-start shadow-card hover:-translate-y-0.5 transition-transform">
           <span className="grid size-11 place-items-center rounded-xl bg-warning-surface text-warning"><CreditCard size={20} aria-hidden="true" /></span>
           <span>
-            <span className="block text-sm font-black">Review payments</span>
-            <span className="mt-1 block text-xs text-ink-muted">Transfers awaiting confirmation</span>
+            <span className="block text-sm font-black">{tr('dashboard.reviewPayments')}</span>
+            <span className="mt-1 block text-xs text-ink-muted">{tr('dashboard.paymentsHint')}</span>
           </span>
         </Link>
-        <Link href="/inventory" className="flex min-h-20 items-center gap-4 rounded-card border border-line bg-white px-5 text-left shadow-card hover:-translate-y-0.5 transition-transform">
+        <Link href="/inventory" className="flex min-h-20 items-center gap-4 rounded-card border border-line bg-white px-5 text-start shadow-card hover:-translate-y-0.5 transition-transform">
           <span className="grid size-11 place-items-center rounded-xl bg-success-surface text-success"><Boxes size={20} aria-hidden="true" /></span>
           <span>
-            <span className="block text-sm font-black">Check inventory</span>
-            <span className="mt-1 block text-xs text-ink-muted">{pendingReviews} items are running low</span>
+            <span className="block text-sm font-black">{tr('dashboard.checkInventory')}</span>
+            <span className="mt-1 block text-xs text-ink-muted">{tr('dashboard.itemsRunningLow', { count: pendingReviews })}</span>
           </span>
         </Link>
       </section>
@@ -225,7 +220,7 @@ export function Dashboard() {
 function MetricCard({ label, value, detail, direction, icon }: { label: string; value: string; detail: string; direction: 'up' | 'neutral' | 'attention'; icon: ReactNode }) {
   return (
     <article className="relative overflow-hidden rounded-card border border-line bg-white p-5 shadow-card">
-      <div className={`absolute inset-y-0 left-0 w-1 ${direction === 'attention' ? 'bg-amber-500' : direction === 'up' ? 'bg-accent-teal' : 'bg-brand'}`} />
+      <div className={`absolute inset-y-0 start-0 w-1 ${direction === 'attention' ? 'bg-amber-500' : direction === 'up' ? 'bg-accent-teal' : 'bg-brand'}`} />
       <div className="flex items-start justify-between">
         <p className="text-sm font-bold text-ink-muted">{label}</p>
         <span className="text-ink-muted/60 [&>svg]:size-4">{icon}</span>

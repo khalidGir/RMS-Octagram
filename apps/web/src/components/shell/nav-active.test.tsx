@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render as baseRender, screen } from '@testing-library/react';
+import { LocaleProvider } from '@/components/locale-provider';
 import { NavRail } from './nav-rail';
 import { MobileNav } from './mobile-nav';
+
+const render = (ui: React.ReactElement) => baseRender(<LocaleProvider>{ui}</LocaleProvider>);
 
 const state = vi.hoisted(() => ({ pathname: '/kitchen/config' }));
 

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
-import { formatEtbMinor } from '@/lib/money';
+import { useLocale } from '@/components/locale-provider';
 import { useAuth } from '@/components/auth-provider';
 import { useBranch } from '@/components/shell/branch-provider';
 import { useOnlineStatus } from '@/hooks';
@@ -101,6 +101,7 @@ function formatInTz(iso: string, timeZone: string): string {
 
 export function DayClosePage() {
   const { accessToken, csrfToken, profile } = useAuth();
+  const { formatCurrency, tr } = useLocale();
   const { branchId } = useBranch();
   const online = useOnlineStatus();
   const membership = profile?.memberships?.[0];
@@ -146,8 +147,8 @@ export function DayClosePage() {
 
   async function closeDay(withException: boolean) {
     const effectiveReason = reason.trim();
-    if (withException && !effectiveReason) return setMessage('Explain why you are closing with an exception.');
-    if (!online) return setMessage('You are offline. Reconnect before closing the business day.');
+    if (withException && !effectiveReason) return setMessage(tr('shifts.needExceptionReason'));
+    if (!online) return setMessage(tr('shifts.offlineDayClose'));
     setBusy(true);
     setMessage(null);
     try {
@@ -162,7 +163,7 @@ export function DayClosePage() {
       setException(false);
       await Promise.all([previewQuery.refetch(), currentQuery.refetch()]);
     } catch (error) {
-      setMessage(error instanceof ApiError ? error.message : 'Could not close the business day.');
+      setMessage(error instanceof ApiError ? error.message : tr('shifts.dayCloseError'));
       await previewQuery.refetch();
     } finally {
       setBusy(false);
@@ -171,8 +172,8 @@ export function DayClosePage() {
 
   async function reopenDay() {
     const effectiveReason = reopenReason.trim();
-    if (!effectiveReason) return setMessage('A reason is required to reopen the business day.');
-    if (!online) return setMessage('You are offline. Reconnect before reopening the business day.');
+    if (!effectiveReason) return setMessage(tr('shifts.reopenReasonRequired'));
+    if (!online) return setMessage(tr('shifts.offlineReopen'));
     setBusy(true);
     setMessage(null);
     try {
@@ -187,7 +188,7 @@ export function DayClosePage() {
       setReopenOpen(false);
       await Promise.all([previewQuery.refetch(), currentQuery.refetch()]);
     } catch (error) {
-      setMessage(error instanceof ApiError ? error.message : 'Could not reopen the business day.');
+      setMessage(error instanceof ApiError ? error.message : tr('shifts.dayReopenError'));
       await currentQuery.refetch();
     } finally {
       setBusy(false);
@@ -195,16 +196,16 @@ export function DayClosePage() {
   }
 
   if (!membership || !allowed) {
-    return <State title="Permission denied" detail="This page is available to owners and managers only." />;
+    return <State title={tr('shifts.permissionTitle')} detail={tr('shifts.dayPermissionDetail')} />;
   }
   if (previewQuery.isLoading || currentQuery.isLoading) {
-    return <State title="Loading business day…" detail="Retrieving reconciliation totals for this branch." />;
+    return <State title={tr('shifts.loadingDayTitle')} detail={tr('shifts.loadingDayDetail')} />;
   }
   if (previewQuery.isError || currentQuery.isError) {
     return (
       <State
-        title="Business day unavailable"
-        detail="Reconnect and try again."
+        title={tr('shifts.dayUnavailableTitle')}
+        detail={tr('shifts.reconnectDetail')}
         retry={() => {
           void previewQuery.refetch();
           void currentQuery.refetch();
@@ -212,7 +213,7 @@ export function DayClosePage() {
       />
     );
   }
-  if (!preview) return <State title="Business day unavailable" detail="No reconciliation data returned." />;
+  if (!preview) return <State title={tr('shifts.dayUnavailableTitle')} detail={tr('shifts.noDataDetail')} />;
 
   if (closedSnapshot) {
     return (
@@ -263,28 +264,27 @@ export function DayClosePage() {
       {message && <Alert>{message}</Alert>}
       {reopened && (
         <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-bold text-amber-900">
-          This business day was reopened{reopened.reopenReason ? `: ${reopened.reopenReason}` : '.'} Close it again when the
-          missing entries are added.
+          {tr('shifts.reopenedBanner', { suffix: reopened.reopenReason ? `: ${reopened.reopenReason}` : '.' })}
         </div>
       )}
 
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        {preview.status === 'BLOCKED' ? (
-          <StatusChip status="danger">Blocked</StatusChip>
-        ) : preview.status === 'ALREADY_CLOSED' ? (
-          <StatusChip status="info">Already closed</StatusChip>
-        ) : (
-          <StatusChip status="success">Ready to close</StatusChip>
+          {preview.status === 'BLOCKED' ? (
+            <StatusChip status="danger">{tr('status.dayBlocked')}</StatusChip>
+          ) : preview.status === 'ALREADY_CLOSED' ? (
+            <StatusChip status="info">{tr('status.dayAlreadyClosed')}</StatusChip>
+          ) : (
+            <StatusChip status="success">{tr('status.dayReadyToClose')}</StatusChip>
         )}
         <span className="text-sm text-ink-muted">
-          {preview.branchTimezone} · business day starts at {preview.businessDayCutoffLocal}
+          {tr('shifts.tzStartsAt', { tz: preview.branchTimezone, cutoff: preview.businessDayCutoffLocal })}
         </span>
       </div>
 
       {preview.blockers.length > 0 && (
         <section className="mb-5 rounded-2xl border border-red-200 bg-red-50 p-5">
-          <h2 className="font-black text-red-800">Must be resolved before a normal close</h2>
-          <ul className="mt-2 list-disc pl-5 text-sm font-semibold text-red-800">
+          <h2 className="font-black text-red-800">{tr('shifts.blockersTitle')}</h2>
+          <ul className="mt-2 list-disc ps-5 text-sm font-semibold text-red-800">
             {preview.blockers.map((blocker) => (
               <li key={blocker}>{blocker}</li>
             ))}
@@ -293,51 +293,51 @@ export function DayClosePage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Recognised sales" value={preview.orderTotals.confirmed.totalMinor} detail={`${preview.orderTotals.confirmed.count} orders`} />
-        <Stat label="Cash approved" value={preview.paymentTotals.cash.approvedMinor} detail={`${preview.paymentTotals.cash.count} payments`} />
-        <Stat label="Bank transfer approved" value={preview.paymentTotals.bankTransfer.approvedMinor} detail={`${preview.paymentTotals.bankTransfer.count} payments`} />
-        <Stat label="Telebirr approved" value={preview.paymentTotals.telebirr.approvedMinor} detail={`${preview.paymentTotals.telebirr.count} payments`} />
-        <Stat label="Cancelled orders" value={preview.orderTotals.cancelled.totalMinor} detail={`${preview.orderTotals.cancelled.count} orders`} />
-        <Stat label="Voided orders" value={preview.orderTotals.voided.totalMinor} detail={`${preview.orderTotals.voided.count} orders`} />
+        <Stat label={tr('shifts.recognisedSales')} value={preview.orderTotals.confirmed.totalMinor} detail={tr('shifts.ordersCount', { count: preview.orderTotals.confirmed.count })} />
+        <Stat label={tr('shifts.cashApproved')} value={preview.paymentTotals.cash.approvedMinor} detail={tr('shifts.paymentsCount', { count: preview.paymentTotals.cash.count })} />
+        <Stat label={tr('shifts.bankApproved')} value={preview.paymentTotals.bankTransfer.approvedMinor} detail={tr('shifts.paymentsCount', { count: preview.paymentTotals.bankTransfer.count })} />
+        <Stat label={tr('shifts.telebirrApproved')} value={preview.paymentTotals.telebirr.approvedMinor} detail={tr('shifts.paymentsCount', { count: preview.paymentTotals.telebirr.count })} />
+        <Stat label={tr('shifts.cancelledOrders')} value={preview.orderTotals.cancelled.totalMinor} detail={tr('shifts.ordersCount', { count: preview.orderTotals.cancelled.count })} />
+        <Stat label={tr('shifts.voidedOrders')} value={preview.orderTotals.voided.totalMinor} detail={tr('shifts.ordersCount', { count: preview.orderTotals.voided.count })} />
         <Stat
-          label="Pending payments"
+          label={tr('shifts.pendingPayments')}
           value={preview.orderTotals.pendingPayment.totalMinor}
-          detail={`${preview.orderTotals.pendingPayment.count} orders awaiting payment`}
+          detail={tr('shifts.awaitingPaymentCount', { count: preview.orderTotals.pendingPayment.count })}
         />
         <Stat
-          label="Manual transfers to verify"
+          label={tr('shifts.manualToVerify')}
           value={preview.paymentTotals.manualTransfer.pendingVerificationMinor}
-          detail={`${preview.paymentTotals.manualTransfer.count} transfers`}
+          detail={tr('shifts.transfersCount', { count: preview.paymentTotals.manualTransfer.count })}
         />
       </div>
 
       {preview.shiftReports.length > 0 && (
         <section className="mt-6 rounded-2xl border border-line bg-white p-5 shadow-card">
-          <h2 className="text-lg font-black">Closed cash shifts</h2>
+          <h2 className="text-lg font-black">{tr('shifts.closedShiftsTitle')}</h2>
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-xs uppercase text-ink-muted">
-                  <th className="py-2 pr-4 font-bold">Shift</th>
-                  <th className="py-2 pr-4 font-bold">Opening</th>
-                  <th className="py-2 pr-4 font-bold">Expected</th>
-                  <th className="py-2 pr-4 font-bold">Counted</th>
-                  <th className="py-2 pr-4 font-bold">Variance</th>
-                  <th className="py-2 pr-4 font-bold">Payments</th>
-                  <th className="py-2 font-bold">Orders</th>
+                <tr className="border-b border-line text-start text-xs uppercase text-ink-muted">
+                  <th className="py-2 pe-4 font-bold">{tr('shifts.thShift')}</th>
+                  <th className="py-2 pe-4 font-bold">{tr('shifts.thOpening')}</th>
+                  <th className="py-2 pe-4 font-bold">{tr('shifts.thExpected')}</th>
+                  <th className="py-2 pe-4 font-bold">{tr('shifts.thCounted')}</th>
+                  <th className="py-2 pe-4 font-bold">{tr('shifts.thVariance')}</th>
+                  <th className="py-2 pe-4 font-bold">{tr('shifts.thPayments')}</th>
+                  <th className="py-2 font-bold">{tr('shifts.thOrders')}</th>
                 </tr>
               </thead>
               <tbody>
                 {preview.shiftReports.map((row, index) => (
                   <tr key={row.cashShiftId} className="border-b border-line/60 last:border-0">
-                    <td className="py-2 pr-4 font-bold">Shift {index + 1}</td>
-                    <td className="py-2 pr-4 tabular-nums">{formatEtbMinor(row.openingCashMinor)}</td>
-                    <td className="py-2 pr-4 tabular-nums">{formatEtbMinor(row.expectedCashMinor)}</td>
-                    <td className="py-2 pr-4 tabular-nums">{formatEtbMinor(row.countedCashMinor)}</td>
-                    <td className={`py-2 pr-4 tabular-nums font-bold ${row.varianceMinor !== 0 ? 'text-red-700' : ''}`}>
-                      {formatEtbMinor(row.varianceMinor)}
+                    <td className="py-2 pe-4 font-bold">{tr('shifts.shiftNumber', { n: index + 1 })}</td>
+                    <td className="py-2 pe-4 tabular-nums">{formatCurrency(row.openingCashMinor)}</td>
+                    <td className="py-2 pe-4 tabular-nums">{formatCurrency(row.expectedCashMinor)}</td>
+                    <td className="py-2 pe-4 tabular-nums">{formatCurrency(row.countedCashMinor)}</td>
+                    <td className={`py-2 pe-4 tabular-nums font-bold ${row.varianceMinor !== 0 ? 'text-red-700' : ''}`}>
+                      {formatCurrency(row.varianceMinor)}
                     </td>
-                    <td className="py-2 pr-4 tabular-nums">{row.paymentCount}</td>
+                    <td className="py-2 pe-4 tabular-nums">{row.paymentCount}</td>
                     <td className="py-2 tabular-nums">{row.orderCount}</td>
                   </tr>
                 ))}
@@ -348,14 +348,14 @@ export function DayClosePage() {
       )}
 
       <section className="mt-6 max-w-2xl rounded-2xl border border-line bg-white p-6 shadow-card">
-        <h2 className="text-xl font-black">Close the business day</h2>
+        <h2 className="text-xl font-black">{tr('shifts.closeTitle')}</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          Closing freezes the day&apos;s totals into an immutable report that can be printed later.
+          {tr('shifts.closeHintDay')}
         </p>
 
         {!isOwner ? (
           <p className="mt-4 rounded-xl bg-muted p-4 text-sm font-bold">
-            Only the Owner can close or reopen the business day. You can review every total on this page.
+            {tr('shifts.ownerOnlyClose')}
           </p>
         ) : (
           <div className="mt-4">
@@ -371,18 +371,18 @@ export function DayClosePage() {
                   }}
                   className="mt-1 size-4"
                 />
-                <span>Close with exception anyway (blockers stay documented in the snapshot)</span>
+                <span>{tr('shifts.exceptionCheck')}</span>
               </label>
             )}
             {exception && (
               <label className="mt-4 block text-sm font-black">
-                Why are you closing while blocked?
+                {tr('shifts.closeReasonLabel')}
                 <textarea
                   required
                   maxLength={500}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
-                  placeholder="Required, up to 500 characters"
+                  placeholder={tr('shifts.required500')}
                   className="mt-2 min-h-24 w-full rounded-xl border border-line p-3 font-normal"
                 />
               </label>
@@ -395,16 +395,16 @@ export function DayClosePage() {
                 disabled={!online || (exception && !reason.trim())}
                 onClick={() => void closeDay(exception)}
               >
-                {exception ? 'Close with exception' : 'Close business day'}
+                {tr(exception ? 'shifts.closeWithException' : 'shifts.closeBusinessDay')}
               </Button>
             )}
             {preview.status === 'BLOCKED' && !exception && (
               <p className="mt-4 text-sm text-ink-muted">
-                Resolve the items above, or close with a documented exception.
+                {tr('shifts.resolveHint')}
               </p>
             )}
             {!online && (
-              <p className="mt-4 text-sm font-bold text-red-700">Offline — closing is disabled until the server reconnects.</p>
+              <p className="mt-4 text-sm font-bold text-red-700">{tr('shifts.offlineClosing')}</p>
             )}
           </div>
         )}
@@ -422,17 +422,18 @@ function Header({
   onDateChange: (value: string) => void;
   preview: DayClosePreview;
 }) {
+  const { tr } = useLocale();
   return (
     <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <p className="text-xs font-black uppercase tracking-wider text-brand">Money</p>
-        <h1 className="mt-2 text-3xl font-black">Day close</h1>
+        <p className="text-xs font-black uppercase tracking-wider text-brand">{tr('shifts.dayEyebrow')}</p>
+        <h1 className="mt-2 text-3xl font-black">{tr('shifts.dayPageTitle')}</h1>
         <p className="mt-2 text-sm text-ink-muted">
-          Reconcile cash, payments and orders for one business day, then freeze the totals.
+          {tr('shifts.dayPageDescription')}
         </p>
       </div>
       <label className="text-sm font-black">
-        Business date
+        {tr('shifts.businessDate')}
         <input
           type="date"
           value={dateValue}
@@ -440,7 +441,7 @@ function Header({
           className="mt-2 block min-h-11 rounded-xl border border-line bg-white px-4 font-normal"
         />
         <span className="mt-1 block text-xs font-normal text-ink-muted">
-          {preview.branchTimezone} · cutoff {preview.businessDayCutoffLocal}
+          {tr('shifts.cutoffInfo', { tz: preview.branchTimezone, cutoff: preview.businessDayCutoffLocal })}
         </span>
       </label>
     </header>
@@ -472,6 +473,7 @@ function ClosedSnapshot({
   onToggleReopen: () => void;
   onReopen: () => void;
 }) {
+  const { tr } = useLocale();
   function download() {
     const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -485,62 +487,62 @@ function ClosedSnapshot({
   return (
     <section className="rounded-2xl border border-line bg-white p-6 shadow-card">
       <div className="flex flex-wrap items-center gap-3">
-        <p className="text-xs font-black uppercase tracking-wider text-emerald-700">Business day closed</p>
-        <StatusChip status="success">Closed</StatusChip>
-        {snapshot.closedWithException && <StatusChip status="warning">Closed with exception</StatusChip>}
-        {record.close.status === 'REOPENED' && <StatusChip status="info">Reopened</StatusChip>}
+        <p className="text-xs font-black uppercase tracking-wider text-emerald-700">{tr('shifts.dayClosedEyebrow')}</p>
+        <StatusChip status="success">{tr('status.dayClosed')}</StatusChip>
+        {snapshot.closedWithException && <StatusChip status="warning">{tr('status.dayClosedWithException')}</StatusChip>}
+        {record.close.status === 'REOPENED' && <StatusChip status="info">{tr('status.dayReopened')}</StatusChip>}
       </div>
       <h1 className="mt-2 text-3xl font-black">{snapshot.localBusinessDate}</h1>
       <p className="mt-2 text-sm text-ink-muted">
-        Closed {formatInTz(snapshot.closedAt, tz)} in {tz}.
+        {tr('shifts.closedAtLine', { date: formatInTz(snapshot.closedAt, tz), tz })}
       </p>
       {snapshot.closedWithException && snapshot.reason && (
         <p className="mt-4 rounded-xl bg-amber-50 p-4 text-sm">
-          <b>Exception reason:</b> {snapshot.reason}
+          <b>{tr('shifts.exceptionReasonLabel')}</b> {snapshot.reason}
         </p>
       )}
       {record.close.status === 'REOPENED' && record.close.reopenReason && (
         <p className="mt-4 rounded-xl bg-muted p-4 text-sm">
-          <b>Reopened:</b> {record.close.reopenReason}
+          <b>{tr('shifts.reopenedLabel')}</b> {record.close.reopenReason}
         </p>
       )}
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat label="Recognised sales" value={snapshot.recognizedSalesMinor} detail={`${snapshot.recognizedSalesCount} orders`} />
-        <Stat label="Expected cash" value={snapshot.expectedCashMinor} />
-        <Stat label="Counted cash" value={snapshot.countedCashMinor} />
-        <Stat label="Cash variance" value={snapshot.cashVarianceMinor} danger={snapshot.cashVarianceMinor !== 0} />
-        <Stat label="Bank transfers" value={snapshot.bankTransferTotalMinor} detail={`${snapshot.bankTransferCount} payments`} />
-        <Stat label="Telebirr" value={snapshot.telebirrTotalMinor} detail={`${snapshot.telebirrCount} payments`} />
-        <Stat label="Cancelled orders" value={snapshot.cancelledTotalMinor} detail={`${snapshot.cancelledCount} orders`} />
-        <Stat label="Voided orders" value={snapshot.voidedTotalMinor} detail={`${snapshot.voidedCount} orders`} />
-        <Stat label="Pending payments" value={snapshot.pendingPaymentTotalMinor} detail={`${snapshot.pendingPaymentCount} orders`} />
-        <Stat label="Pending manual transfers" value={snapshot.pendingManualTransferMinor} detail={`${snapshot.pendingManualTransferCount} transfers`} />
+        <Stat label={tr('shifts.recognisedSales')} value={snapshot.recognizedSalesMinor} detail={tr('shifts.ordersCount', { count: snapshot.recognizedSalesCount })} />
+        <Stat label={tr('shifts.expectedCash')} value={snapshot.expectedCashMinor} />
+        <Stat label={tr('shifts.countedCash')} value={snapshot.countedCashMinor} />
+        <Stat label={tr('shifts.cashVariance')} value={snapshot.cashVarianceMinor} danger={snapshot.cashVarianceMinor !== 0} />
+        <Stat label={tr('shifts.bankTransfers')} value={snapshot.bankTransferTotalMinor} detail={tr('shifts.paymentsCount', { count: snapshot.bankTransferCount })} />
+        <Stat label={tr('shifts.telebirrLabel')} value={snapshot.telebirrTotalMinor} detail={tr('shifts.paymentsCount', { count: snapshot.telebirrCount })} />
+        <Stat label={tr('shifts.cancelledOrders')} value={snapshot.cancelledTotalMinor} detail={tr('shifts.ordersCount', { count: snapshot.cancelledCount })} />
+        <Stat label={tr('shifts.voidedOrders')} value={snapshot.voidedTotalMinor} detail={tr('shifts.ordersCount', { count: snapshot.voidedCount })} />
+        <Stat label={tr('shifts.pendingPayments')} value={snapshot.pendingPaymentTotalMinor} detail={tr('shifts.ordersCount', { count: snapshot.pendingPaymentCount })} />
+        <Stat label={tr('shifts.pendingManual')} value={snapshot.pendingManualTransferMinor} detail={tr('shifts.transfersCount', { count: snapshot.pendingManualTransferCount })} />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
         <Button variant="secondary" onClick={() => window.print()}>
-          Print
+          {tr('shifts.print')}
         </Button>
         <Button variant="secondary" onClick={download}>
-          Download
+          {tr('shifts.download')}
         </Button>
         {isOwner && record.close.status === 'CLOSED' && (
           <Button variant="danger" onClick={onToggleReopen}>
-            Reopen day
+            {tr('shifts.reopenDayBtn')}
           </Button>
         )}
       </div>
 
       {isOwner && reopenOpen && record.close.status === 'CLOSED' && (
         <label className="mt-5 block max-w-xl text-sm font-black">
-          Why are you reopening this day?
+          {tr('shifts.reopenLabel')}
           <textarea
             required
             maxLength={500}
             value={reopenReason}
             onChange={(event) => onReopenReasonChange(event.target.value)}
-            placeholder="Required, up to 500 characters"
+            placeholder={tr('shifts.required500')}
             className="mt-2 min-h-24 w-full rounded-xl border border-line p-3 font-normal"
           />
         </label>
@@ -553,12 +555,12 @@ function ClosedSnapshot({
           disabled={!online || !reopenReason.trim()}
           onClick={onReopen}
         >
-          Reopen business day
+          {tr('shifts.reopenBusinessDay')}
         </Button>
       )}
       {!isOwner && (
         <p className="mt-5 rounded-xl bg-muted p-4 text-sm font-bold">
-          Only the Owner can reopen the business day.
+          {tr('shifts.ownerOnlyReopen')}
         </p>
       )}
     </section>
@@ -576,10 +578,11 @@ function Stat({
   detail?: string;
   danger?: boolean;
 }) {
+  const { formatCurrency } = useLocale();
   return (
     <section className="rounded-2xl border border-line bg-white p-5 shadow-card">
       <p className="text-sm font-bold text-ink-muted">{label}</p>
-      <p className={`mt-3 text-xl font-black tabular-nums ${danger ? 'text-red-700' : ''}`}>{formatEtbMinor(value)}</p>
+      <p className={`mt-3 text-xl font-black tabular-nums ${danger ? 'text-red-700' : ''}`}>{formatCurrency(value)}</p>
       {detail && <p className="mt-2 text-xs text-ink-muted">{detail}</p>}
     </section>
   );
@@ -594,6 +597,7 @@ function Alert({ children }: { children: React.ReactNode }) {
 }
 
 function State({ title, detail, retry }: { title: string; detail: string; retry?: () => void }) {
+  const { tr } = useLocale();
   return (
     <section className="grid min-h-72 place-items-center text-center">
       <div>
@@ -601,7 +605,7 @@ function State({ title, detail, retry }: { title: string; detail: string; retry?
         <p className="mt-2 text-sm text-ink-muted">{detail}</p>
         {retry && (
           <button onClick={retry} className="mt-4 min-h-11 rounded-xl bg-dark px-5 font-black text-white">
-            Try again
+            {tr('common.tryAgain')}
           </button>
         )}
       </div>

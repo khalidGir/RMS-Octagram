@@ -20,6 +20,8 @@ import {
   suspendTenant,
   type TenantDetail,
 } from '@/lib/platform-api';
+import { useLocale, type MessageKey } from '@/components/locale-provider';
+import { labelFor, membershipStatusKeys, tenantStatusKeys } from '@/lib/status-labels';
 
 const statusVariant: Record<string, 'success' | 'warning' | 'danger' | 'idle'> = {
   ACTIVE: 'success',
@@ -32,6 +34,14 @@ const memberStatusVariant: Record<string, 'success' | 'warning' | 'danger' | 'id
   INVITED: 'warning',
   SUSPENDED: 'danger',
   REVOKED: 'idle',
+};
+
+const ROLE_KEYS: Record<string, MessageKey> = {
+  OWNER: 'platform.roleOwner',
+  MANAGER: 'platform.roleManager',
+  CASHIER: 'platform.roleCashier',
+  KITCHEN_STAFF: 'platform.roleKitchen',
+  WAITER: 'platform.roleWaiter',
 };
 
 function roleLabel(role: string): string {
@@ -47,36 +57,6 @@ function safeZone(timeZone: string): string {
   }
 }
 
-function formatDate(iso: string | null, timeZone: string): string {
-  if (!iso) return '—';
-  try {
-    return new Date(iso).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      timeZone: safeZone(timeZone),
-    });
-  } catch {
-    return '—';
-  }
-}
-
-function formatDateTime(iso: string | null, timeZone: string): string {
-  if (!iso) return 'Never';
-  try {
-    return new Date(iso).toLocaleString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: safeZone(timeZone),
-    });
-  } catch {
-    return 'Never';
-  }
-}
-
 function initials(name: string | null, fallback: string): string {
   const source = (name ?? fallback).trim();
   const parts = source.split(/\s+/).filter(Boolean);
@@ -87,8 +67,27 @@ function initials(name: string | null, fallback: string): string {
 
 export function TenantDetail() {
   const { accessToken, csrfToken } = useAuth();
+  const { tr, formatDate } = useLocale();
   const params = useParams<{ id: string }>();
   const tenantId = params.id;
+
+  const formatDateInZone = (iso: string | null, timeZone: string): string => {
+    if (!iso) return '—';
+    try {
+      return formatDate(iso, { day: '2-digit', month: 'short', year: 'numeric', timeZone: safeZone(timeZone) });
+    } catch {
+      return '—';
+    }
+  };
+
+  const formatDateTimeInZone = (iso: string | null, timeZone: string): string => {
+    if (!iso) return tr('platform.never');
+    try {
+      return formatDate(iso, { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: safeZone(timeZone) });
+    } catch {
+      return tr('platform.never');
+    }
+  };
 
   const [detail, setDetail] = useState<TenantDetail | null>(null);
   const [featuresEnabled, setFeaturesEnabled] = useState<number | null>(null);
@@ -115,7 +114,7 @@ export function TenantDetail() {
     } catch (err) {
       const message = err instanceof Error ? err.message : '';
       if (message.toLowerCase().includes('not found')) setNotFound(true);
-      else setActionError('Could not load this restaurant. Please try again.');
+      else setActionError(tr('platform.restaurantLoadError'));
     } finally {
       setLoading(false);
     }
@@ -137,7 +136,7 @@ export function TenantDetail() {
       setDetail((prev) => (prev ? { ...prev, status: updated.status } : prev));
     } catch {
       setActionError(
-        `Could not ${detail.status === 'SUSPENDED' ? 'activate' : 'suspend'} ${detail.name}. Please try again.`,
+        tr(detail.status === 'SUSPENDED' ? 'platform.activateError' : 'platform.suspendError', { name: detail.name }),
       );
     } finally {
       setActionLoading(false);
@@ -151,13 +150,13 @@ export function TenantDetail() {
     return (
       <div className="grid min-h-[55vh] place-items-center">
         <div className="max-w-sm rounded-card border border-line bg-white p-8 text-center shadow-card">
-          <p className="text-lg font-extrabold">Restaurant not found</p>
+          <p className="text-lg font-extrabold">{tr('platform.notFoundTitle')}</p>
           <p className="mt-2 text-sm text-ink-muted">
-            This restaurant may have been removed, or the link is wrong.
+            {tr('platform.notFoundDetail')}
           </p>
           <Link href="/platform" className="mt-5 inline-block">
             <Button variant="secondary">
-              <ArrowLeft size={14} /> Back to restaurants
+              <ArrowLeft size={14} /> {tr('platform.backToRestaurants')}
             </Button>
           </Link>
         </div>
@@ -173,23 +172,23 @@ export function TenantDetail() {
         href="/platform"
         className="inline-flex items-center gap-1.5 text-xs font-black text-ink-muted transition hover:text-brand"
       >
-        <ArrowLeft size={14} /> All restaurants
+        <ArrowLeft size={14} /> {tr('platform.allRestaurants')}
       </Link>
 
       <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div className="page-header">
-          <p className="page-eyebrow">Platform / Restaurants</p>
+          <p className="page-eyebrow">{tr('platform.tdEyebrow')}</p>
           <h1 className="page-title flex flex-wrap items-center gap-3">
             {detail.name}
-            <StatusChip status={statusVariant[detail.status] ?? 'idle'}>{detail.status}</StatusChip>
+            <StatusChip status={statusVariant[detail.status] ?? 'idle'}>{labelFor(tenantStatusKeys, detail.status, tr)}</StatusChip>
           </h1>
           <p className="page-description">
-            {detail.slug} · joined {formatDate(detail.createdAt, zone)} · {detail.defaultCurrency} · {zone}
+            {tr('platform.joinedLine', { slug: detail.slug, date: formatDateInZone(detail.createdAt, zone), currency: detail.defaultCurrency, zone })}
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Link href={`/platform/features?tenant=${detail.id}`}>
-            <Button variant="secondary">Manage features</Button>
+            <Button variant="secondary">{tr('platform.manageFeatures')}</Button>
           </Link>
           <Button
             variant={detail.status === 'SUSPENDED' ? 'primary' : 'danger'}
@@ -197,41 +196,41 @@ export function TenantDetail() {
             loading={actionLoading}
             onClick={() => setPendingAction(true)}
           >
-            {detail.status === 'SUSPENDED' ? 'Activate restaurant' : 'Suspend restaurant'}
+            {detail.status === 'SUSPENDED' ? tr('platform.activateConfirm') : tr('platform.suspendConfirm')}
           </Button>
         </div>
       </div>
 
       {actionError && (
-        <Banner variant="danger" title="Action failed" onDismiss={() => setActionError(null)} className="mt-5">
+        <Banner variant="danger" title={tr('platform.actionFailed')} onDismiss={() => setActionError(null)} className="mt-5">
           {actionError}
         </Banner>
       )}
 
       <section className="mt-7 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard label="Team members" value={String(detail._count.memberships)} detail="Owners, managers and staff" tone="brand" />
-        <SummaryCard label="Branches" value={String(detail._count.branches)} detail="Physical locations" tone="dark" />
+        <SummaryCard label={tr('platform.teamMembers')} value={String(detail._count.memberships)} detail={tr('platform.teamMembersDetail')} tone="brand" />
+        <SummaryCard label={tr('platform.branchesLabel')} value={String(detail._count.branches)} detail={tr('platform.branchesDetail')} tone="dark" />
         <SummaryCard
-          label="Features active"
-          value={featuresEnabled === null ? '—' : `${featuresEnabled} of 9`}
-          detail={featuresEnabled === null ? 'Unavailable right now' : 'Enabled for this restaurant'}
+          label={tr('platform.featuresActive')}
+          value={featuresEnabled === null ? '—' : tr('platform.ofTotal', { enabled: featuresEnabled, total: 9 })}
+          detail={featuresEnabled === null ? tr('platform.unavailableNow') : tr('platform.enabledForRestaurant')}
           tone="brand"
         />
-        <SummaryCard label="Member since" value={formatDate(detail.createdAt, zone)} detail={`Timezone ${zone}`} tone="amber" />
+        <SummaryCard label={tr('platform.memberSince')} value={formatDateInZone(detail.createdAt, zone)} detail={tr('platform.timezoneLine', { zone })} tone="amber" />
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-2 xl:items-start">
         <div className="rounded-card border border-line bg-white shadow-card">
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
-            <h2 className="text-sm font-black">Branches</h2>
+            <h2 className="text-sm font-black">{tr('platform.branchesLabel')}</h2>
             <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-black uppercase tracking-wider text-ink-muted">
-              {detail.branches.length} total
+              {tr('platform.totalSuffix', { count: detail.branches.length })}
             </span>
           </div>
           {detail.branches.length === 0 ? (
             <div className="px-5 py-10 text-center">
-              <p className="text-sm font-bold text-ink-muted">No branches yet</p>
-              <p className="mt-1 text-xs text-ink-muted">The owner can create the first branch from the restaurant settings.</p>
+              <p className="text-sm font-bold text-ink-muted">{tr('platform.noBranchesYet')}</p>
+              <p className="mt-1 text-xs text-ink-muted">{tr('platform.noBranchesHint')}</p>
             </div>
           ) : (
             <ul className="divide-y divide-line">
@@ -247,23 +246,23 @@ export function TenantDetail() {
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="truncate text-sm font-black">{branch.name}</p>
                       {!branch.isActive && (
-                        <StatusChip status="idle">Inactive</StatusChip>
+                        <StatusChip status="idle">{tr('platform.inactiveBadge')}</StatusChip>
                       )}
                     </div>
                     <p className="mt-0.5 truncate text-xs text-ink-muted">
                       /{branch.slug}
                       {branch.publicSlug && (
                         <>
-                          {' · '}Order link: <span className="font-semibold text-brand">/r/{branch.publicSlug}</span>
+                          {' · '}{tr('platform.orderLinkLabel')} <span className="font-semibold text-brand">/r/{branch.publicSlug}</span>
                         </>
                       )}
                     </p>
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="shrink-0 text-end">
                     <StatusChip status={branch.isActive ? 'success' : 'idle'}>
-                      {branch.isActive ? 'Active' : 'Off'}
+                      {branch.isActive ? tr('platform.activeBadge') : tr('platform.offBadge')}
                     </StatusChip>
-                    <p className="mt-1 text-[11px] text-ink-muted">{formatDate(branch.createdAt, zone)}</p>
+                    <p className="mt-1 text-[11px] text-ink-muted">{formatDateInZone(branch.createdAt, zone)}</p>
                   </div>
                 </li>
               ))}
@@ -273,15 +272,15 @@ export function TenantDetail() {
 
         <div className="rounded-card border border-line bg-white shadow-card">
           <div className="flex items-center justify-between border-b border-line px-5 py-4">
-            <h2 className="text-sm font-black">Team members</h2>
+            <h2 className="text-sm font-black">{tr('platform.teamMembers')}</h2>
             <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-black uppercase tracking-wider text-ink-muted">
-              {detail.memberships.length} total
+              {tr('platform.totalSuffix', { count: detail.memberships.length })}
             </span>
           </div>
           {detail.memberships.length === 0 ? (
             <div className="px-5 py-10 text-center">
-              <p className="text-sm font-bold text-ink-muted">No team members yet</p>
-              <p className="mt-1 text-xs text-ink-muted">Members appear here after they are invited to this restaurant.</p>
+              <p className="text-sm font-bold text-ink-muted">{tr('platform.noMembersYet')}</p>
+              <p className="mt-1 text-xs text-ink-muted">{tr('platform.noMembersHint')}</p>
             </div>
           ) : (
             <ul className="divide-y divide-line">
@@ -295,21 +294,21 @@ export function TenantDetail() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-sm font-black">
-                          {member.user.displayName ?? contact ?? 'Unnamed member'}
+                          {member.user.displayName ?? contact ?? tr('platform.unnamedMember')}
                         </p>
                         <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-brand">
-                          {roleLabel(member.role)}
+                          {ROLE_KEYS[member.role] ? tr(ROLE_KEYS[member.role]) : roleLabel(member.role)}
                         </span>
                       </div>
                       <p className="mt-0.5 truncate text-xs text-ink-muted">
-                        {contact ?? 'No contact on file'} · last sign-in {formatDateTime(member.user.lastLoginAt, zone)}
+                        {contact ?? tr('platform.noContact')} · {tr('platform.lastSignIn', { when: formatDateTimeInZone(member.user.lastLoginAt, zone) })}
                       </p>
                     </div>
-                    <div className="shrink-0 text-right">
+                    <div className="shrink-0 text-end">
                       <StatusChip status={memberStatusVariant[member.status] ?? 'idle'}>
-                        {member.status}
+                        {labelFor(membershipStatusKeys, member.status, tr)}
                       </StatusChip>
-                      <p className="mt-1 text-[11px] text-ink-muted">Joined {formatDate(member.createdAt, zone)}</p>
+                      <p className="mt-1 text-[11px] text-ink-muted">{tr('platform.joined', { date: formatDateInZone(member.createdAt, zone) })}</p>
                     </div>
                   </li>
                 );
@@ -322,13 +321,13 @@ export function TenantDetail() {
       <ConfirmDialog
         open={pendingAction}
         onOpenChange={setPendingAction}
-        title={`${detail.status === 'SUSPENDED' ? 'Activate' : 'Suspend'} ${detail.name}?`}
+        title={tr(detail.status === 'SUSPENDED' ? 'platform.activateTitle' : 'platform.suspendTitle', { name: detail.name })}
         description={
           detail.status === 'SUSPENDED'
-            ? 'Staff of this restaurant will be able to sign in and use the platform again.'
-            : 'All users of this restaurant will lose access until the account is reactivated. Existing data is kept.'
+            ? tr('platform.activateDesc')
+            : tr('platform.suspendDesc')
         }
-        confirmLabel={detail.status === 'SUSPENDED' ? 'Activate restaurant' : 'Suspend restaurant'}
+        confirmLabel={detail.status === 'SUSPENDED' ? tr('platform.activateConfirm') : tr('platform.suspendConfirm')}
         variant={detail.status === 'SUSPENDED' ? 'primary' : 'danger'}
         onConfirm={() => void handleToggle()}
       />

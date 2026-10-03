@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useKitchens } from '@/lib/use-kitchen-config';
+import { LocaleProvider } from '@/components/locale-provider';
 import { KitchenList } from './kitchen-list';
 
 vi.mock('@/lib/use-kitchen-config', () => ({
@@ -20,7 +21,11 @@ const mockUseKitchens = vi.mocked(useKitchens);
 
 function renderWithProviders(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  return render(
+    <LocaleProvider>
+      <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
+    </LocaleProvider>
+  );
 }
 
 describe('KitchenList', () => {

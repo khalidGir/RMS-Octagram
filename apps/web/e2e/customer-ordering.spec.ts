@@ -57,7 +57,7 @@ test.describe('Customer ordering journey', () => {
               pickupEnabled: true,
               availablePaymentMethods: ['BANK_TRANSFER', 'TELEBIRR'],
             },
-            lines: [{ variantId: simpleVariantId, name: 'Water', priceMinor: '5000', quantity: 2 }],
+            lines: [{ variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 2 }],
             quotedSubtotal: '10000',
           }),
         );
@@ -85,7 +85,7 @@ test.describe('Customer ordering journey', () => {
               pickupEnabled: true,
               availablePaymentMethods: ['BANK_TRANSFER', 'TELEBIRR'],
             },
-            lines: [{ variantId: simpleVariantId, name: 'Water', priceMinor: '5000', quantity: 1 }],
+            lines: [{ variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 1 }],
             quotedSubtotal: '5000',
           }),
         );
@@ -114,7 +114,7 @@ test.describe('Customer ordering journey', () => {
               pickupEnabled: true,
               availablePaymentMethods: ['BANK_TRANSFER', 'TELEBIRR'],
             },
-            lines: [{ variantId: simpleVariantId, name: 'Water', priceMinor: '5000', quantity: 1 }],
+            lines: [{ variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 1 }],
             quotedSubtotal: '5000',
           }),
         );
@@ -154,7 +154,7 @@ test.describe('Customer ordering journey', () => {
               pickupEnabled: true,
               availablePaymentMethods: ['BANK_TRANSFER', 'TELEBIRR'],
             },
-            lines: [{ variantId: simpleVariantId, name: 'Water', priceMinor: '5000', quantity: 1 }],
+            lines: [{ variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 1 }],
             quotedSubtotal: '5000',
           }),
         );

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as baseRender, screen, fireEvent } from '@testing-library/react';
+import { LocaleProvider } from '@/components/locale-provider';
 import { MoreSheet } from './more-sheet';
+
+const render = (ui: React.ReactElement) => baseRender(<LocaleProvider>{ui}</LocaleProvider>);
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/tables',

@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/cn';
 import { navItems, activeNavHrefs, moreMobileNav } from './nav-config';
 import type { AppRole } from '@/components/staff-shell';
+import { useLocale } from '@/components/locale-provider';
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ export function MoreSheet({
   onClose: () => void;
 }) {
   const pathname = usePathname();
+  const { tr } = useLocale();
   const fullVisible = navItems.filter((item) =>
     (item.roles as readonly string[]).includes(role),
   );
@@ -31,15 +33,15 @@ export function MoreSheet({
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
         className="bottom-0 top-auto left-0 right-0 translate-x-0 translate-y-0 max-h-[70vh] overflow-y-auto rounded-t-2xl border-t border-black/10 p-4 lg:hidden"
-        aria-label="More navigation"
+        aria-label={tr('navigation.moreNav')}
       >
-        <DialogTitle className="text-sm font-black">More</DialogTitle>
-        <nav className="mt-3 space-y-1" aria-label="More navigation options">
+        <DialogTitle className="text-sm font-black">{tr('navigation.more')}</DialogTitle>
+        <nav className="mt-3 space-y-1" aria-label={tr('navigation.moreOptions')}>
           {visibleNav.map((item) => {
             const active = activeSet.has(item.href);
             return (
               <Link
-                key={item.label}
+                key={item.href}
                 href={item.href}
                 onClick={onClose}
                 className={cn(
@@ -48,7 +50,7 @@ export function MoreSheet({
                 )}
               >
                 <item.icon size={20} aria-hidden="true" />
-                {item.label}
+                {tr(item.labelKey)}
               </Link>
             );
           })}

@@ -1,6 +1,8 @@
 import type { AppRole } from '@/components/staff-shell';
 import type { Route } from 'next';
 
+import type { MessageKey } from '@/locales';
+
 import {
   LayoutDashboard, ShoppingCart, ClipboardList, CreditCard, ChefHat, UtensilsCrossed,
   Grid3x3, Wallet, Utensils, Package, BarChart3, Users, Settings, Shield, ToggleLeft,
@@ -11,6 +13,7 @@ export type NavGroup = 'Serve' | 'Kitchen' | 'Money' | 'Manage' | 'Platform';
 
 export type NavItem = {
   label: string;
+  labelKey: MessageKey;
   icon: typeof LayoutDashboard;
   href: Route;
   roles: readonly AppRole[];
@@ -19,37 +22,45 @@ export type NavItem = {
 };
 
 export const navItems: NavItem[] = [
-  { label: 'Overview', icon: LayoutDashboard, href: '/dashboard', roles: ['OWNER', 'MANAGER'], group: 'Serve', mobileOrder: 0 },
-  { label: 'Point of sale', icon: ShoppingCart, href: '/pos', roles: ['OWNER', 'MANAGER', 'CASHIER'], group: 'Serve', mobileOrder: 1 },
-  { label: 'Orders', icon: ClipboardList, href: '/orders', roles: ['OWNER', 'MANAGER', 'CASHIER'], group: 'Serve', mobileOrder: 2 },
-  { label: 'Tables & QR', icon: Grid3x3, href: '/tables', roles: ['OWNER', 'MANAGER'], group: 'Serve' },
-  { label: 'Waiter workspace', icon: UtensilsCrossed, href: '/waiter', roles: ['WAITER'], group: 'Serve', mobileOrder: 1 },
+  { label: 'Overview', labelKey: 'navigation.navOverview', icon: LayoutDashboard, href: '/dashboard', roles: ['OWNER', 'MANAGER'], group: 'Serve', mobileOrder: 0 },
+  { label: 'Point of sale', labelKey: 'navigation.navPos', icon: ShoppingCart, href: '/pos', roles: ['OWNER', 'MANAGER', 'CASHIER'], group: 'Serve', mobileOrder: 1 },
+  { label: 'Orders', labelKey: 'navigation.navOrders', icon: ClipboardList, href: '/orders', roles: ['OWNER', 'MANAGER', 'CASHIER'], group: 'Serve', mobileOrder: 2 },
+  { label: 'Tables & QR', labelKey: 'navigation.navTables', icon: Grid3x3, href: '/tables', roles: ['OWNER', 'MANAGER'], group: 'Serve' },
+  { label: 'Waiter workspace', labelKey: 'navigation.navWaiter', icon: UtensilsCrossed, href: '/waiter', roles: ['WAITER'], group: 'Serve', mobileOrder: 1 },
 
-  { label: 'Kitchen display', icon: ChefHat, href: '/kitchen', roles: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'], group: 'Kitchen', mobileOrder: 1 },
-  { label: 'Expo', icon: Eye, href: '/expo' as Route, roles: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'], group: 'Kitchen', mobileOrder: 1 },
+  { label: 'Kitchen display', labelKey: 'navigation.navKitchenDisplay', icon: ChefHat, href: '/kitchen', roles: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'], group: 'Kitchen', mobileOrder: 1 },
+  { label: 'Expo', labelKey: 'navigation.navExpo', icon: Eye, href: '/expo' as Route, roles: ['OWNER', 'MANAGER', 'KITCHEN_STAFF'], group: 'Kitchen', mobileOrder: 1 },
 
-  { label: 'Payment review', icon: CreditCard, href: '/payments', roles: ['OWNER'], group: 'Money', mobileOrder: 3 },
-  { label: 'My cash shift', icon: Wallet, href: '/shifts', roles: ['OWNER', 'MANAGER', 'CASHIER'], group: 'Money' },
-  { label: 'Day close', icon: CalendarCheck, href: '/day-close' as Route, roles: ['OWNER', 'MANAGER'], group: 'Money' },
-  { label: 'Reports', icon: BarChart3, href: '/reports', roles: ['OWNER', 'MANAGER'], group: 'Money' },
+  { label: 'Payment review', labelKey: 'navigation.navPayments', icon: CreditCard, href: '/payments', roles: ['OWNER'], group: 'Money', mobileOrder: 3 },
+  { label: 'My cash shift', labelKey: 'navigation.navShift', icon: Wallet, href: '/shifts', roles: ['OWNER', 'MANAGER', 'CASHIER'], group: 'Money' },
+  { label: 'Day close', labelKey: 'navigation.navDayClose', icon: CalendarCheck, href: '/day-close' as Route, roles: ['OWNER', 'MANAGER'], group: 'Money' },
+  { label: 'Reports', labelKey: 'navigation.navReports', icon: BarChart3, href: '/reports', roles: ['OWNER', 'MANAGER'], group: 'Money' },
 
-  { label: 'Menu', icon: Utensils, href: '/menu', roles: ['OWNER', 'MANAGER'], group: 'Manage' },
-  { label: 'Inventory', icon: Package, href: '/inventory', roles: ['OWNER', 'MANAGER'], group: 'Manage' },
-  { label: 'Kitchen config', icon: Coffee, href: '/kitchen/config' as Route, roles: ['OWNER', 'MANAGER'], group: 'Manage' },
-  { label: 'Team & branches', icon: Users, href: '/team', roles: ['OWNER', 'MANAGER'], group: 'Manage' },
-  { label: 'Settings', icon: Settings, href: '/settings', roles: ['OWNER', 'MANAGER'], group: 'Manage' },
+  { label: 'Menu', labelKey: 'navigation.navMenu', icon: Utensils, href: '/menu', roles: ['OWNER', 'MANAGER'], group: 'Manage' },
+  { label: 'Inventory', labelKey: 'navigation.navInventory', icon: Package, href: '/inventory', roles: ['OWNER', 'MANAGER'], group: 'Manage' },
+  { label: 'Kitchen config', labelKey: 'navigation.navKitchenConfig', icon: Coffee, href: '/kitchen/config' as Route, roles: ['OWNER', 'MANAGER'], group: 'Manage' },
+  { label: 'Team & branches', labelKey: 'navigation.navTeam', icon: Users, href: '/team', roles: ['OWNER', 'MANAGER'], group: 'Manage' },
+  { label: 'Settings', labelKey: 'navigation.navSettings', icon: Settings, href: '/settings', roles: ['OWNER', 'MANAGER'], group: 'Manage' },
 
-  { label: 'Platform', icon: Shield, href: '/platform', roles: ['SUPER_ADMIN'], group: 'Platform' },
-  { label: 'Feature control', icon: ToggleLeft, href: '/platform/features', roles: ['SUPER_ADMIN'], group: 'Platform' },
+  { label: 'Platform', labelKey: 'navigation.navPlatform', icon: Shield, href: '/platform', roles: ['SUPER_ADMIN'], group: 'Platform' },
+  { label: 'Feature control', labelKey: 'navigation.navFeatures', icon: ToggleLeft, href: '/platform/features', roles: ['SUPER_ADMIN'], group: 'Platform' },
 ] as const;
 
-export const roleLabels: Record<AppRole, string> = {
-  OWNER: 'Owner',
-  MANAGER: 'Manager',
-  CASHIER: 'Cashier',
-  KITCHEN_STAFF: 'Kitchen staff',
-  WAITER: 'Waiter',
-  SUPER_ADMIN: 'Super admin',
+export const roleKeys: Record<AppRole, MessageKey> = {
+  OWNER: 'navigation.roleOwner',
+  MANAGER: 'navigation.roleManager',
+  CASHIER: 'navigation.roleCashier',
+  KITCHEN_STAFF: 'navigation.roleKitchen',
+  WAITER: 'navigation.roleWaiter',
+  SUPER_ADMIN: 'navigation.roleSuperAdmin',
+};
+
+export const groupKeys: Record<NavGroup, MessageKey> = {
+  Serve: 'navigation.groupServe',
+  Kitchen: 'navigation.groupKitchen',
+  Money: 'navigation.groupMoney',
+  Manage: 'navigation.groupManage',
+  Platform: 'navigation.groupPlatform',
 };
 
 function byMobileOrder(a: NavItem, b: NavItem): number {

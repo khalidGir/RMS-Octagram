@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render as baseRender, screen, fireEvent } from '@testing-library/react';
+import { LocaleProvider } from '@/components/locale-provider';
 import { BranchPicker } from './branch-picker';
 import type { BranchOption } from './branch-provider';
+
+const render = (ui: React.ReactElement) => baseRender(<LocaleProvider>{ui}</LocaleProvider>);
 
 const branches: BranchOption[] = [
   { id: 'b1', name: 'Main Branch', slug: 'main', isActive: true },

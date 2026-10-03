@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useStations, useCreateStation, useUpdateStation, useDeleteStation } from '@/lib/use-kitchen-config';
 import { Button, Dialog, DialogContent, DialogTitle, TextField, Switch } from '@/components/ui';
+import { useLocale } from '@/components/locale-provider';
 import type { KitchenStation } from '@/lib/fulfillment-types';
 
 interface StationManagerProps {
@@ -12,6 +13,7 @@ interface StationManagerProps {
 
 export function StationManager({ kitchenId, kitchenName }: StationManagerProps) {
   const { data: stations = [], isLoading } = useStations(kitchenId);
+  const { tr } = useLocale();
   const createStation = useCreateStation();
   const updateStation = useUpdateStation();
   const deleteStation = useDeleteStation();
@@ -57,8 +59,8 @@ export function StationManager({ kitchenId, kitchenName }: StationManagerProps) 
     e.preventDefault();
     const trimmedName = sName.trim();
     const trimmedCode = code.trim();
-    if (!trimmedName) return setError('Enter a station name.');
-    if (!trimmedCode) return setError('Enter a station code.');
+    if (!trimmedName) return setError(tr('kitchen.enterStationName'));
+    if (!trimmedCode) return setError(tr('kitchen.enterStationCode'));
     setBusy(true);
     setError(null);
     try {
@@ -73,7 +75,7 @@ export function StationManager({ kitchenId, kitchenName }: StationManagerProps) 
       setShowCreate(false);
       resetForm();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not create station.');
+      setError(err instanceof Error ? err.message : tr('kitchen.createStationFailed'));
     } finally {
       setBusy(false);
     }
@@ -84,8 +86,8 @@ export function StationManager({ kitchenId, kitchenName }: StationManagerProps) 
     if (!editing) return;
     const trimmedName = sName.trim();
     const trimmedCode = code.trim();
-    if (!trimmedName) return setError('Enter a station name.');
-    if (!trimmedCode) return setError('Enter a station code.');
+    if (!trimmedName) return setError(tr('kitchen.enterStationName'));
+    if (!trimmedCode) return setError(tr('kitchen.enterStationCode'));
     setBusy(true);
     setError(null);
     try {
@@ -100,7 +102,7 @@ export function StationManager({ kitchenId, kitchenName }: StationManagerProps) 
       setEditing(null);
       resetForm();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not update station.');
+      setError(err instanceof Error ? err.message : tr('kitchen.updateStationFailed'));
     } finally {
       setBusy(false);
     }
@@ -113,43 +115,43 @@ export function StationManager({ kitchenId, kitchenName }: StationManagerProps) 
       await deleteStation.mutateAsync(deleteTarget.id);
       setDeleteTarget(null);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not delete station.');
+      setError(err instanceof Error ? err.message : tr('kitchen.deleteStationFailed'));
     } finally {
       setBusy(false);
     }
   }
 
   if (isLoading) {
-    return <p className="py-8 text-center text-sm font-bold text-ink-muted">Loading stations...</p>;
+    return <p className="py-8 text-center text-sm font-bold text-ink-muted">{tr('kitchen.loadingStations')}</p>;
   }
 
   return (
     <>
       <div className="flex items-center justify-between">
         <p className="text-sm text-ink-muted">
-          {stations.length} station{stations.length !== 1 ? 's' : ''} in {kitchenName}
+          {tr('kitchen.stationsInKitchen', { count: stations.length, kitchen: kitchenName })}
         </p>
-        <Button onClick={openCreate}>Add station</Button>
+        <Button onClick={openCreate}>{tr('kitchen.addStation')}</Button>
       </div>
 
       {stations.length === 0 ? (
         <div className="mt-4 grid min-h-48 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
           <div>
-            <p className="text-lg font-black">No stations yet</p>
-            <p className="mt-2 text-sm text-ink-muted">Add a station to this kitchen.</p>
+            <p className="text-lg font-black">{tr('kitchen.noStations')}</p>
+            <p className="mt-2 text-sm text-ink-muted">{tr('kitchen.noStationsHint')}</p>
           </div>
         </div>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-2xl border border-black/[.07] bg-white shadow-sm">
-          <table className="w-full min-w-[600px] text-left">
+          <table className="w-full min-w-[600px] text-start">
             <thead>
               <tr className="text-xs uppercase tracking-wider text-ink-muted">
-                <th className="px-5 py-4">Name</th>
-                <th className="px-5 py-4">Code</th>
-                <th className="px-5 py-4">Prep (min)</th>
-                <th className="px-5 py-4">Expo</th>
-                <th className="px-5 py-4">Collection Override</th>
-                <th className="px-5 py-4 text-right">Actions</th>
+                <th className="px-5 py-4">{tr('kitchen.colName')}</th>
+                <th className="px-5 py-4">{tr('kitchen.colCode')}</th>
+                <th className="px-5 py-4">{tr('kitchen.colPrep')}</th>
+                <th className="px-5 py-4">{tr('kitchen.colExpo')}</th>
+                <th className="px-5 py-4">{tr('kitchen.colCollectionOverride')}</th>
+                <th className="px-5 py-4 text-end">{tr('kitchen.colActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -160,10 +162,10 @@ export function StationManager({ kitchenId, kitchenName }: StationManagerProps) 
                   <td className="px-5 py-4">{s.defaultPrepMinutes ?? '—'}</td>
                   <td className="px-5 py-4">{s.isExpo ? '✓' : '—'}</td>
                   <td className="px-5 py-4 text-ink-muted">{s.collectionLabelOverride ?? '—'}</td>
-                  <td className="px-5 py-4 text-right">
+                  <td className="px-5 py-4 text-end">
                     <div className="flex justify-end gap-2">
-                      <Button variant="secondary" onClick={() => openEdit(s)}>Edit</Button>
-                      <Button variant="danger" onClick={() => setDeleteTarget(s)}>Delete</Button>
+                      <Button variant="secondary" onClick={() => openEdit(s)}>{tr('kitchen.edit')}</Button>
+                      <Button variant="danger" onClick={() => setDeleteTarget(s)}>{tr('kitchen.delete')}</Button>
                     </div>
                   </td>
                 </tr>
@@ -175,20 +177,20 @@ export function StationManager({ kitchenId, kitchenName }: StationManagerProps) 
 
       {showCreate && (
         <Dialog open onOpenChange={(o) => { if (!o) { setShowCreate(false); resetForm(); } }}>
-          <DialogContent className="max-w-lg" aria-label="Add station">
-            <DialogTitle>Add station to {kitchenName}</DialogTitle>
+          <DialogContent className="max-w-lg" aria-label={tr('kitchen.addStation')}>
+            <DialogTitle>{tr('kitchen.addStationTo', { kitchen: kitchenName })}</DialogTitle>
             <form onSubmit={handleCreate} className="mt-4 grid gap-4">
-              <TextField label="Station name" value={sName} onChange={(e) => setSName(e.target.value)} required />
-              <TextField label="Station code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. GRILL" required />
-              <TextField label="Default prep time (minutes)" value={prepMinutes} onChange={(e) => setPrepMinutes(e.target.value)} type="number" />
+              <TextField label={tr('kitchen.stationName')} value={sName} onChange={(e) => setSName(e.target.value)} required />
+              <TextField label={tr('kitchen.stationCode')} value={code} onChange={(e) => setCode(e.target.value)} placeholder={tr('kitchen.stationCodePlaceholder')} required />
+              <TextField label={tr('kitchen.prepTime')} value={prepMinutes} onChange={(e) => setPrepMinutes(e.target.value)} type="number" />
               <div className="flex items-center gap-3">
-                <Switch label="Expo station" checked={isExpo} onCheckedChange={setIsExpo} />
+                <Switch label={tr('kitchen.expoStation')} checked={isExpo} onCheckedChange={setIsExpo} />
               </div>
-              <TextField label="Collection label override (optional)" value={collectionOverride} onChange={(e) => setCollectionOverride(e.target.value)} placeholder="e.g. Grill pass" />
+              <TextField label={tr('kitchen.collectionOverride')} value={collectionOverride} onChange={(e) => setCollectionOverride(e.target.value)} placeholder={tr('kitchen.collectionOverridePlaceholder')} />
               {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">{error}</div>}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={() => { setShowCreate(false); resetForm(); }}>Cancel</Button>
-                <Button type="submit" disabled={busy}>{busy ? 'Creating...' : 'Create'}</Button>
+                <Button type="button" variant="secondary" onClick={() => { setShowCreate(false); resetForm(); }}>{tr('kitchen.cancel')}</Button>
+                <Button type="submit" disabled={busy}>{busy ? tr('kitchen.creating') : tr('kitchen.create')}</Button>
               </div>
             </form>
           </DialogContent>
@@ -197,20 +199,20 @@ export function StationManager({ kitchenId, kitchenName }: StationManagerProps) 
 
       {editing && (
         <Dialog open onOpenChange={(o) => { if (!o) { setEditing(null); resetForm(); } }}>
-          <DialogContent className="max-w-lg" aria-label="Edit station">
-            <DialogTitle>Edit station</DialogTitle>
+          <DialogContent className="max-w-lg" aria-label={tr('kitchen.editStation')}>
+            <DialogTitle>{tr('kitchen.editStation')}</DialogTitle>
             <form onSubmit={handleUpdate} className="mt-4 grid gap-4">
-              <TextField label="Station name" value={sName} onChange={(e) => setSName(e.target.value)} required />
-              <TextField label="Station code" value={code} onChange={(e) => setCode(e.target.value)} required />
-              <TextField label="Default prep time (minutes)" value={prepMinutes} onChange={(e) => setPrepMinutes(e.target.value)} type="number" />
+              <TextField label={tr('kitchen.stationName')} value={sName} onChange={(e) => setSName(e.target.value)} required />
+              <TextField label={tr('kitchen.stationCode')} value={code} onChange={(e) => setCode(e.target.value)} required />
+              <TextField label={tr('kitchen.prepTime')} value={prepMinutes} onChange={(e) => setPrepMinutes(e.target.value)} type="number" />
               <div className="flex items-center gap-3">
-                <Switch label="Expo station" checked={isExpo} onCheckedChange={setIsExpo} />
+                <Switch label={tr('kitchen.expoStation')} checked={isExpo} onCheckedChange={setIsExpo} />
               </div>
-              <TextField label="Collection label override (optional)" value={collectionOverride} onChange={(e) => setCollectionOverride(e.target.value)} />
+              <TextField label={tr('kitchen.collectionOverride')} value={collectionOverride} onChange={(e) => setCollectionOverride(e.target.value)} />
               {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">{error}</div>}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={() => { setEditing(null); resetForm(); }}>Cancel</Button>
-                <Button type="submit" disabled={busy}>{busy ? 'Saving...' : 'Save'}</Button>
+                <Button type="button" variant="secondary" onClick={() => { setEditing(null); resetForm(); }}>{tr('kitchen.cancel')}</Button>
+                <Button type="submit" disabled={busy}>{busy ? tr('kitchen.saving') : tr('kitchen.save')}</Button>
               </div>
             </form>
           </DialogContent>
@@ -219,15 +221,15 @@ export function StationManager({ kitchenId, kitchenName }: StationManagerProps) 
 
       {deleteTarget && (
         <Dialog open onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
-          <DialogContent className="max-w-md" aria-label="Delete station">
-            <DialogTitle>Delete station</DialogTitle>
+          <DialogContent className="max-w-md" aria-label={tr('kitchen.deleteStation')}>
+            <DialogTitle>{tr('kitchen.deleteStation')}</DialogTitle>
             <p className="mt-2 text-sm text-ink-muted">
-              Are you sure you want to delete <strong>{deleteTarget.name}</strong>? All routes assigned to this station will be removed.
+              {tr('kitchen.deleteConfirmPrefix')}<strong>{deleteTarget.name}</strong>{tr('kitchen.deleteStationConfirmSuffix')}
             </p>
             {error && <div role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">{error}</div>}
             <div className="mt-4 flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-              <Button variant="danger" onClick={handleDelete} disabled={busy}>{busy ? 'Deleting...' : 'Delete'}</Button>
+              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>{tr('kitchen.cancel')}</Button>
+              <Button variant="danger" onClick={handleDelete} disabled={busy}>{busy ? tr('kitchen.deleting') : tr('kitchen.delete')}</Button>
             </div>
           </DialogContent>
         </Dialog>

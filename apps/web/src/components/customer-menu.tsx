@@ -1,10 +1,13 @@
 'use client';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
+import type { Route } from 'next';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { apiRequest, formatEtbMinor, type ApiEnvelope } from '@/lib/api-client';
+import { apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { normalizePublicMenu } from '@/lib/public-menu';
+import { LanguagePicker } from './language-picker';
+import { useLocale } from './locale-provider';
 
 interface ApiVariant { id: string; name: string; basePriceMinor: string; isDefault: boolean }
 interface ApiModifierOption { id: string; name: string; priceDeltaMinor: string }
@@ -36,6 +39,8 @@ function toneFor(index: number): string {
 export function CustomerMenu() {
   const params = useParams<{ branchSlug: string }>();
   const branchSlug = params.branchSlug;
+  const router = useRouter();
+  const { tr, formatCurrency } = useLocale();
   const [categoryId, setCategoryId] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
@@ -93,11 +98,11 @@ export function CustomerMenu() {
       quotedSubtotal: subtotal.toString(),
     };
     window.sessionStorage.setItem('rms-public-cart', JSON.stringify(payload));
-    window.location.assign(`/r/${encodeURIComponent(branchSlug!)}/checkout`);
+    router.push(`/r/${encodeURIComponent(branchSlug!)}/checkout` as Route);
   }
 
-  if (query.isLoading) return <StateScreen title="Loading menu…" detail="Checking current prices and availability." />;
-  if (query.isError || !menu) return <StateScreen title="Menu unavailable" detail="Please ask restaurant staff for a current ordering link." retry={() => void query.refetch()} />;
+  if (query.isLoading) return <StateScreen title={tr('ordering.loadingMenu')} detail={tr('ordering.loadingMenuDetail')} />;
+  if (query.isError || !menu) return <StateScreen title={tr('ordering.menuUnavailable')} detail={tr('ordering.linkHelp')} retry={() => void query.refetch()} />;
 
   return (
     <main className="min-h-screen bg-surface-warm pb-24 lg:pb-8">
@@ -107,17 +112,18 @@ export function CustomerMenu() {
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand text-sm font-black text-white shadow-lg shadow-brand/20">{menu.tenant.name[0]}</span>
             <span className="leading-none"><span className="block text-[15px] font-extrabold tracking-[-0.02em]">{menu.tenant.name}</span><span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted">{menu.branch.name}</span></span>
           </Link>
-          <button onClick={() => setCartOpen(true)} aria-label={`Open cart with ${count} items`} className="relative grid size-11 place-items-center rounded-xl bg-dark text-white">
-            ▢{count > 0 && <span className="absolute -right-1 -top-1 grid size-5 place-items-center rounded-full bg-brand text-[9px] font-black">{count}</span>}
-          </button>
+          <div className="flex items-center gap-2"><LanguagePicker compact />
+          <button onClick={() => setCartOpen(true)} aria-label={tr('ordering.openCartCount', { count })} className="relative grid size-11 place-items-center rounded-xl bg-dark text-white">
+            ▢{count > 0 && <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-brand text-[9px] font-black">{count}</span>}
+          </button></div>
         </div>
       </header>
 
       <section className="bg-dark-muted px-4 py-10 text-white">
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-black uppercase tracking-[.18em] text-accent-gold">{menu.branch.name} · Pickup</p>
-          <h1 className="mt-3 max-w-2xl text-4xl font-black tracking-[-.05em] sm:text-5xl">Made with warmth.<br/>Served with pride.</h1>
-          <p className="mt-4 text-sm text-white/60">Order ahead for pickup · Payment by bank transfer or Telebirr</p>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-accent-gold">{tr('ordering.branchPickup', { branch: menu.branch.name })}</p>
+          <h1 className="mt-3 max-w-2xl text-4xl font-black tracking-[-.05em] sm:text-5xl">{tr('ordering.heroLine1')}<br />{tr('ordering.heroLine2')}</h1>
+          <p className="mt-4 text-sm text-white/60">{tr('ordering.pickupTagline')}</p>
         </div>
       </section>
 
@@ -127,7 +133,7 @@ export function CustomerMenu() {
         </div>
         <div className="grid gap-6 py-7 lg:grid-cols-[1fr_360px]">
           <section>
-            <p className="text-xs font-black uppercase tracking-[.16em] text-brand">Explore the menu</p>
+            <p className="text-xs font-black uppercase tracking-[.16em] text-brand">{tr('ordering.exploreMenu')}</p>
             <h2 className="mt-2 text-2xl font-black">{category?.name}</h2>
             {query.isLoading ? <div className="mt-5 grid gap-4 sm:grid-cols-2">{Array.from({ length: 6 }, (_, i) => <div className="h-40 animate-pulse rounded-xl bg-white" key={i} />)}</div>
               : category?.items.length === 0 ? <p className="mt-5 rounded-xl border border-line bg-white p-6 text-center text-sm font-bold text-ink-muted">No items in this category yet.</p>
@@ -142,8 +148,8 @@ export function CustomerMenu() {
                     <h3 className="font-black">{item.name}</h3>
                     <p className="mt-1 text-xs leading-5 text-ink-muted">{item.description}</p>
                     <div className="mt-auto flex items-center justify-between">
-                      <b className="text-brand">{variant ? formatEtbMinor(variant.basePriceMinor) : 'Unavailable'}</b>
-                      <button disabled={!variant || needsOptions} onClick={() => add(item)} aria-label={`Add ${item.name}`} className="grid size-10 place-items-center rounded-xl bg-muted text-xl font-black text-brand disabled:bg-stone-200 disabled:text-stone-400">{variant && !needsOptions ? '+' : '...'}</button>
+                      <b className="text-brand">{variant ? formatCurrency(variant.basePriceMinor) : tr('ordering.itemUnavailable')}</b>
+                      <button disabled={!variant || needsOptions} onClick={() => add(item)} aria-label={tr('ordering.addItem', { item: item.name })} className="grid size-10 place-items-center rounded-xl bg-muted text-xl font-black text-brand disabled:bg-stone-200 disabled:text-stone-400">{variant && !needsOptions ? '+' : '...'}</button>
                     </div>
                   </div>
                 </article>;
@@ -154,12 +160,12 @@ export function CustomerMenu() {
       </div>
 
       {count > 0 && <button onClick={() => setCartOpen(true)} className="fixed inset-x-4 bottom-4 z-30 flex min-h-14 items-center justify-between rounded-2xl bg-brand px-5 font-black text-white shadow-float lg:hidden">
-        <span>View order · {count} items</span><span dir="ltr">{formatEtbMinor(subtotal)}</span>
+        <span>{tr('ordering.viewOrderCount', { count })}</span><span dir="ltr">{formatCurrency(subtotal)}</span>
       </button>}
 
       {cartOpen && <div className="fixed inset-0 z-50 flex items-end bg-black/45 lg:hidden" onClick={e => { if (e.currentTarget === e.target) setCartOpen(false); }}>
         <div className="max-h-[88vh] w-full overflow-auto rounded-t-3xl bg-surface-warm p-4">
-          <div className="mb-3 flex justify-between"><h2 className="text-xl font-black">Your order</h2><button onClick={() => setCartOpen(false)} aria-label="Close cart">×</button></div>
+          <div className="mb-3 flex justify-between"><h2 className="text-xl font-black">{tr('ordering.yourOrder')}</h2><button onClick={() => setCartOpen(false)} aria-label={tr('ordering.closeCart')}>×</button></div>
           <CartSidebar cart={cart} subtotal={subtotal} change={change} onContinue={continueOrder} />
         </div>
       </div>}
@@ -168,11 +174,12 @@ export function CustomerMenu() {
 }
 
 function CartSidebar({ cart, subtotal, change, onContinue }: { cart: CartLine[]; subtotal: bigint; change: (id: string, d: number) => void; onContinue: () => void }) {
+  const { tr, formatCurrency } = useLocale();
   return <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
-    <div className="border-b border-line p-5"><h2 className="text-xl font-black">Your order</h2></div>
-    <div className="p-5">{cart.length === 0 ? <p className="py-10 text-center text-sm font-bold text-ink-muted">Add something delicious.</p>
+    <div className="border-b border-line p-5"><h2 className="text-xl font-black">{tr('ordering.yourOrder')}</h2></div>
+    <div className="p-5">{cart.length === 0 ? <p className="py-10 text-center text-sm font-bold text-ink-muted">{tr('ordering.addSomething')}</p>
       : <div className="space-y-4">{cart.map(line => <div key={line.variantId}>
-        <div className="flex justify-between text-sm"><b>{line.name}</b><b dir="ltr">{formatEtbMinor(BigInt(line.basePriceMinor) * BigInt(line.quantity))}</b></div>
+        <div className="flex justify-between text-sm"><b>{line.name}</b><b dir="ltr">{formatCurrency(BigInt(line.basePriceMinor) * BigInt(line.quantity))}</b></div>
         <div className="mt-2 flex justify-end"><div className="flex items-center rounded-lg border border-line">
           <button onClick={() => change(line.variantId, -1)} className="grid size-8 place-items-center">−</button>
           <span className="w-7 text-center text-xs font-black">{line.quantity}</span>
@@ -181,12 +188,13 @@ function CartSidebar({ cart, subtotal, change, onContinue }: { cart: CartLine[];
       </div>)}</div>}
     </div>
     {cart.length > 0 && <div className="border-t border-line bg-muted/50 p-5">
-      <div className="flex justify-between"><span>Subtotal</span><b dir="ltr">{formatEtbMinor(subtotal)}</b></div>
-      <button onClick={onContinue} className="mt-4 grid min-h-12 w-full place-items-center rounded-xl bg-brand text-sm font-black text-white">Review order</button>
+      <div className="flex justify-between"><span>{tr('ordering.subtotal')}</span><b dir="ltr">{formatCurrency(subtotal)}</b></div>
+      <button onClick={onContinue} className="mt-4 grid min-h-12 w-full place-items-center rounded-xl bg-brand text-sm font-black text-white">{tr('ordering.reviewOrder')}</button>
     </div>}
   </div>;
 }
 
 function StateScreen({ title, detail, retry }: { title: string; detail: string; retry?: () => void }) {
-  return <main className="grid min-h-screen place-items-center bg-surface-warm p-6 text-center"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-2 max-w-md text-sm text-ink-muted">{detail}</p>{retry && <button onClick={retry} className="mt-5 min-h-11 rounded-xl bg-dark px-5 font-black text-white">Try again</button>}</div></main>;
+  const { tr } = useLocale();
+  return <main className="grid min-h-screen place-items-center bg-surface-warm p-6 text-center"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-2 max-w-md text-sm text-ink-muted">{detail}</p>{retry && <button onClick={retry} className="mt-5 min-h-11 rounded-xl bg-dark px-5 font-black text-white">{tr('common.tryAgain')}</button>}</div></main>;
 }

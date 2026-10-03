@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { useKdsTickets, type KdsTicket, type KdsStation } from '@/lib/use-kds-tickets';
 import { useKitchens } from '@/lib/use-kitchen-config';
 import { useOnlineStatus } from '@/hooks';
+import { useLocale, type MessageKey } from '@/components/locale-provider';
+import { kdsStatusKeys, labelFor } from '@/lib/status-labels';
 
 function elapsedMinutes(iso: string): number {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -37,17 +39,6 @@ function ticketAgeClass(ticket: KdsTicket): string {
   return 'border-line bg-white';
 }
 
-function statusLabel(status: string): string {
-  switch (status) {
-    case 'QUEUED': return 'Queued';
-    case 'IN_PROGRESS': return 'In progress';
-    case 'READY': return 'Ready';
-    case 'COMPLETED': return 'Completed';
-    case 'CANCELLED': return 'Cancelled';
-    default: return status;
-  }
-}
-
 function statusColor(status: string): string {
   switch (status) {
     case 'QUEUED': return 'bg-slate-100 text-slate-700';
@@ -59,12 +50,12 @@ function statusColor(status: string): string {
   }
 }
 
-function nextBumpLabel(status: string): string {
+function nextBumpKey(status: string): MessageKey {
   switch (status) {
-    case 'QUEUED': return 'Start';
-    case 'IN_PROGRESS': return 'Ready';
-    case 'READY': return 'Complete';
-    default: return '';
+    case 'QUEUED': return 'kitchen.bumpStart';
+    case 'IN_PROGRESS': return 'kitchen.bumpReady';
+    case 'READY': return 'kitchen.bumpComplete';
+    default: return 'kitchen.bumpStart';
   }
 }
 
@@ -77,6 +68,7 @@ interface TicketCardProps {
 }
 
 function TicketCard({ ticket, onBump, onRecall, onComplete, onCancel }: TicketCardProps) {
+  const { tr } = useLocale();
   const age = ticket.startedAt ? formatElapsed(ticket.startedAt) : formatElapsed(ticket.createdAt);
   const canBump = ticket.status === 'QUEUED' || ticket.status === 'IN_PROGRESS';
   const canRecall = ticket.status === 'READY';
@@ -92,15 +84,15 @@ function TicketCard({ ticket, onBump, onRecall, onComplete, onCancel }: TicketCa
         <div className="flex items-center gap-3">
           <span className="text-lg font-black">#{ticket.ticketNumber}</span>
           {ticket.orderNumber && (
-            <span className="text-xs font-bold opacity-80">Order {ticket.orderNumber}</span>
+            <span className="text-xs font-bold opacity-80">{tr('kitchen.orderPrefix', { order: ticket.orderNumber })}</span>
           )}
           {ticket.tableId && (
-            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-black">Table</span>
+            <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-black">{tr('kitchen.tableBadge')}</span>
           )}
         </div>
         <div className="flex items-center gap-2">
           {ticket.estimatedReadyAt && (
-            <span className="text-xs font-bold opacity-70">Est. {formatElapsed(ticket.estimatedReadyAt)}</span>
+            <span className="text-xs font-bold opacity-70">{tr('kitchen.estPrefix', { value: formatElapsed(ticket.estimatedReadyAt) })}</span>
           )}
           <span className="text-sm font-black">{age}</span>
         </div>
@@ -120,8 +112,8 @@ function TicketCard({ ticket, onBump, onRecall, onComplete, onCancel }: TicketCa
           {ticket.customerName && (
             <span className="text-xs font-bold text-ink-muted">{ticket.customerName}</span>
           )}
-          <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-black ${statusColor(ticket.status)}`}>
-            {statusLabel(ticket.status)}
+          <span className={`ms-auto rounded-full px-2 py-0.5 text-[10px] font-black ${statusColor(ticket.status)}`}>
+            {labelFor(kdsStatusKeys, ticket.status, tr)}
           </span>
         </div>
 
@@ -130,7 +122,7 @@ function TicketCard({ ticket, onBump, onRecall, onComplete, onCancel }: TicketCa
             <div key={line.id} className="flex items-start justify-between text-sm">
               <div className="flex-1 min-w-0">
                 <span className="font-black">{line.quantity}×</span>{' '}
-                <span className="font-bold">{line.itemName ?? 'Item'}</span>
+                <span className="font-bold">{line.itemName ?? tr('kitchen.itemFallback')}</span>
                 {line.variantName && line.variantName !== 'Regular' && (
                   <span className="text-ink-muted"> ({line.variantName})</span>
                 )}
@@ -149,37 +141,37 @@ function TicketCard({ ticket, onBump, onRecall, onComplete, onCancel }: TicketCa
         {canBump && (
           <button
             onClick={() => onBump(ticket.id, ticket.version)}
-            aria-label={`${nextBumpLabel(ticket.status)} ticket ${ticket.orderNumber}`}
+            aria-label={tr('kitchen.bumpTicketAria', { action: tr(nextBumpKey(ticket.status)), order: ticket.orderNumber ?? '' })}
             className="flex-1 bg-dark-muted py-3 text-xs font-black text-white hover:bg-dark-muted transition-colors"
           >
-            {nextBumpLabel(ticket.status)} →
+            {tr(nextBumpKey(ticket.status))} →
           </button>
         )}
         {canComplete && (
           <button
             onClick={() => onComplete(ticket.id, ticket.version)}
-            aria-label={`Complete ticket ${ticket.orderNumber}`}
+            aria-label={tr('kitchen.completeTicketAria', { order: ticket.orderNumber ?? '' })}
             className="flex-1 bg-emerald-600 py-3 text-xs font-black text-white hover:bg-emerald-700 transition-colors"
           >
-            Complete ✓
+            {tr('kitchen.completeBtn')}
           </button>
         )}
         {canRecall && (
           <button
             onClick={() => onRecall(ticket.id, ticket.version)}
-            aria-label={`Recall ticket ${ticket.orderNumber}`}
+            aria-label={tr('kitchen.recallTicketAria', { order: ticket.orderNumber ?? '' })}
             className="flex-1 bg-amber-500 py-3 text-xs font-black text-white hover:bg-amber-600 transition-colors"
           >
-            Recall ←
+            {tr('kitchen.recallBtn')}
           </button>
         )}
         {canCancel && (
           <button
             onClick={() => onCancel(ticket.id, ticket.version)}
-            aria-label={`Cancel ticket ${ticket.orderNumber}`}
+            aria-label={tr('kitchen.cancelTicketAria', { order: ticket.orderNumber ?? '' })}
             className="flex-1 bg-white py-3 text-xs font-black text-red-600 hover:bg-red-50 transition-colors"
           >
-            Cancel
+            {tr('kitchen.cancel')}
           </button>
         )}
       </div>
@@ -194,21 +186,22 @@ interface ConnectionBarProps {
 }
 
 function ConnectionBar({ socketStatus, isOnline, onReconnect }: ConnectionBarProps) {
+  const { tr } = useLocale();
   if (socketStatus === 'connected' && isOnline) return null;
 
   const message = !isOnline
-    ? 'Offline — changes will sync when connection returns'
+    ? tr('kitchen.connOffline')
     : socketStatus === 'connecting'
-    ? 'Reconnecting…'
+    ? tr('kitchen.connReconnecting')
     : socketStatus === 'error'
-    ? 'Connection error — retry'
-    : 'Disconnected — retry';
+    ? tr('kitchen.connError')
+    : tr('kitchen.connDisconnected');
 
   return (
     <div className={`flex items-center justify-between px-4 py-2.5 text-sm font-bold ${!isOnline ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
       <span>{message}</span>
       <button onClick={onReconnect} className="rounded-lg bg-white/60 px-3 py-1 text-xs font-black hover:bg-white/80 transition-colors">
-        Retry
+        {tr('kitchen.connRetry')}
       </button>
     </div>
   );
@@ -222,13 +215,14 @@ interface ConnectionStateProps {
 }
 
 function ConnectionState({ loading, error, tickets, onRetry }: ConnectionStateProps) {
+  const { tr } = useLocale();
   if (loading && tickets.length === 0) {
     return (
       <div className="grid min-h-[400px] place-items-center">
         <div className="text-center">
           <span className="mx-auto grid size-12 place-items-center rounded-full bg-muted text-xl animate-pulse">◇</span>
-          <h2 className="mt-4 font-black">Loading tickets…</h2>
-          <p className="mt-2 text-sm text-ink-muted">Synchronizing kitchen display</p>
+          <h2 className="mt-4 font-black">{tr('kitchen.loadingTickets')}</h2>
+          <p className="mt-2 text-sm text-ink-muted">{tr('kitchen.syncDisplay')}</p>
         </div>
       </div>
     );
@@ -239,10 +233,10 @@ function ConnectionState({ loading, error, tickets, onRetry }: ConnectionStatePr
       <div className="grid min-h-[400px] place-items-center">
         <div className="text-center">
           <span className="mx-auto grid size-12 place-items-center rounded-full bg-red-100 text-xl">⚠</span>
-          <h2 className="mt-4 font-black">Failed to load tickets</h2>
+          <h2 className="mt-4 font-black">{tr('kitchen.ticketsLoadFailed')}</h2>
           <p className="mt-2 text-sm text-ink-muted">{error}</p>
           <button onClick={onRetry} className="mt-4 rounded-xl bg-dark px-5 py-3 text-sm font-black text-white">
-            Try again
+            {tr('common.tryAgain')}
           </button>
         </div>
       </div>
@@ -264,6 +258,7 @@ const LANE_CONFIGS = [
 
 export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
   const isOnline = useOnlineStatus();
+  const { tr } = useLocale();
 
   const [selectedKitchenId, setSelectedKitchenId] = useState<string | null>(null);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
@@ -339,24 +334,24 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
 
       <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-white/60">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-black">Kitchen Display</h1>
+          <h1 className="text-lg font-black">{tr('kitchen.displayTitle')}</h1>
           {activeStation && (
             <span className="rounded-full bg-brand px-3 py-1 text-xs font-black text-white">{activeStation.name}</span>
           )}
-          <div className="flex gap-1.5 ml-2">
+          <div className="flex gap-1.5 ms-2">
             {LANE_CONFIGS.map((lane) => (
               <span key={lane.status} className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-black text-ink-muted">
-                {totalByStatus[lane.status]} {lane.label}
+                {totalByStatus[lane.status]} {labelFor(kdsStatusKeys, lane.status, tr)}
               </span>
             ))}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => refetch()} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-black hover:bg-muted transition-colors">
-            Refresh
+            {tr('kitchen.refresh')}
           </button>
           <span className={`rounded-full px-3 py-1.5 text-xs font-black ${socketStatus === 'connected' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-            {socketStatus === 'connected' ? '● Live' : '○ Polling'}
+            {socketStatus === 'connected' ? tr('kitchen.live') : tr('kitchen.polling')}
           </span>
         </div>
       </div>
@@ -367,7 +362,7 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
           aria-pressed={selectedKitchenId === null && selectedStationId === null}
           className={`whitespace-nowrap rounded-full px-4 py-2 text-xs font-black transition-colors ${selectedKitchenId === null && selectedStationId === null ? 'bg-dark text-white' : 'bg-white border border-line hover:bg-muted'}`}
         >
-          All kitchens
+          {tr('kitchen.allKitchens')}
         </button>
         {kitchens.map((kitchen) => (
           <button
@@ -387,9 +382,9 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
             onClick={() => setSelectedStationId(null)}
             aria-pressed={selectedStationId === null}
             className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[10px] font-black transition-colors ${selectedStationId === null ? 'bg-brand text-white' : 'bg-white border border-line hover:bg-muted'}`}
-          >
-            All stations
-          </button>
+        >
+          {tr('kitchen.allStations')}
+        </button>
           {filteredStations.map((station) => (
             <button
               key={station.id}
@@ -409,8 +404,8 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
         <div className="grid min-h-[400px] place-items-center">
           <div className="text-center">
             <span className="mx-auto grid size-12 place-items-center rounded-full bg-muted text-xl">🍳</span>
-            <h2 className="mt-4 font-black">No tickets yet</h2>
-            <p className="mt-2 text-sm text-ink-muted">Kitchen tickets will appear here when orders are confirmed</p>
+            <h2 className="mt-4 font-black">{tr('kitchen.noTickets')}</h2>
+            <p className="mt-2 text-sm text-ink-muted">{tr('kitchen.noTicketsHint')}</p>
           </div>
         </div>
       )}
@@ -423,7 +418,7 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <span className={`size-2.5 rounded-full ${lane.color}`} />
-                    <h2 className="text-xs font-black tracking-wider uppercase">{lane.label}</h2>
+                    <h2 className="text-xs font-black tracking-wider uppercase">{labelFor(kdsStatusKeys, lane.status, tr)}</h2>
                   </div>
                   <span className="rounded-full bg-white px-2.5 py-1 text-xs font-black shadow-sm">
                     {ticketsByStatus[lane.status].length}
@@ -432,7 +427,7 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
                 <div className="flex-1 space-y-3 overflow-y-auto hide-scrollbar">
                   {ticketsByStatus[lane.status].length === 0 && (
                     <div className="grid min-h-[120px] place-items-center rounded-xl border-2 border-dashed border-line bg-white/50">
-                      <p className="text-xs font-bold text-ink-muted">Empty</p>
+                      <p className="text-xs font-bold text-ink-muted">{tr('kitchen.laneEmpty')}</p>
                     </div>
                   )}
                   {ticketsByStatus[lane.status].map((ticket) => (

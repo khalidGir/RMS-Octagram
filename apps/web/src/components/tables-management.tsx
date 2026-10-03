@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
 import { useBranch } from './shell/branch-provider';
+import { useLocale } from '@/components/locale-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -44,6 +45,7 @@ interface DiningSession {
 export function TablesManagement() {
   const { accessToken, csrfToken, profile } = useAuth();
   const { branchId } = useBranch();
+  const { tr } = useLocale();
   const membership = profile?.memberships[0];
   const tenantId = membership?.tenant.id ?? '';
   const [tab, setTab] = useState('tables');
@@ -81,13 +83,13 @@ export function TablesManagement() {
   });
 
   if (!membership || !['OWNER', 'MANAGER', 'CASHIER', 'WAITER'].includes(membership.role)) {
-    return <p role="alert">Permission denied.</p>;
+    return <p role="alert">{tr('tables.permissionDenied')}</p>;
   }
 
   if (!branchId) {
     return (
       <div className="grid min-h-72 place-items-center">
-        <p className="text-sm font-bold text-ink-muted">Select a branch to manage tables.</p>
+        <p className="text-sm font-bold text-ink-muted">{tr('tables.selectBranch')}</p>
       </div>
     );
   }
@@ -98,10 +100,10 @@ export function TablesManagement() {
     <>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">Dining room</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Tables &amp; sessions</h1>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">{tr('tables.eyebrow')}</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{tr('tables.pageTitle')}</h1>
           <p className="mt-2 text-sm text-ink-muted">
-            Manage table availability, dining areas, and active sessions.
+            {tr('tables.pageDescription')}
           </p>
         </div>
         {isManager && (
@@ -110,13 +112,13 @@ export function TablesManagement() {
               onClick={() => { setNotice(null); setShowCreateArea(true); }}
               className="min-h-11 rounded-xl border border-line bg-white px-4 text-sm font-bold"
             >
-              + Add area
+              {tr('tables.addAreaBtn')}
             </button>
             <button
               onClick={() => { setNotice(null); setShowCreateTable(true); }}
               className="min-h-11 rounded-xl bg-dark px-5 text-sm font-bold text-white shadow-sm transition hover:bg-dark-muted"
             >
-              + Add table
+              {tr('tables.addTableBtn')}
             </button>
           </div>
         )}
@@ -129,21 +131,21 @@ export function TablesManagement() {
       )}
 
       {(occupancy.isLoading || areas.isLoading) && (
-        <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading tables…</p>
+        <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('tables.loading')}</p>
       )}
 
       {(occupancy.isError || areas.isError) && (
         <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">
-          Could not load tables. Check the API connection and try again.
+          {tr('tables.loadError')}
         </div>
       )}
 
       {!occupancy.isLoading && !occupancy.isError && (
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="tables">Tables ({occupancy.data?.length ?? 0})</TabsTrigger>
-            <TabsTrigger value="sessions">Sessions ({sessions.data?.length ?? 0})</TabsTrigger>
-            <TabsTrigger value="areas">Areas ({areas.data?.length ?? 0})</TabsTrigger>
+            <TabsTrigger value="tables">{tr('tables.tablesTab', { count: occupancy.data?.length ?? 0 })}</TabsTrigger>
+            <TabsTrigger value="sessions">{tr('tables.sessionsTab', { count: sessions.data?.length ?? 0 })}</TabsTrigger>
+            <TabsTrigger value="areas">{tr('tables.areasTab', { count: areas.data?.length ?? 0 })}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="tables">
@@ -197,7 +199,7 @@ export function TablesManagement() {
           onCreated={async (name) => {
             setShowCreateArea(false);
             await areas.refetch();
-            setNotice(`Area "${name}" created.`);
+            setNotice(tr('tables.areaCreated', { name }));
           }}
         />
       )}
@@ -213,7 +215,7 @@ export function TablesManagement() {
             setShowCreateTable(false);
             await occupancy.refetch();
             await areas.refetch();
-            setNotice(`Table "${label}" created with QR code.`);
+            setNotice(tr('tables.tableCreated', { label }));
           }}
         />
       )}
@@ -244,14 +246,15 @@ function TablesGrid({
   onNotice: (msg: string | null) => void;
   onInvalidate: () => void;
 }) {
+  const { tr } = useLocale();
   const [editingTable, setEditingTable] = useState<TableOccupancy | null>(null);
 
   if (tables.length === 0) {
     return (
       <div className="mt-4 grid min-h-72 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
         <div>
-          <p className="text-lg font-black">No tables yet</p>
-          <p className="mt-2 text-sm text-ink-muted">Add your first table to start managing dine-in orders.</p>
+          <p className="text-lg font-black">{tr('tables.emptyTitle')}</p>
+          <p className="mt-2 text-sm text-ink-muted">{tr('tables.emptyHint')}</p>
         </div>
       </div>
     );
@@ -280,21 +283,21 @@ function TablesGrid({
                       : 'bg-emerald-50 text-emerald-700'
                   }`}
                 >
-                  {isOccupied ? 'OCCUPIED' : t.isActive ? 'AVAILABLE' : 'INACTIVE'}
+                  {isOccupied ? tr('tables.occupied') : t.isActive ? tr('tables.availableLabel') : tr('tables.inactiveLabel')}
                 </span>
               </div>
-              <h2 className="mt-4 font-black">Table {t.label}</h2>
+              <h2 className="mt-4 font-black">{tr('tables.tableHeading', { label: t.label })}</h2>
               <p className="mt-1 text-sm text-ink-muted">
                 {isOccupied
-                  ? `${t.openOrderCount} order${t.openOrderCount !== 1 ? 's' : ''} · ${t.capacity} seats`
-                  : `Seats ${t.capacity}`}
+                  ? `${tr('tables.openOrdersCount', { count: t.openOrderCount })} · ${tr('tables.seatsCount', { count: t.capacity })}`
+                  : tr('tables.seatsLabel', { count: t.capacity })}
               </p>
               {isManager && (
                 <button
                   onClick={() => setEditingTable(t)}
                   className="mt-4 w-full rounded-xl border border-line py-2 text-xs font-black"
                 >
-                  Manage
+                  {tr('tables.manageBtn')}
                 </button>
               )}
             </div>
@@ -312,7 +315,7 @@ function TablesGrid({
           onClose={() => setEditingTable(null)}
           onSaved={async () => {
             setEditingTable(null);
-            onNotice('Table updated.');
+            onNotice(tr('tables.tableUpdated'));
             onInvalidate();
           }}
         />
@@ -344,14 +347,15 @@ function SessionsList({
   onNotice: (msg: string | null) => void;
   onInvalidate: () => void;
 }) {
+  const { formatTime, tr } = useLocale();
   const [clearingSession, setClearingSession] = useState<DiningSession | null>(null);
 
   if (sessions.length === 0) {
     return (
       <div className="mt-4 grid min-h-72 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
         <div>
-          <p className="text-lg font-black">No open sessions</p>
-          <p className="mt-2 text-sm text-ink-muted">Sessions open automatically when orders are confirmed.</p>
+          <p className="text-lg font-black">{tr('tables.noSessionsTitle')}</p>
+          <p className="mt-2 text-sm text-ink-muted">{tr('tables.noSessionsHint')}</p>
         </div>
       </div>
     );
@@ -366,9 +370,9 @@ function SessionsList({
             className="flex items-center justify-between rounded-2xl border border-black/[.07] bg-white px-5 py-4 shadow-sm"
           >
             <div>
-              <p className="text-sm font-black">Session {s.id.slice(0, 8)}…</p>
+              <p className="text-sm font-black">{tr('tables.sessionPrefix', { id: s.id.slice(0, 8) })}</p>
               <p className="mt-1 text-sm text-ink-muted">
-                {s.guestCount} guest{s.guestCount !== 1 ? 's' : ''} · {s.orderCount} order{s.orderCount !== 1 ? 's' : ''} · Opened {new Date(s.openedAt).toLocaleTimeString()}
+                {tr('tables.guestCount', { count: s.guestCount })} · {tr('tables.sessionOrdersCount', { count: s.orderCount })} · {tr('tables.openedAt', { time: formatTime(s.openedAt) })}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -380,7 +384,7 @@ function SessionsList({
                   onClick={() => setClearingSession(s)}
                   className="min-h-9 rounded-lg border border-line px-3 text-xs font-bold"
                 >
-                  Clear
+                  {tr('tables.clearBtn')}
                 </button>
               )}
             </div>
@@ -398,7 +402,7 @@ function SessionsList({
           onClose={() => setClearingSession(null)}
           onCleared={async () => {
             setClearingSession(null);
-            onNotice('Session cleared.');
+            onNotice(tr('tables.sessionCleared'));
             onInvalidate();
           }}
         />
@@ -430,14 +434,15 @@ function AreasList({
   onNotice: (msg: string | null) => void;
   onInvalidate: () => void;
 }) {
+  const { tr } = useLocale();
   const [editingArea, setEditingArea] = useState<DiningArea | null>(null);
 
   if (areas.length === 0) {
     return (
       <div className="mt-4 grid min-h-72 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
         <div>
-          <p className="text-lg font-black">No dining areas</p>
-          <p className="mt-2 text-sm text-ink-muted">Create areas to organize your tables (e.g. Main Floor, Terrace).</p>
+          <p className="text-lg font-black">{tr('tables.noAreasTitle')}</p>
+          <p className="mt-2 text-sm text-ink-muted">{tr('tables.noAreasHint')}</p>
         </div>
       </div>
     );
@@ -454,7 +459,7 @@ function AreasList({
             <div>
               <p className="text-sm font-black">{area.name}</p>
               <p className="mt-1 text-sm text-ink-muted">
-                {area._count?.tables ?? 0} table{area._count?.tables !== 1 ? 's' : ''}
+                {tr('tables.areaTablesCount', { count: area._count?.tables ?? 0 })}
               </p>
             </div>
             {isManager && (
@@ -462,7 +467,7 @@ function AreasList({
                 onClick={() => setEditingArea(area)}
                 className="min-h-9 rounded-lg border border-line px-3 text-xs font-bold"
               >
-                Edit
+                {tr('tables.editBtn')}
               </button>
             )}
           </div>
@@ -479,7 +484,7 @@ function AreasList({
           onClose={() => setEditingArea(null)}
           onSaved={async () => {
             setEditingArea(null);
-            onNotice('Area updated.');
+            onNotice(tr('tables.areaUpdated'));
             onInvalidate();
           }}
         />
@@ -510,11 +515,12 @@ function CreateAreaDialog({
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
-    if (!trimmed) return setError('Enter an area name.');
+    if (!trimmed) return setError(tr('tables.enterAreaName'));
     setBusy(true);
     setError(null);
     try {
@@ -527,7 +533,7 @@ function CreateAreaDialog({
       });
       await onCreated(trimmed);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create area.');
+      setError(err instanceof ApiError ? err.message : tr('tables.createAreaError'));
     } finally {
       setBusy(false);
     }
@@ -535,16 +541,16 @@ function CreateAreaDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm" aria-label="Add dining area">
-        <DialogTitle>Add dining area</DialogTitle>
+      <DialogContent className="max-w-sm" aria-label={tr('tables.addAreaTitle')}>
+        <DialogTitle>{tr('tables.addAreaTitle')}</DialogTitle>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <label className="text-sm font-black">
-            Area name
+            {tr('tables.areaNameLabel')}
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={200}
-              placeholder="e.g. Main Floor"
+              placeholder={tr('tables.areaNamePlaceholder')}
               className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-4 font-normal outline-none focus:ring-2 focus:ring-brand/20"
               autoFocus
             />
@@ -556,10 +562,10 @@ function CreateAreaDialog({
           )}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy || !name.trim()} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-              {busy ? 'Creating…' : 'Create area'}
+              {busy ? tr('tables.creating') : tr('tables.createAreaBtn')}
             </button>
           </div>
         </form>
@@ -594,13 +600,14 @@ function CreateTableDialog({
   const [diningAreaId, setDiningAreaId] = useState(areas[0]?.id ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimmedLabel = label.trim();
     const cap = parseInt(capacity, 10);
-    if (!trimmedLabel) return setError('Enter a table label.');
-    if (isNaN(cap) || cap < 1) return setError('Capacity must be at least 1.');
+    if (!trimmedLabel) return setError(tr('tables.enterTableLabel'));
+    if (isNaN(cap) || cap < 1) return setError(tr('tables.capacityMin'));
     setBusy(true);
     setError(null);
     try {
@@ -613,7 +620,7 @@ function CreateTableDialog({
       });
       await onCreated(trimmedLabel);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not create table.');
+      setError(err instanceof ApiError ? err.message : tr('tables.createTableError'));
     } finally {
       setBusy(false);
     }
@@ -621,23 +628,23 @@ function CreateTableDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md" aria-label="Add table">
-        <DialogTitle>Add table</DialogTitle>
+      <DialogContent className="max-w-md" aria-label={tr('tables.addTableTitle')}>
+        <DialogTitle>{tr('tables.addTableTitle')}</DialogTitle>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <label className="text-sm font-black">
-            Table label
+            {tr('tables.tableLabelLabel')}
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               maxLength={50}
-              placeholder="e.g. T1"
+              placeholder={tr('tables.tableLabelPlaceholder')}
               className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-4 font-normal outline-none focus:ring-2 focus:ring-brand/20"
               autoFocus
             />
           </label>
           <div className="grid grid-cols-2 gap-4">
             <label className="text-sm font-black">
-              Capacity
+              {tr('tables.capacityLabel')}
               <input
                 value={capacity}
                 onChange={(e) => setCapacity(e.target.value)}
@@ -647,11 +654,11 @@ function CreateTableDialog({
               />
             </label>
             <label className="text-sm font-black">
-              Dining area
-              <div className="mt-2"><Select value={diningAreaId || 'none'} onValueChange={(value) => setDiningAreaId(value === 'none' ? '' : value)}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{areas.map((a) => <SelectItem value={a.id} key={a.id}>{a.name}</SelectItem>)}</SelectContent></Select></div>
+              {tr('tables.diningAreaLabel')}
+              <div className="mt-2"><Select value={diningAreaId || 'none'} onValueChange={(value) => setDiningAreaId(value === 'none' ? '' : value)}><SelectTrigger className="min-h-12 font-normal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">{tr('tables.noneOption')}</SelectItem>{areas.map((a) => <SelectItem value={a.id} key={a.id}>{a.name}</SelectItem>)}</SelectContent></Select></div>
             </label>
           </div>
-          <p className="text-xs text-ink-muted">A QR code will be generated automatically for this table.</p>
+          <p className="text-xs text-ink-muted">{tr('tables.qrHint')}</p>
           {error && (
             <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
               {error}
@@ -659,10 +666,10 @@ function CreateTableDialog({
           )}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy || !label.trim()} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-              {busy ? 'Creating…' : 'Create table'}
+              {busy ? tr('tables.creating') : tr('tables.createTableBtn')}
             </button>
           </div>
         </form>
@@ -697,12 +704,13 @@ function EditTableDialog({
   const [isActive, setIsActive] = useState(table.isActive);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const cap = parseInt(capacity, 10);
-    if (!label.trim()) return setError('Enter a table label.');
-    if (isNaN(cap) || cap < 1) return setError('Capacity must be at least 1.');
+    if (!label.trim()) return setError(tr('tables.enterTableLabel'));
+    if (isNaN(cap) || cap < 1) return setError(tr('tables.capacityMin'));
     setBusy(true);
     setError(null);
     try {
@@ -715,7 +723,7 @@ function EditTableDialog({
       });
       await onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update table.');
+      setError(err instanceof ApiError ? err.message : tr('tables.updateTableError'));
     } finally {
       setBusy(false);
     }
@@ -723,11 +731,11 @@ function EditTableDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-md" aria-label={`Edit table ${table.label}`}>
-        <DialogTitle>Edit table {table.label}</DialogTitle>
+      <DialogContent className="max-w-md" aria-label={tr('tables.editTable', { label: table.label })}>
+        <DialogTitle>{tr('tables.editTable', { label: table.label })}</DialogTitle>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <label className="text-sm font-black">
-            Table label
+            {tr('tables.tableLabelLabel')}
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
@@ -736,7 +744,7 @@ function EditTableDialog({
             />
           </label>
           <label className="text-sm font-black">
-            Capacity
+            {tr('tables.capacityLabel')}
             <input
               value={capacity}
               onChange={(e) => setCapacity(e.target.value)}
@@ -747,8 +755,8 @@ function EditTableDialog({
           </label>
           <label className="flex items-center justify-between rounded-xl border border-line bg-white px-4 py-3 text-sm font-black">
             <span>
-              <span className="block">Active</span>
-              <span className="mt-1 block text-xs font-normal text-ink-muted">Inactive tables are hidden from POS.</span>
+              <span className="block">{tr('tables.activeLabel')}</span>
+              <span className="mt-1 block text-xs font-normal text-ink-muted">{tr('tables.inactiveHint')}</span>
             </span>
             <input
               type="checkbox"
@@ -764,10 +772,10 @@ function EditTableDialog({
           )}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-              {busy ? 'Saving…' : 'Save'}
+              {busy ? tr('tables.saving') : tr('tables.saveBtn')}
             </button>
           </div>
         </form>
@@ -800,11 +808,12 @@ function EditAreaDialog({
   const [name, setName] = useState(area.name);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
-    if (!trimmed) return setError('Enter an area name.');
+    if (!trimmed) return setError(tr('tables.enterAreaName'));
     setBusy(true);
     setError(null);
     try {
@@ -817,7 +826,7 @@ function EditAreaDialog({
       });
       await onSaved();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not update area.');
+      setError(err instanceof ApiError ? err.message : tr('tables.updateAreaError'));
     } finally {
       setBusy(false);
     }
@@ -825,11 +834,11 @@ function EditAreaDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm" aria-label={`Edit area ${area.name}`}>
-        <DialogTitle>Edit dining area</DialogTitle>
+      <DialogContent className="max-w-sm" aria-label={tr('tables.editAreaAria', { name: area.name })}>
+        <DialogTitle>{tr('tables.editAreaTitle')}</DialogTitle>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <label className="text-sm font-black">
-            Area name
+            {tr('tables.areaNameLabel')}
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -845,10 +854,10 @@ function EditAreaDialog({
           )}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy || !name.trim()} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-              {busy ? 'Saving…' : 'Save'}
+              {busy ? tr('tables.saving') : tr('tables.saveBtn')}
             </button>
           </div>
         </form>
@@ -881,6 +890,7 @@ function ClearSessionDialog({
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { tr } = useLocale();
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -896,7 +906,7 @@ function ClearSessionDialog({
       });
       await onCleared();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not clear session.');
+      setError(err instanceof ApiError ? err.message : tr('tables.clearSessionError'));
     } finally {
       setBusy(false);
     }
@@ -904,18 +914,18 @@ function ClearSessionDialog({
 
   return (
     <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm" aria-label="Clear session">
-        <DialogTitle>Clear session</DialogTitle>
+      <DialogContent className="max-w-sm" aria-label={tr('tables.clearSessionTitle')}>
+        <DialogTitle>{tr('tables.clearSessionTitle')}</DialogTitle>
         <p className="mt-2 text-sm text-ink-muted">
-          All linked orders must be completed or cancelled before clearing.
+          {tr('tables.clearSessionHint')}
         </p>
         <form onSubmit={submit} className="mt-4 grid gap-4">
           <label className="text-sm font-black">
-            Reason <span className="font-normal text-ink-muted">(optional)</span>
+            {tr('tables.reasonLabel')} <span className="font-normal text-ink-muted">{tr('tables.optionalHint')}</span>
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. Guests departed"
+              placeholder={tr('tables.reasonPlaceholder')}
               className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-4 font-normal outline-none focus:ring-2 focus:ring-brand/20"
             />
           </label>
@@ -926,10 +936,10 @@ function ClearSessionDialog({
           )}
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-              Cancel
+              {tr('common.cancel')}
             </button>
             <button disabled={busy} className="min-h-10 rounded-lg bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-50">
-              {busy ? 'Clearing…' : 'Clear session'}
+              {busy ? tr('tables.clearing') : tr('tables.clearSessionTitle')}
             </button>
           </div>
         </form>

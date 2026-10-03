@@ -10,7 +10,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Banner } from '@/components/ui/banner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { PageHeader } from '@/components/ui/page-header';
+import { useLocale } from '@/components/locale-provider';
 import { cn } from '@/lib/cn';
+import { labelFor, tenantStatusKeys } from '@/lib/status-labels';
 import {
   fetchTenants,
   suspendTenant,
@@ -26,6 +28,7 @@ const statusVariant: Record<string, 'success' | 'warning' | 'danger' | 'idle'> =
 
 export function PlatformAdmin() {
   const { accessToken, csrfToken } = useAuth();
+  const { tr } = useLocale();
   const router = useRouter();
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +45,7 @@ export function PlatformAdmin() {
       const data = await fetchTenants(accessToken, csrfToken);
       setTenants(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load tenants');
+      setError(err instanceof Error ? err.message : tr('platform.loadError'));
     } finally {
       setLoading(false);
     }
@@ -63,7 +66,7 @@ export function PlatformAdmin() {
         setTenants((prev) => prev.map((prev) => prev.id === tenant.id ? updated : prev));
       }
     } catch {
-      setActionError(`Could not ${tenant.status === 'SUSPENDED' ? 'activate' : 'suspend'} ${tenant.name}. Please try again.`);
+      setActionError(tr(tenant.status === 'SUSPENDED' ? 'platform.activateError' : 'platform.suspendError', { name: tenant.name }));
     } finally {
       setActionLoading(null);
       setPendingAction(null);
@@ -80,9 +83,9 @@ export function PlatformAdmin() {
     return (
       <div className="grid min-h-[55vh] place-items-center">
         <div className="max-w-sm rounded-panel border border-line bg-white p-8 text-center shadow-card">
-          <p className="text-lg font-extrabold">Platform unavailable</p>
+          <p className="text-lg font-extrabold">{tr('platform.unavailableTitle')}</p>
           <p className="mt-2 text-sm text-ink-muted">{error}</p>
-          <Button onClick={() => void fetchAll()} className="mt-5">Try again</Button>
+          <Button onClick={() => void fetchAll()} className="mt-5">{tr('common.tryAgain')}</Button>
         </div>
       </div>
     );
@@ -91,42 +94,42 @@ export function PlatformAdmin() {
   return (
     <div className="mx-auto max-w-[1500px]">
       <PageHeader
-        eyebrow="Platform"
-        title="Tenant operations"
-        description="Manage restaurant tenants, account status, and platform-wide access."
+        eyebrow={tr('platform.eyebrow')}
+        title={tr('platform.pageTitle')}
+        description={tr('platform.pageDescription')}
         actions={
-          <Button onClick={() => router.push('/platform/tenants/new')}>New tenant</Button>
+          <Button onClick={() => router.push('/platform/tenants/new')}>{tr('platform.newTenantBtn')}</Button>
         }
       />
 
       {actionError && (
-        <Banner variant="danger" title="Action failed" onDismiss={() => setActionError(null)} className="mt-5">
+        <Banner variant="danger" title={tr('platform.actionFailed')} onDismiss={() => setActionError(null)} className="mt-5">
           {actionError}
         </Banner>
       )}
 
       <section className="mt-7 grid gap-3 sm:grid-cols-3">
-        <SummaryCard label="Active tenants" value={String(activeCount)} detail="Currently active" tone="brand" />
-        <SummaryCard label="Trial tenants" value={String(trialCount)} detail="Evaluating" tone="dark" />
-        <SummaryCard label="Suspended" value={String(suspendedCount)} detail="Account suspended" tone="amber" />
+        <SummaryCard label={tr('platform.activeLabel')} value={String(activeCount)} detail={tr('platform.activeDetail')} tone="brand" />
+        <SummaryCard label={tr('platform.trialLabel')} value={String(trialCount)} detail={tr('platform.trialDetail')} tone="dark" />
+        <SummaryCard label={tr('platform.suspendedLabel')} value={String(suspendedCount)} detail={tr('platform.suspendedDetail')} tone="amber" />
       </section>
 
       <section className="mt-5 rounded-panel border border-line bg-white shadow-card overflow-x-auto">
         {tenants.length === 0 ? (
           <div className="p-8 text-center">
-            <p className="text-sm font-bold text-ink-muted">No restaurants registered yet</p>
-            <p className="mt-1 text-xs text-ink-muted">Tenants will appear here once they sign up.</p>
+            <p className="text-sm font-bold text-ink-muted">{tr('platform.emptyTitle')}</p>
+            <p className="mt-1 text-xs text-ink-muted">{tr('platform.emptyHint')}</p>
           </div>
         ) : (
-          <table className="w-full min-w-[700px] text-left">
+          <table className="w-full min-w-[700px] text-start">
             <thead>
               <tr className="border-b border-line text-xs uppercase tracking-wider text-ink-muted">
-                <th className="px-5 py-4">Restaurant</th>
-                <th className="px-5 py-4">Slug</th>
-                <th className="px-5 py-4">Members</th>
-                <th className="px-5 py-4">Branches</th>
-                <th className="px-5 py-4">Status</th>
-                <th className="px-5 py-4">Actions</th>
+                <th className="px-5 py-4">{tr('platform.thRestaurant')}</th>
+                <th className="px-5 py-4">{tr('platform.thSlug')}</th>
+                <th className="px-5 py-4">{tr('platform.thMembers')}</th>
+                <th className="px-5 py-4">{tr('platform.thBranches')}</th>
+                <th className="px-5 py-4">{tr('platform.thStatus')}</th>
+                <th className="px-5 py-4">{tr('platform.thActions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -141,7 +144,9 @@ export function PlatformAdmin() {
                   <td className="px-5 py-5">{tenant._count?.memberships ?? 0}</td>
                   <td className="px-5 py-5">{tenant._count?.branches ?? 0}</td>
                   <td className="px-5 py-5">
-                    <StatusChip status={statusVariant[tenant.status] ?? 'idle'}>{tenant.status}</StatusChip>
+                    <StatusChip status={statusVariant[tenant.status] ?? 'idle'}>
+                      {labelFor(tenantStatusKeys, tenant.status, tr)}
+                    </StatusChip>
                   </td>
                   <td className="px-5 py-5">
                     <div className="flex gap-3">
@@ -150,9 +155,9 @@ export function PlatformAdmin() {
                         disabled={actionLoading === tenant.id}
                         className={cn('text-xs font-black', tenant.status === 'SUSPENDED' ? 'text-emerald-700' : 'text-amber-700')}
                       >
-                        {actionLoading === tenant.id ? '...' : tenant.status === 'SUSPENDED' ? 'Activate' : 'Suspend'}
+                        {actionLoading === tenant.id ? '...' : tenant.status === 'SUSPENDED' ? tr('platform.activateBtn') : tr('platform.suspendBtn')}
                       </button>
-                      <Link href={`/platform/features?tenant=${tenant.id}`} className="text-xs font-black text-brand">Features →</Link>
+                      <Link href={`/platform/features?tenant=${tenant.id}`} className="text-xs font-black text-brand">{tr('platform.featuresLink')}</Link>
                     </div>
                   </td>
                 </tr>
@@ -165,13 +170,13 @@ export function PlatformAdmin() {
       <ConfirmDialog
         open={pendingAction !== null}
         onOpenChange={(open) => { if (!open) setPendingAction(null); }}
-        title={pendingAction ? `${pendingAction.status === 'SUSPENDED' ? 'Activate' : 'Suspend'} ${pendingAction.name}?` : ''}
+        title={pendingAction ? tr(pendingAction.status === 'SUSPENDED' ? 'platform.activateTitle' : 'platform.suspendTitle', { name: pendingAction.name }) : ''}
         description={
           pendingAction?.status === 'SUSPENDED'
-            ? 'Staff of this restaurant will be able to sign in and use the platform again.'
-            : 'All users of this restaurant will lose access until the account is reactivated. Existing data is kept.'
+            ? tr('platform.activateDesc')
+            : tr('platform.suspendDesc')
         }
-        confirmLabel={pendingAction?.status === 'SUSPENDED' ? 'Activate restaurant' : 'Suspend restaurant'}
+        confirmLabel={pendingAction?.status === 'SUSPENDED' ? tr('platform.activateConfirm') : tr('platform.suspendConfirm')}
         variant={pendingAction?.status === 'SUSPENDED' ? 'primary' : 'danger'}
         onConfirm={() => { if (pendingAction) void handleToggle(pendingAction); }}
       />

@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { apiRequest } from '@/lib/api-client';
+import { useLocale, type MessageKey } from '@/components/locale-provider';
+import { kdsStatusKeys, labelFor } from '@/lib/status-labels';
 
 interface KitchenTicketTimeline {
   ticketId: string;
@@ -26,15 +28,6 @@ interface FulfillmentTimelineProps {
   orderId: string;
 }
 
-function formatTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  });
-}
-
 function elapsedMinutes(start: string | null, end: string | null): string | null {
   if (!start) return null;
   const endTime = end ? new Date(end).getTime() : Date.now();
@@ -55,16 +48,19 @@ function statusStep(status: string): number {
   }
 }
 
-const TIMELINE_STEPS = [
-  { key: 'QUEUED', label: 'Queued', icon: '📋' },
-  { key: 'IN_PROGRESS', label: 'Preparing', icon: '🔥' },
-  { key: 'READY', label: 'Ready', icon: '✅' },
-  { key: 'COLLECTED', label: 'Collected', icon: '🤝' },
-  { key: 'SERVED', label: 'Served', icon: '🍽' },
+const TIMELINE_STEPS: { key: string; labelKey: MessageKey; icon: string }[] = [
+  { key: 'QUEUED', labelKey: 'orders.stepQueued', icon: '📋' },
+  { key: 'IN_PROGRESS', labelKey: 'orders.stepPreparing', icon: '🔥' },
+  { key: 'READY', labelKey: 'orders.stepReady', icon: '✅' },
+  { key: 'COLLECTED', labelKey: 'orders.stepCollected', icon: '🤝' },
+  { key: 'SERVED', labelKey: 'orders.stepServed', icon: '🍽' },
 ];
 
 export function FulfillmentTimeline({ orderId }: FulfillmentTimelineProps) {
   const { accessToken, csrfToken, profile } = useAuth();
+  const { tr, formatTime } = useLocale();
+  const timeFmt = (iso: string | null) =>
+    iso ? formatTime(iso, { hour: 'numeric', hour12: true }) : '—';
   const [tickets, setTickets] = useState<KitchenTicketTimeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +79,7 @@ export function FulfillmentTimeline({ orderId }: FulfillmentTimelineProps) {
         );
         if (!cancelled) setTickets(res.data);
       } catch {
-        if (!cancelled) setError('Could not load fulfillment timeline');
+        if (!cancelled) setError(tr('orders.timelineLoadFailed'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -91,13 +87,13 @@ export function FulfillmentTimeline({ orderId }: FulfillmentTimelineProps) {
 
     fetchTickets();
     return () => { cancelled = true; };
-  }, [orderId, accessToken, csrfToken, tenantId]);
+  }, [orderId, accessToken, csrfToken, tenantId, tr]);
 
   if (loading) {
     return (
       <div className="rounded-panel border border-line bg-white shadow-card p-6">
-        <h3 className="text-sm font-black">Fulfillment timeline</h3>
-        <p className="mt-4 text-sm text-ink-muted animate-pulse">Loading timeline...</p>
+        <h3 className="text-sm font-black">{tr('orders.timelineTitle')}</h3>
+        <p className="mt-4 text-sm text-ink-muted animate-pulse">{tr('orders.timelineLoading')}</p>
       </div>
     );
   }
@@ -105,7 +101,7 @@ export function FulfillmentTimeline({ orderId }: FulfillmentTimelineProps) {
   if (error) {
     return (
       <div className="rounded-panel border border-line bg-white shadow-card p-6">
-        <h3 className="text-sm font-black">Fulfillment timeline</h3>
+        <h3 className="text-sm font-black">{tr('orders.timelineTitle')}</h3>
         <p className="mt-4 text-sm text-ink-muted">{error}</p>
       </div>
     );
@@ -114,15 +110,15 @@ export function FulfillmentTimeline({ orderId }: FulfillmentTimelineProps) {
   if (tickets.length === 0) {
     return (
       <div className="rounded-panel border border-line bg-white shadow-card p-6">
-        <h3 className="text-sm font-black">Fulfillment timeline</h3>
-        <p className="mt-4 text-sm text-ink-muted">No kitchen tickets for this order yet.</p>
+        <h3 className="text-sm font-black">{tr('orders.timelineTitle')}</h3>
+        <p className="mt-4 text-sm text-ink-muted">{tr('orders.timelineEmptyTickets')}</p>
       </div>
     );
   }
 
   return (
     <div className="rounded-panel border border-line bg-white shadow-card p-6">
-      <h3 className="text-sm font-black">Fulfillment timeline</h3>
+      <h3 className="text-sm font-black">{tr('orders.timelineTitle')}</h3>
       <div className="mt-4 space-y-4">
         {tickets.map((ticket) => {
           const currentStep = statusStep(ticket.status);
@@ -139,7 +135,7 @@ export function FulfillmentTimeline({ orderId }: FulfillmentTimelineProps) {
                   currentStep >= 2 ? 'bg-blue-100 text-blue-700' :
                   'bg-slate-100 text-slate-700'
                 }`}>
-                  {ticket.status.replace('_', ' ')}
+                  {labelFor(kdsStatusKeys, ticket.status, tr)}
                 </span>
               </div>
 
@@ -149,7 +145,7 @@ export function FulfillmentTimeline({ orderId }: FulfillmentTimelineProps) {
                   const isCurrent = currentStep === i;
                   return (
                     <div key={step.key} className="flex items-center flex-1">
-                      <div className={`flex items-center gap-1 ${i > 0 ? 'ml-1' : ''}`}>
+                      <div className={`flex items-center gap-1 ${i > 0 ? 'ms-1' : ''}`}>
                         <span className={`text-xs ${isCurrent ? 'font-black' : isComplete ? 'font-bold' : 'font-normal text-ink-muted'}`}>
                           {step.icon}
                         </span>
@@ -164,21 +160,21 @@ export function FulfillmentTimeline({ orderId }: FulfillmentTimelineProps) {
 
               <div className="grid grid-cols-4 gap-2 text-[10px] text-ink-muted">
                 <div>
-                  <p className="font-black">Started</p>
-                  <p>{formatTime(ticket.startedAt)}</p>
-                  {ticket.startedAt && <p className="text-brand font-bold">{elapsedMinutes(ticket.startedAt, ticket.readyAt)} prep</p>}
+                  <p className="font-black">{tr('orders.timelineStarted')}</p>
+                  <p>{timeFmt(ticket.startedAt)}</p>
+                  {ticket.startedAt && <p className="text-brand font-bold">{tr('orders.timelinePrep', { duration: elapsedMinutes(ticket.startedAt, ticket.readyAt) ?? '' })}</p>}
                 </div>
                 <div>
-                  <p className="font-black">Ready</p>
-                  <p>{formatTime(ticket.readyAt)}</p>
+                  <p className="font-black">{tr('orders.stepReady')}</p>
+                  <p>{timeFmt(ticket.readyAt)}</p>
                 </div>
                 <div>
-                  <p className="font-black">Collected</p>
-                  <p>{formatTime(ticket.collectedAt)}</p>
+                  <p className="font-black">{tr('orders.stepCollected')}</p>
+                  <p>{timeFmt(ticket.collectedAt)}</p>
                 </div>
                 <div>
-                  <p className="font-black">Served</p>
-                  <p>{formatTime(ticket.servedAt)}</p>
+                  <p className="font-black">{tr('orders.stepServed')}</p>
+                  <p>{timeFmt(ticket.servedAt)}</p>
                 </div>
               </div>
 
@@ -186,7 +182,7 @@ export function FulfillmentTimeline({ orderId }: FulfillmentTimelineProps) {
                 {ticket.lines.map((line, i) => (
                   <span key={i} className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${line.isRequired ? 'bg-surface text-ink' : 'bg-surface text-ink-muted'}`}>
                     {line.quantity}× {line.itemName}
-                    {!line.isRequired && <span className="ml-0.5 text-ink-muted">(opt)</span>}
+                    {!line.isRequired && <span className="ms-0.5 text-ink-muted">{tr('orders.timelineOptional')}</span>}
                   </span>
                 ))}
               </div>

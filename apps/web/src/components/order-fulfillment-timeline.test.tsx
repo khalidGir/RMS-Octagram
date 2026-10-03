@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render as baseRender, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { LocaleProvider } from '@/components/locale-provider';
 import { apiRequest } from '@/lib/api-client';
 import { FulfillmentTimeline } from './order-fulfillment-timeline';
 
@@ -20,7 +21,7 @@ const mockApiRequest = vi.mocked(apiRequest);
 
 function renderWithProviders(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  return baseRender(<LocaleProvider><QueryClientProvider client={qc}>{ui}</QueryClientProvider></LocaleProvider>);
 }
 
 describe('FulfillmentTimeline', () => {

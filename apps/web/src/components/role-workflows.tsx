@@ -1,5 +1,7 @@
 'use client';
 
+import { useLocale } from '@/components/locale-provider';
+
 export function PageTitle({ label, title, copy, action }: { label: string; title: string; copy: string; action?: React.ReactNode }) {
   return (
     <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
@@ -18,25 +20,26 @@ export function Panel({ children, className = '' }: { children: React.ReactNode;
 }
 
 export function StateGallery() {
+  const { tr } = useLocale();
   const states = [
-    ['Loading', 'Synchronizing restaurant data…', 'animate-pulse'],
-    ['Empty', 'No orders match this view.', ''],
-    ['Error', 'We could not load this section. Retry safely.', ''],
-    ['Offline', 'Changes will sync when connection returns.', ''],
-    ['Permission denied', 'Your role cannot access this branch.', ''],
+    [tr('common.stateLoading'), tr('common.stateLoadingDetail'), 'animate-pulse', false],
+    [tr('common.stateEmpty'), tr('common.stateEmptyDetail'), '', false],
+    [tr('common.stateError'), tr('common.stateErrorDetail'), '', false],
+    [tr('common.offline'), tr('common.stateOfflineDetail'), '', false],
+    [tr('common.permissionDenied'), tr('common.stateDeniedDetail'), '', true],
   ] as const;
 
   return (
     <>
-      <PageTitle label="System resilience" title="Application states" copy="Reusable states shown consistently across every role and workflow." />
+      <PageTitle label={tr('common.galleryEyebrow')} title={tr('common.galleryTitle')} copy={tr('common.galleryCopy')} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {states.map(([label, desc, anim]) => (
+        {states.map(([label, desc, anim, isDenied]) => (
           <Panel className="grid min-h-52 place-items-center p-6 text-center" key={label}>
             <div>
               <span className={`mx-auto grid size-12 place-items-center rounded-full bg-muted text-xl ${anim}`}>◇</span>
               <h2 className="mt-4 font-black">{label}</h2>
               <p className="mt-2 text-sm text-ink-muted">{desc}</p>
-              <button className="mt-4 text-sm font-black text-brand">{label === 'Permission denied' ? 'Go back' : 'Try again'}</button>
+              <button className="mt-4 text-sm font-black text-brand">{isDenied ? tr('common.goBack') : tr('common.tryAgain')}</button>
             </div>
           </Panel>
         ))}

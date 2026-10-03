@@ -96,11 +96,15 @@
   html {
     background: rgb(var(--canvas));
     color: rgb(var(--ink));
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", var(--font-inter), sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", var(--font-inter), "Noto Sans Ethiopic", "Noto Sans Arabic", Arial, sans-serif;
     text-rendering: optimizeLegibility;
   }
 
   body { min-height: 100vh; margin: 0; background: rgb(var(--canvas)); }
+  html[lang="am"] { font-family: "Noto Sans Ethiopic", "Nyala", "Segoe UI", var(--font-inter), sans-serif; }
+  html[lang="ar"] { font-family: "Noto Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif; }
+  html[dir="rtl"] body { text-align: start; }
+  html[dir="rtl"] .page-eyebrow { letter-spacing: 0; }
   button, input, select, textarea { font: inherit; }
   button, a, input, select { -webkit-tap-highlight-color: transparent; }
 
@@ -159,6 +163,23 @@
 
 .hide-scrollbar { scrollbar-width: none; }
 .hide-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Localization typography — negative tracking harms Ethiopic and Arabic
+   glyphs, so the app-wide tracking utilities are neutralized for those
+   languages. Unlayered on purpose so it outranks Tailwind's utility layer. */
+html[lang="am"] h1, html[lang="am"] h2, html[lang="am"] h3,
+html[lang="ar"] h1, html[lang="ar"] h2, html[lang="ar"] h3,
+html[lang="am"] .page-eyebrow, html[lang="ar"] .page-eyebrow,
+html[lang="am"] .uppercase, html[lang="ar"] .uppercase {
+  letter-spacing: normal;
+}
+
+/* Mobile nav rail: in RTL the logical inset flips, so the off-canvas slide
+   must move the opposite way. Unlayered so it outranks max-lg: utilities. */
+@media (max-width: 1023px) {
+  html[dir="rtl"] .nav-rail-offcanvas { transform: translateX(100%); }
+  html[dir="rtl"] .nav-rail-offcanvas.is-open { transform: translateX(0); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

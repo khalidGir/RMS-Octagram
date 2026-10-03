@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { useKitchens, useStations, useAllStationRoutes, useReplaceRoutes } from '@/lib/use-kitchen-config';
 import { Button, Dialog, DialogContent, DialogTitle, Select, SelectTrigger, SelectContent, SelectItem, SelectValue, Switch } from '@/components/ui';
+import { useLocale } from '@/components/locale-provider';
 import type { StationRoute, RouteType } from '@/lib/fulfillment-types';
 
 export function RouteEditor() {
   const { data: kitchens = [] } = useKitchens();
   const { data: allRoutes = [], isLoading } = useAllStationRoutes();
   const replaceRoutes = useReplaceRoutes();
+  const { tr } = useLocale();
 
   const [selectedMenuItemId, setSelectedMenuItemId] = useState<string | null>(null);
   const [showAssign, setShowAssign] = useState(false);
@@ -51,7 +53,7 @@ export function RouteEditor() {
       setAssignStationId('');
       setAssignRequired(true);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not assign route.');
+      setError(err instanceof Error ? err.message : tr('kitchen.assignRouteFailed'));
     } finally {
       setBusy(false);
     }
@@ -66,7 +68,7 @@ export function RouteEditor() {
         .map((r, i) => ({ stationId: r.stationId, routeType: r.routeType as RouteType, isRequired: r.isRequired, sortOrder: i }));
       await replaceRoutes.mutateAsync({ menuItemId: selectedMenuItemId, routes: updatedRoutes });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not remove route.');
+      setError(err instanceof Error ? err.message : tr('kitchen.removeRouteFailed'));
     } finally {
       setBusy(false);
     }
@@ -81,35 +83,35 @@ export function RouteEditor() {
       ).map((r, i) => ({ stationId: r.stationId, routeType: r.routeType as RouteType, isRequired: r.isRequired, sortOrder: i }));
       await replaceRoutes.mutateAsync({ menuItemId: selectedMenuItemId, routes: updatedRoutes });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Could not update route.');
+      setError(err instanceof Error ? err.message : tr('kitchen.updateRouteFailed'));
     } finally {
       setBusy(false);
     }
   }
 
   if (isLoading) {
-    return <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading routes...</p>;
+    return <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('kitchen.loadingRoutes')}</p>;
   }
 
   return (
     <>
       <p className="text-sm text-ink-muted">
-        {uniqueMenuItems.length} menu item{uniqueMenuItems.length !== 1 ? 's' : ''} with routes configured
+        {tr('kitchen.menuItemRoutes', { count: uniqueMenuItems.length })}
       </p>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[280px_1fr]">
         <div className="overflow-x-auto rounded-2xl border border-black/[.07] bg-white shadow-sm">
           <div className="p-4">
-            <p className="text-xs font-black uppercase tracking-wider text-ink-muted">Menu items</p>
+            <p className="text-xs font-black uppercase tracking-wider text-ink-muted">{tr('kitchen.menuItems')}</p>
           </div>
           {uniqueMenuItems.length === 0 ? (
-            <div className="px-4 pb-4 text-sm text-ink-muted">No routes configured yet.</div>
+            <div className="px-4 pb-4 text-sm text-ink-muted">{tr('kitchen.noRoutesYet')}</div>
           ) : (
             <ul className="max-h-[400px] overflow-y-auto">
               {uniqueMenuItems.map(([id, name]) => (
                 <li key={id}>
                   <button
-                    className={`w-full px-4 py-3 text-left text-sm font-bold transition hover:bg-surface ${selectedMenuItemId === id ? 'bg-surface text-brand' : ''}`}
+                    className={`w-full px-4 py-3 text-start text-sm font-bold transition hover:bg-surface ${selectedMenuItemId === id ? 'bg-surface text-brand' : ''}`}
                     onClick={() => setSelectedMenuItemId(id)}
                   >
                     {name}
@@ -124,8 +126,8 @@ export function RouteEditor() {
           {!selectedMenuItemId ? (
             <div className="grid min-h-48 place-items-center text-center">
               <div>
-                <p className="text-lg font-black">Select a menu item</p>
-                <p className="mt-2 text-sm text-ink-muted">Choose a menu item from the list to view and edit its station routes.</p>
+                <p className="text-lg font-black">{tr('kitchen.selectMenuItem')}</p>
+                <p className="mt-2 text-sm text-ink-muted">{tr('kitchen.selectMenuItemHint')}</p>
               </div>
             </div>
           ) : (
@@ -133,9 +135,9 @@ export function RouteEditor() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-black">{selectedMenuItemName}</h3>
-                  <p className="text-xs text-ink-muted">{selectedRoutes.length} route{selectedRoutes.length !== 1 ? 's' : ''}</p>
+                  <p className="text-xs text-ink-muted">{tr('kitchen.routeCount', { count: selectedRoutes.length })}</p>
                 </div>
-                <Button onClick={() => setShowAssign(true)}>Add route</Button>
+                <Button onClick={() => setShowAssign(true)}>{tr('kitchen.addRoute')}</Button>
               </div>
 
               {error && (
@@ -144,7 +146,7 @@ export function RouteEditor() {
 
               {selectedRoutes.length === 0 ? (
                 <div className="mt-4 grid min-h-32 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
-                  <p className="text-sm text-ink-muted">No routes assigned. Add a station route.</p>
+                  <p className="text-sm text-ink-muted">{tr('kitchen.noRoutesAssigned')}</p>
                 </div>
               ) : (
                 <div className="mt-4 space-y-2">
@@ -161,10 +163,10 @@ export function RouteEditor() {
                           onClick={() => handleToggleRequired(r)}
                           disabled={busy}
                         >
-                          {r.isRequired ? 'Required' : 'Optional'}
+                          {r.isRequired ? tr('kitchen.required') : tr('kitchen.optional')}
                         </button>
                         <Button variant="danger" onClick={() => handleRemoveRoute(r.stationId)} disabled={busy}>
-                          Remove
+                          {tr('pos.remove')}
                         </Button>
                       </div>
                     </div>
@@ -178,14 +180,14 @@ export function RouteEditor() {
 
       {showAssign && (
         <Dialog open onOpenChange={(o) => { if (!o) setShowAssign(false); }}>
-          <DialogContent className="max-w-lg" aria-label="Add route">
-            <DialogTitle>Add station route for {selectedMenuItemName}</DialogTitle>
+          <DialogContent className="max-w-lg" aria-label={tr('kitchen.addRoute')}>
+            <DialogTitle>{tr('kitchen.addRouteTitle', { name: selectedMenuItemName ?? '' })}</DialogTitle>
             <form onSubmit={handleAssign} className="mt-4 grid gap-4">
               <div>
-                <label className="text-sm font-black">Kitchen</label>
+                <label className="text-sm font-black">{tr('kitchen.kitchenLabel')}</label>
                 <Select value={assignKitchenId} onValueChange={(v) => { setAssignKitchenId(v); setAssignStationId(''); }}>
                   <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Select kitchen" />
+                    <SelectValue placeholder={tr('kitchen.selectKitchen')} />
                   </SelectTrigger>
                   <SelectContent>
                     {kitchens.map((k) => (
@@ -198,12 +200,12 @@ export function RouteEditor() {
                 <StationSelectInline kitchenId={assignKitchenId} value={assignStationId} onChange={setAssignStationId} />
               )}
               <div className="flex items-center gap-3">
-                <Switch label="Required for order completion" checked={assignRequired} onCheckedChange={setAssignRequired} />
+                <Switch label={tr('kitchen.requiredForCompletion')} checked={assignRequired} onCheckedChange={setAssignRequired} />
               </div>
               {error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">{error}</div>}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="secondary" onClick={() => setShowAssign(false)}>Cancel</Button>
-                <Button type="submit" disabled={busy || !assignStationId}>{busy ? 'Adding...' : 'Add'}</Button>
+                <Button type="button" variant="secondary" onClick={() => setShowAssign(false)}>{tr('kitchen.cancel')}</Button>
+                <Button type="submit" disabled={busy || !assignStationId}>{busy ? tr('kitchen.adding') : tr('kitchen.add')}</Button>
               </div>
             </form>
           </DialogContent>
@@ -215,13 +217,14 @@ export function RouteEditor() {
 
 function StationSelectInline({ kitchenId, value, onChange }: { kitchenId: string; value: string; onChange: (v: string) => void }) {
   const { data: stations = [] } = useStations(kitchenId);
+  const { tr } = useLocale();
 
   return (
     <div>
-      <label className="text-sm font-black">Station</label>
+      <label className="text-sm font-black">{tr('kitchen.stationLabel')}</label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="mt-2">
-          <SelectValue placeholder="Select station" />
+          <SelectValue placeholder={tr('kitchen.selectStation')} />
         </SelectTrigger>
         <SelectContent>
           {stations.map((s) => (

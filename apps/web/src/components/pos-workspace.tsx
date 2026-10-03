@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ApiError, apiRequest, formatEtbMinor, newIdempotencyKey, type ApiEnvelope } from '@/lib/api-client';
+import { ApiError, apiRequest, newIdempotencyKey, type ApiEnvelope } from '@/lib/api-client';
 import { normalizePublicMenu } from '@/lib/public-menu';
 import { useAuth } from './auth-provider';
+import { useLocale } from '@/components/locale-provider';
 import { useOnlineStatus } from '@/hooks';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -61,6 +62,7 @@ function findCartLineForVariant(cart: CartLine[], variantId: string): CartLine |
 
 export function PosWorkspace() {
   const { accessToken, csrfToken, profile } = useAuth();
+  const { formatCurrency, tr } = useLocale();
   const membership = profile?.memberships[0];
   const tenantId = membership?.tenant.id ?? '';
   const branchId = typeof window === 'undefined' ? '' : window.sessionStorage.getItem('rms-branch-id') ?? membership?.branchAssignments[0]?.branchId ?? '';
@@ -183,7 +185,7 @@ export function PosWorkspace() {
 
   async function createOrder() {
     if (!cart.length || !isOnline) return;
-    if (orderType === 'DINE_IN' && !tableId) return setMessage('Choose a table for a dine-in order.');
+    if (orderType === 'DINE_IN' && !tableId) return setMessage(tr('pos.chooseTable'));
     setBusy(true);
     setMessage(null);
     try {
@@ -212,13 +214,13 @@ export function PosWorkspace() {
         const details = error.details as StalePriceDetail | undefined;
         if (details?.code === 'PRICE_CHANGED') {
           setStaleDetail(details);
-          setMessage('Prices changed since you added items. Review the affected lines below, then update your cart or retry.');
+          setMessage(tr('pos.priceChanged'));
           void menuQuery.refetch();
         } else {
-          setMessage('The menu or order changed. Refresh the menu and review the ticket before retrying.');
+          setMessage(tr('pos.menuOrderChanged'));
         }
       } else {
-        setMessage(error instanceof ApiError ? error.message : 'Could not create the order.');
+        setMessage(error instanceof ApiError ? error.message : tr('pos.createOrderFailed'));
       }
     } finally {
       setBusy(false);
@@ -227,7 +229,7 @@ export function PosWorkspace() {
 
   async function confirmCash() {
     if (!pending || !isOnline) return;
-    if (!shiftQuery.data) return setMessage('Open a cash shift before confirming this payment.');
+    if (!shiftQuery.data) return setMessage(tr('pos.openShiftFirst'));
     setBusy(true);
     setMessage(null);
     try {
@@ -244,34 +246,34 @@ export function PosWorkspace() {
         csrfToken,
         tenantId,
       });
-      setMessage(`Order #${pending.orderNumber} confirmed and released to the kitchen.`);
+      setMessage(tr('pos.orderConfirmed', { number: pending.orderNumber }));
       setCart([]);
       setPending(null);
       setNotes('');
       orderKey.current = newIdempotencyKey();
       paymentKey.current = newIdempotencyKey();
     } catch (error) {
-      setMessage(error instanceof ApiError ? error.message : 'Cash confirmation failed. No success has been recorded.');
+      setMessage(error instanceof ApiError ? error.message : tr('pos.cashConfirmFailed'));
     } finally {
       setBusy(false);
     }
   }
 
-  if (!membership || !['OWNER', 'MANAGER', 'CASHIER'].includes(membership.role)) return <p role="alert">Permission denied.</p>;
+  if (!membership || !['OWNER', 'MANAGER', 'CASHIER'].includes(membership.role)) return <p role="alert">{tr('pos.permissionDenied')}</p>;
 
   return (
     <div className="mx-auto max-w-[1500px]">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-wider text-brand">Point of sale</p>
-          <h1 className="mt-2 text-3xl font-black">New order</h1>
+          <p className="text-xs font-black uppercase tracking-wider text-brand">{tr('pos.eyebrow')}</p>
+          <h1 className="mt-2 text-3xl font-black">{tr('pos.title')}</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            {shiftQuery.data ? 'Cash shift active' : 'Cash confirmation unavailable until a shift is opened.'}
+            {shiftQuery.data ? tr('pos.shiftActive') : tr('pos.shiftUnavailable')}
           </p>
         </div>
         {!shiftQuery.data && (
           <a href="/shifts" className="grid min-h-11 place-items-center rounded-xl bg-dark px-5 font-black text-white">
-            Open shift
+            {tr('pos.openShift')}
           </a>
         )}
       </header>
@@ -284,37 +286,37 @@ export function PosWorkspace() {
 
       {staleDetail?.lines && staleDetail.lines.length > 0 && (
         <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <p className="text-xs font-black uppercase tracking-wider text-amber-800">Affected lines</p>
+          <p className="text-xs font-black uppercase tracking-wider text-amber-800">{tr('pos.affectedLines')}</p>
           <ul className="mt-2 divide-y divide-amber-200">
             {staleDetail.lines.map((sl) => {
               const cartLine = findCartLineForVariant(cart, sl.variantId);
               return (
                 <li key={sl.variantId} className="flex items-center justify-between gap-3 py-2 text-sm">
                   <span>
-                    <b>{cartLine?.item.name ?? 'Unknown item'}</b>
-                    <span className="ml-1 text-ink-muted">{cartLine?.variant.name ?? sl.variantId}</span>
+                    <b>{cartLine?.item.name ?? tr('pos.unknownItem')}</b>
+                    <span className="ms-1 text-ink-muted">{cartLine?.variant.name ?? sl.variantId}</span>
                   </span>
-                  <span className="font-black text-amber-900">{formatEtbMinor(sl.lineTotal)}</span>
+                  <span className="font-black text-amber-900">{formatCurrency(sl.lineTotal)}</span>
                 </li>
               );
             })}
           </ul>
           <p className="mt-2 text-xs text-ink-muted">
-            Server total: {staleDetail.serverTotal ? formatEtbMinor(staleDetail.serverTotal) : 'unknown'}. 
-            Update the affected items in your cart, then retry with the same order.
+            {tr('pos.staleServerTotal', { total: staleDetail.serverTotal ? formatCurrency(staleDetail.serverTotal) : tr('pos.staleUnknownTotal') })}{' '}
+            {tr('pos.staleInstruction')}
           </p>
           <button
             onClick={() => setStaleDetail(null)}
             className="mt-3 min-h-9 rounded-lg border border-amber-300 bg-white px-4 text-xs font-bold text-amber-800 hover:bg-amber-100"
           >
-            Dismiss
+            {tr('pos.dismiss')}
           </button>
         </div>
       )}
 
       {!isOnline && (
         <div role="status" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-900">
-          You are offline. Order creation is disabled until connection is restored.
+          {tr('pos.offlineNotice')}
         </div>
       )}
 
@@ -323,8 +325,8 @@ export function PosWorkspace() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search menu"
-            aria-label="Search menu"
+            placeholder={tr('pos.searchMenu')}
+            aria-label={tr('pos.searchMenu')}
             className="min-h-12 w-full rounded-xl border border-line bg-white px-4"
           />
           <div className="hide-scrollbar mt-4 flex gap-2 overflow-auto">
@@ -332,7 +334,7 @@ export function PosWorkspace() {
               onClick={() => setCategory('')}
               className={`min-h-11 shrink-0 rounded-full px-4 font-bold ${!category ? 'bg-dark text-white' : 'bg-white'}`}
             >
-              All
+              {tr('orders.filterAll')}
             </button>
             {categories.map((g) => (
               <button
@@ -352,12 +354,12 @@ export function PosWorkspace() {
             </div>
           ) : menuQuery.isError ? (
             <div role="alert" className="mt-5 rounded-xl border border-red-200 bg-red-50 p-6 text-center">
-              <p className="text-sm font-bold text-red-800">Could not load menu</p>
-              <button onClick={() => void menuQuery.refetch()} className="mt-3 min-h-9 rounded-lg bg-red-700 px-4 text-xs font-black text-white">Retry</button>
+              <p className="text-sm font-bold text-red-800">{tr('pos.loadMenuFailed')}</p>
+              <button onClick={() => void menuQuery.refetch()} className="mt-3 min-h-9 rounded-lg bg-red-700 px-4 text-xs font-black text-white">{tr('pos.retry')}</button>
             </div>
           ) : items.length === 0 ? (
             <div className="mt-5 rounded-xl border border-line bg-white p-6 text-center">
-              <p className="text-sm font-bold text-ink-muted">No menu items found</p>
+              <p className="text-sm font-bold text-ink-muted">{tr('pos.noMenuItems')}</p>
             </div>
           ) : (
             <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -369,17 +371,17 @@ export function PosWorkspace() {
                   key={item.id}
                   disabled={!variant}
                   onClick={() => (needsSelection ? openModifierSelector(item) : addQuick(item))}
-                  className="min-h-40 rounded-2xl border border-line bg-white p-4 text-left shadow-card"
+                  className="min-h-40 rounded-2xl border border-line bg-white p-4 text-start shadow-card"
                 >
                   <b>{item.name}</b>
                   <p className="mt-2 line-clamp-2 text-xs text-ink-muted">{item.description}</p>
                   {item.modifierGroups.length > 0 && (
                     <p className="mt-1 text-[10px] font-bold uppercase text-brand">
-                      {item.modifierGroups.filter((g) => g.isRequired).length > 0 ? 'Required options' : 'Optional options'}
+                      {item.modifierGroups.filter((g) => g.isRequired).length > 0 ? tr('pos.requiredOptions') : tr('pos.optionalOptions')}
                     </p>
                   )}
                   <p className="mt-3 font-black text-brand">
-                    {variant ? formatEtbMinor(variant.basePriceMinor) : 'Unavailable'}
+                    {variant ? formatCurrency(variant.basePriceMinor) : tr('pos.unavailable')}
                   </p>
                 </button>
               );
@@ -390,15 +392,15 @@ export function PosWorkspace() {
 
         <aside className="h-fit rounded-2xl border border-line bg-white p-5 shadow-card">
           <div className="flex items-center justify-between">
-            <h2 className="font-black">Order</h2>
+            <h2 className="font-black">{tr('pos.orderTitle')}</h2>
             {cart.length > 0 && (
               <button onClick={() => { setCart([]); setNotes(''); setPending(null); setMessage(null); }} className="text-xs font-bold text-ink-muted hover:text-red-600">
-                Clear all
+                {tr('pos.clearAll')}
               </button>
             )}
           </div>
           {cart.length === 0 ? (
-            <p className="mt-4 text-sm text-ink-muted">No items yet.</p>
+            <p className="mt-4 text-sm text-ink-muted">{tr('pos.emptyCart')}</p>
           ) : (
             <ul className="mt-4 divide-y divide-line">
               {cart.map((line) => {
@@ -413,7 +415,7 @@ export function PosWorkspace() {
                   <li key={line.lineKey} className="py-3">
                     <div className="flex justify-between gap-2">
                       <b className="text-sm">{line.item.name}</b>
-                      <span className="text-sm font-black">{formatEtbMinor(unitTotal * BigInt(line.quantity))}</span>
+                      <span className="text-sm font-black">{formatCurrency(unitTotal * BigInt(line.quantity))}</span>
                     </div>
                     <p className="text-xs text-ink-muted">{line.variant.name}</p>
                     {Object.values(line.selectedModifiers).flat().length > 0 && (
@@ -427,25 +429,25 @@ export function PosWorkspace() {
                         }).filter(Boolean).join(' · ')}
                       </p>
                     )}
-                    {line.notes && <p className="text-[10px] text-ink-muted">Note: {line.notes}</p>}
+                    {line.notes && <p className="text-[10px] text-ink-muted">{tr('pos.notePrefix', { note: line.notes })}</p>}
                     <div className="mt-2 flex items-center gap-2">
-                      <button onClick={() => updateLineQty(line.lineKey, -1)} aria-label={`Decrease ${line.item.name} quantity`} className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-white text-sm font-bold">
+                      <button onClick={() => updateLineQty(line.lineKey, -1)} aria-label={tr('pos.decreaseQty', { name: line.item.name })} className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-white text-sm font-bold">
                         −
                       </button>
                       <span className="w-8 text-center text-sm font-black">{line.quantity}</span>
-                      <button onClick={() => updateLineQty(line.lineKey, 1)} aria-label={`Increase ${line.item.name} quantity`} className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-white text-sm font-bold">
+                      <button onClick={() => updateLineQty(line.lineKey, 1)} aria-label={tr('pos.increaseQty', { name: line.item.name })} className="grid h-8 w-8 place-items-center rounded-lg border border-line bg-white text-sm font-bold">
                         +
                       </button>
                       <button
                         onClick={() => {
                           setModifierModal({ item: line.item, editLineKey: line.lineKey });
                         }}
-                        className="ml-2 text-[10px] font-bold text-brand hover:underline"
+                        className="ms-2 text-[10px] font-bold text-brand hover:underline"
                       >
-                        Edit
+                        {tr('pos.edit')}
                       </button>
-                      <button onClick={() => removeLine(line.lineKey)} className="ml-auto text-[10px] font-bold text-red-600 hover:underline">
-                        Remove
+                      <button onClick={() => removeLine(line.lineKey)} className="ms-auto text-[10px] font-bold text-red-600 hover:underline">
+                        {tr('pos.remove')}
                       </button>
                     </div>
                   </li>
@@ -457,18 +459,18 @@ export function PosWorkspace() {
           {cart.length > 0 && (
             <div className="mt-4 border-t border-line pt-4">
               <div className="flex justify-between text-sm">
-                <span className="text-ink-muted">Subtotal (before VAT)</span>
-                <span className="font-black">{formatEtbMinor(cartSubtotal)}</span>
+                <span className="text-ink-muted">{tr('pos.subtotalLabel')}</span>
+                <span className="font-black">{formatCurrency(cartSubtotal)}</span>
               </div>
               {pending && (
                 <>
                   <div className="mt-1 flex justify-between text-sm">
-                    <span className="text-ink-muted">VAT</span>
-                    <span className="font-black">{formatEtbMinor(pending.taxMinor)}</span>
+                    <span className="text-ink-muted">{tr('pos.vatLabel')}</span>
+                    <span className="font-black">{formatCurrency(pending.taxMinor)}</span>
                   </div>
                   <div className="mt-1 flex justify-between text-lg">
-                    <span className="font-black">Total payable</span>
-                    <span className="font-black text-brand">{formatEtbMinor(pending.totalMinor)}</span>
+                    <span className="font-black">{tr('pos.totalLabel')}</span>
+                    <span className="font-black text-brand">{formatCurrency(pending.totalMinor)}</span>
                   </div>
                 </>
               )}
@@ -477,8 +479,8 @@ export function PosWorkspace() {
 
           {orderType === 'DINE_IN' && (
             <div className="mt-4">
-              <label className="text-xs font-bold text-ink-muted">Table</label>
-              <Select value={tableId || undefined} onValueChange={setTableId}><SelectTrigger className="mt-1"><SelectValue placeholder="Select table…" /></SelectTrigger><SelectContent>{tablesQuery.data?.filter((t) => t.isActive).map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}</SelectContent></Select>
+              <label className="text-xs font-bold text-ink-muted">{tr('pos.tableLabel')}</label>
+              <Select value={tableId || undefined} onValueChange={setTableId}><SelectTrigger className="mt-1"><SelectValue placeholder={tr('pos.selectTable')} /></SelectTrigger><SelectContent>{tablesQuery.data?.filter((t) => t.isActive).map((t) => <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>)}</SelectContent></Select>
             </div>
           )}
 
@@ -488,7 +490,7 @@ export function PosWorkspace() {
               disabled={busy || !cart.length || !isOnline}
               className="mt-4 min-h-12 w-full rounded-xl bg-dark font-black text-white disabled:opacity-50"
             >
-              {busy ? 'Creating…' : 'Create order'}
+              {busy ? tr('pos.creating') : tr('pos.createOrder')}
             </button>
           ) : (
             <button
@@ -496,7 +498,7 @@ export function PosWorkspace() {
               disabled={busy || !shiftQuery.data || !isOnline}
               className="mt-4 min-h-12 w-full rounded-xl bg-dark font-black text-white disabled:opacity-50"
             >
-              {busy ? 'Confirming…' : `Confirm cash — ${formatEtbMinor(pending.totalMinor)}`}
+              {busy ? tr('pos.confirming') : tr('pos.confirmCash', { total: formatCurrency(pending.totalMinor) })}
             </button>
           )}
         </aside>
@@ -535,6 +537,7 @@ function VariantSelector({
   onSelect: (variant: Variant) => void;
   onClose: () => void;
 }) {
+  const { formatCurrency, tr } = useLocale();
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -572,24 +575,24 @@ function VariantSelector({
     };
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40" role="dialog" aria-modal="true" aria-label={`Select variant for ${item.name}`}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40" role="dialog" aria-modal="true" aria-label={tr('pos.selectVariant', { name: item.name })}>
       <div ref={dialogRef} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
         <h2 className="text-xl font-black">{item.name}</h2>
-        <p className="mt-1 text-sm text-ink-muted">Choose a size or variant</p>
+        <p className="mt-1 text-sm text-ink-muted">{tr('pos.chooseVariant')}</p>
         <div className="mt-4 space-y-2">
           {item.variants.filter((v) => v.isDefault || item.variants.length > 1).map((variant) => (
             <button
               key={variant.id}
               onClick={() => onSelect(variant)}
-              className="flex w-full items-center justify-between rounded-xl border border-line p-4 text-left hover:bg-orange-50"
+              className="flex w-full items-center justify-between rounded-xl border border-line p-4 text-start hover:bg-orange-50"
             >
               <span className="font-bold">{variant.name}</span>
-              <span className="font-black text-brand">{formatEtbMinor(variant.basePriceMinor)}</span>
+              <span className="font-black text-brand">{formatCurrency(variant.basePriceMinor)}</span>
             </button>
           ))}
         </div>
         <button ref={cancelRef} onClick={onClose} className="mt-4 min-h-11 w-full rounded-xl border border-line bg-white font-bold">
-          Cancel
+          {tr('pos.cancel')}
         </button>
       </div>
     </div>
@@ -609,6 +612,7 @@ function ModifierSelector({
   onConfirm: (variant: Variant, selectedModifiers: Record<string, string[]>, notes: string) => void;
   onClose: () => void;
 }) {
+  const { formatCurrency, tr } = useLocale();
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -675,13 +679,13 @@ function ModifierSelector({
     for (const group of item.modifierGroups) {
       const count = selections[group.id]?.length ?? 0;
       if (group.isRequired && count < 1) {
-        errors.push(`${group.name} requires at least one selection`);
+        errors.push(tr('pos.requiresOne', { group: group.name }));
       }
       if (count < group.minSelections) {
-        errors.push(`${group.name} requires at least ${group.minSelections} selections`);
+        errors.push(tr('pos.requiresMin', { group: group.name, count: group.minSelections }));
       }
       if (group.maxSelections !== null && count > group.maxSelections) {
-        errors.push(`${group.name} allows at most ${group.maxSelections} selections`);
+        errors.push(tr('pos.allowsMax', { group: group.name, count: group.maxSelections }));
       }
     }
     setValidationErrors(errors);
@@ -702,14 +706,14 @@ function ModifierSelector({
   const unitTotal = BigInt(selectedVariant.basePriceMinor) + modifierDelta;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40" role="dialog" aria-modal="true" aria-label={`Customize ${item.name}`}>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40" role="dialog" aria-modal="true" aria-label={tr('pos.customize', { name: item.name })}>
       <div ref={dialogRef} className="w-full max-w-lg max-h-[85vh] overflow-auto rounded-2xl bg-white p-6 shadow-lg">
         <h2 className="text-xl font-black">{item.name}</h2>
         <p className="mt-1 text-sm text-ink-muted">{item.description}</p>
 
         {item.variants.length > 1 && (
           <div className="mt-4">
-            <h3 className="text-xs font-black uppercase tracking-wider text-ink-muted">Size / variant</h3>
+            <h3 className="text-xs font-black uppercase tracking-wider text-ink-muted">{tr('pos.sizeVariant')}</h3>
             <div className="mt-2 flex gap-2">
               {item.variants.map((v) => (
                 <button
@@ -719,7 +723,7 @@ function ModifierSelector({
                     selectedVariant.id === v.id ? 'bg-dark text-white' : 'border border-line bg-white'
                   }`}
                 >
-                  {v.name} — {formatEtbMinor(v.basePriceMinor)}
+                  {v.name} — {formatCurrency(v.basePriceMinor)}
                 </button>
               ))}
             </div>
@@ -730,8 +734,8 @@ function ModifierSelector({
           <div key={group.id} className="mt-5">
             <h3 className="text-xs font-black uppercase tracking-wider text-ink-muted">
               {group.name}
-              {group.isRequired && <span className="ml-1 text-red-600">*</span>}
-              {group.maxSelections !== null && <span className="ml-1 text-ink-muted">— max {group.maxSelections}</span>}
+              {group.isRequired && <span className="ms-1 text-red-600">*</span>}
+              {group.maxSelections !== null && <span className="ms-1 text-ink-muted">{tr('pos.maxSuffix', { count: group.maxSelections })}</span>}
             </h3>
             <div className="mt-2 space-y-1">
               {group.options.map((opt) => {
@@ -752,7 +756,7 @@ function ModifierSelector({
                     <span className="flex-1 font-bold">{opt.name}</span>
                     {opt.priceDeltaMinor !== '0' && (
                       <span className="text-xs text-ink-muted">
-                        {BigInt(opt.priceDeltaMinor) > 0 ? '+' : ''}{formatEtbMinor(opt.priceDeltaMinor)}
+                        {BigInt(opt.priceDeltaMinor) > 0 ? '+' : ''}{formatCurrency(opt.priceDeltaMinor)}
                       </span>
                     )}
                   </label>
@@ -763,11 +767,11 @@ function ModifierSelector({
         ))}
 
         <div className="mt-5">
-          <label className="text-xs font-black uppercase tracking-wider text-ink-muted">Notes (optional)</label>
+          <label className="text-xs font-black uppercase tracking-wider text-ink-muted">{tr('pos.notesLabel')}</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value.slice(0, 500))}
-            placeholder="Special instructions…"
+            placeholder={tr('pos.notesPlaceholder')}
             rows={2}
             className="mt-2 w-full rounded-xl border border-line bg-white px-3 py-2 text-sm"
           />
@@ -780,13 +784,13 @@ function ModifierSelector({
         )}
 
         <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
-          <span className="text-lg font-black text-brand">{formatEtbMinor(unitTotal)}</span>
+          <span className="text-lg font-black text-brand">{formatCurrency(unitTotal)}</span>
           <div className="flex gap-2">
             <button ref={cancelRef} onClick={onClose} className="min-h-11 rounded-xl border border-line bg-white px-5 font-bold">
-              Cancel
+              {tr('pos.cancel')}
             </button>
             <button onClick={handleConfirm} className="min-h-11 rounded-xl bg-dark px-5 font-black text-white">
-              {editLineKey ? 'Update item' : 'Add to order'}
+              {editLineKey ? tr('pos.updateItem') : tr('pos.addToOrder')}
             </button>
           </div>
         </div>

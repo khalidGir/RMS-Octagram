@@ -5,6 +5,8 @@ import { useAuth } from '@/components/auth-provider';
 import { useFulfillmentLive } from '@/lib/use-fulfillment-live';
 import { useServiceBoard, useClaimOrder, useCollectOrder, useServeOrder, useServiceNotifications } from '@/lib/use-service-board';
 import { Button, Dialog, DialogContent, DialogTitle, StatusChip, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
+import { useLocale, type MessageKey } from '@/components/locale-provider';
+import { orderTypeKeys, labelFor } from '@/lib/status-labels';
 import type { ServiceBoardOrder } from '@/lib/fulfillment-types';
 
 function formatElapsed(seconds: number | null): string {
@@ -27,28 +29,29 @@ function chipStatus(s: string): 'idle' | 'active' | 'success' | 'warning' | 'dan
   }
 }
 
-function fulfillmentLabel(s: string): string {
+function fulfillmentKey(s: string): MessageKey | null {
   switch (s) {
-    case 'ALL_READY': return 'All ready';
-    case 'PARTIALLY_READY': return 'Partially ready';
-    case 'QUEUED': return 'Queued';
-    case 'IN_PROGRESS': return 'In progress';
-    case 'READY_FOR_SERVICE': return 'Ready for service';
-    case 'PARTIALLY_SERVED': return 'Partially served';
-    case 'CANCELLED': return 'Cancelled';
-    default: return s;
+    case 'ALL_READY': return 'waiter.stAllReady';
+    case 'PARTIALLY_READY': return 'waiter.stPartiallyReady';
+    case 'QUEUED': return 'status.kdsQueued';
+    case 'IN_PROGRESS': return 'status.kdsInProgress';
+    case 'READY_FOR_SERVICE': return 'waiter.stReadyForService';
+    case 'PARTIALLY_SERVED': return 'waiter.stPartiallyServed';
+    case 'CANCELLED': return 'status.kdsCancelled';
+    default: return null;
   }
 }
 
 export function WaiterWorkspace() {
   const { profile } = useAuth();
   const [tab, setTab] = useState('ready');
+  const { tr } = useLocale();
 
   const membership = profile?.memberships?.[0];
   const role = membership?.role;
   const live = useFulfillmentLive(role === 'WAITER' || role === 'OWNER');
   if (!role || (role !== 'WAITER' && role !== 'OWNER')) {
-    return <p role="alert" className="p-8 text-center text-sm font-bold text-red-700">Permission denied.</p>;
+    return <p role="alert" className="p-8 text-center text-sm font-bold text-red-700">{tr('waiter.permissionDenied')}</p>;
   }
 
   return (
@@ -57,10 +60,10 @@ export function WaiterWorkspace() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
           <div>
             <p className="text-xs font-bold text-white/60">{membership?.tenant.name}</p>
-            <h1 className="text-xl font-black">Waiter · Service Board</h1>
+            <h1 className="text-xl font-black">{tr('waiter.boardTitle')}</h1>
           </div>
-          <button onClick={live.reconnect} aria-label="Reconnect live updates" className="min-h-11 rounded-full border border-white/30 px-3 py-2 text-xs font-black">
-            {live.status === 'connected' ? 'Live updates' : 'Polling · reconnect'}
+          <button onClick={live.reconnect} aria-label={tr('waiter.reconnectAria')} className="min-h-11 rounded-full border border-white/30 px-3 py-2 text-xs font-black">
+            {live.status === 'connected' ? tr('waiter.liveUpdates') : tr('waiter.pollingReconnect')}
           </button>
         </div>
       </header>
@@ -68,10 +71,10 @@ export function WaiterWorkspace() {
       <div className="mx-auto max-w-6xl px-4 py-6">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="ready">Ready to collect</TabsTrigger>
-            <TabsTrigger value="mine">My orders</TabsTrigger>
-            <TabsTrigger value="all">All orders</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="ready">{tr('waiter.tabReady')}</TabsTrigger>
+            <TabsTrigger value="mine">{tr('waiter.tabMine')}</TabsTrigger>
+            <TabsTrigger value="all">{tr('waiter.tabAll')}</TabsTrigger>
+            <TabsTrigger value="notifications">{tr('waiter.tabNotifications')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="ready">
@@ -100,23 +103,24 @@ function ReadyOrdersTab() {
   const claimOrder = useClaimOrder();
   const collectOrder = useCollectOrder();
   const serveOrder = useServeOrder();
+  const { tr } = useLocale();
 
   const readyOrders = orders.filter((o) => o.canCollect || o.canServe || o.readyAllocations > 0);
 
-  if (isLoading) return <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading orders...</p>;
+  if (isLoading) return <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('waiter.loadingOrders')}</p>;
   if (error) return <ErrorState message={error.message} onRetry={refetch} />;
 
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-ink-muted">{readyOrders.length} order{readyOrders.length !== 1 ? 's' : ''} ready</p>
+        <p className="text-sm text-ink-muted">{tr('waiter.readyCount', { count: readyOrders.length })}</p>
         <button onClick={() => refetch()} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-black hover:bg-muted transition-colors">
-          Refresh
+          {tr('waiter.refresh')}
         </button>
       </div>
 
       {readyOrders.length === 0 ? (
-        <EmptyState message="No orders ready for collection" />
+        <EmptyState message={tr('waiter.emptyReady')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {readyOrders.map((order) => (
@@ -141,21 +145,22 @@ function MyOrdersTab() {
   const { data: orders = [], isLoading, error, refetch } = useServiceBoard('mine');
   const collectOrder = useCollectOrder();
   const serveOrder = useServeOrder();
+  const { tr } = useLocale();
 
-  if (isLoading) return <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading orders...</p>;
+  if (isLoading) return <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('waiter.loadingOrders')}</p>;
   if (error) return <ErrorState message={error.message} onRetry={refetch} />;
 
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-ink-muted">{orders.length} order{orders.length !== 1 ? 's' : ''} claimed</p>
+        <p className="text-sm text-ink-muted">{tr('waiter.claimedCount', { count: orders.length })}</p>
         <button onClick={() => refetch()} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-black hover:bg-muted transition-colors">
-          Refresh
+          {tr('waiter.refresh')}
         </button>
       </div>
 
       {orders.length === 0 ? (
-        <EmptyState message="No orders claimed yet" />
+        <EmptyState message={tr('waiter.emptyMine')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {orders.map((order) => (
@@ -179,21 +184,22 @@ function AllOrdersTab() {
   const claimOrder = useClaimOrder();
   const collectOrder = useCollectOrder();
   const serveOrder = useServeOrder();
+  const { tr } = useLocale();
 
-  if (isLoading) return <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading orders...</p>;
+  if (isLoading) return <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('waiter.loadingOrders')}</p>;
   if (error) return <ErrorState message={error.message} onRetry={refetch} />;
 
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-ink-muted">{orders.length} order{orders.length !== 1 ? 's' : ''}</p>
+        <p className="text-sm text-ink-muted">{tr('waiter.orderCount', { count: orders.length })}</p>
         <button onClick={() => refetch()} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-black hover:bg-muted transition-colors">
-          Refresh
+          {tr('waiter.refresh')}
         </button>
       </div>
 
       {orders.length === 0 ? (
-        <EmptyState message="No orders" />
+        <EmptyState message={tr('waiter.emptyAll')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {orders.map((order) => (
@@ -215,31 +221,32 @@ function AllOrdersTab() {
 
 function NotificationsTab() {
   const { data: notifications = [], isLoading, error, refetch } = useServiceNotifications();
+  const { tr, formatTime } = useLocale();
 
-  if (isLoading) return <p className="py-16 text-center text-sm font-bold text-ink-muted">Loading notifications...</p>;
+  if (isLoading) return <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('waiter.loadingNotifications')}</p>;
   if (error) return <ErrorState message={error.message} onRetry={refetch} />;
 
   return (
     <div className="mt-4">
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-ink-muted">{notifications.length} notification{notifications.length !== 1 ? 's' : ''}</p>
+        <p className="text-sm text-ink-muted">{tr('waiter.notificationCount', { count: notifications.length })}</p>
         <button onClick={() => refetch()} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-black hover:bg-muted transition-colors">
-          Refresh
+          {tr('waiter.refresh')}
         </button>
       </div>
 
       {notifications.length === 0 ? (
-        <EmptyState message="No notifications" />
+        <EmptyState message={tr('waiter.emptyNotifications')} />
       ) : (
         <div className="space-y-3">
           {notifications.map((n) => (
             <div key={n.id} className={`rounded-2xl border p-4 ${n.status === 'UNREAD' ? 'border-brand/30 bg-brand/5' : 'border-line bg-white'}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-black">{n.type === 'STATION_READY' ? 'Station ready' : n.type}</p>
-                  <p className="mt-1 text-xs text-ink-muted">Order {n.orderId.slice(0, 8)} · {n.collectionLabelSnapshot}</p>
+                  <p className="text-sm font-black">{n.type === 'STATION_READY' ? tr('waiter.stationReady') : n.type}</p>
+                  <p className="mt-1 text-xs text-ink-muted">{tr('waiter.notifOrderPrefix', { id: n.orderId.slice(0, 8), label: n.collectionLabelSnapshot ?? '' })}</p>
                 </div>
-                <span className="text-[10px] text-ink-muted">{new Date(n.createdAt).toLocaleTimeString()}</span>
+                <span className="text-[10px] text-ink-muted">{formatTime(n.createdAt)}</span>
               </div>
             </div>
           ))}
@@ -261,6 +268,8 @@ interface OrderCardProps {
 
 function OrderCard({ order, onClaim, onCollect, onServe, claimBusy, collectBusy, serveBusy }: OrderCardProps) {
   const [showDetail, setShowDetail] = useState(false);
+  const { tr } = useLocale();
+  const fKey = fulfillmentKey(order.fulfillmentStatus);
 
   return (
     <>
@@ -272,28 +281,28 @@ function OrderCard({ order, onClaim, onCollect, onServe, claimBusy, collectBusy,
               {order.tableLabel && (
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-black">{order.tableLabel}</span>
               )}
-              <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-black uppercase">{order.orderType}</span>
+              <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-black uppercase">{labelFor(orderTypeKeys, order.orderType, tr)}</span>
             </div>
             {order.assignedWaiterName && (
-              <p className="mt-1 text-xs text-ink-muted">Assigned to: {order.assignedWaiterName}</p>
+              <p className="mt-1 text-xs text-ink-muted">{tr('waiter.assignedTo', { name: order.assignedWaiterName })}</p>
             )}
           </div>
           <StatusChip status={chipStatus(order.fulfillmentStatus)}>
-            {fulfillmentLabel(order.fulfillmentStatus)}
+            {fKey ? tr(fKey) : order.fulfillmentStatus}
           </StatusChip>
         </div>
 
         <div className="mt-3 space-y-1.5 text-sm">
           <div className="flex justify-between">
-            <span className="text-ink-muted">Ready:</span>
+            <span className="text-ink-muted">{tr('waiter.readyLabel')}</span>
             <span className="font-bold">{order.readyAllocations}/{order.totalAllocations}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-ink-muted">Collected:</span>
+            <span className="text-ink-muted">{tr('waiter.collectedLabel')}</span>
             <span className="font-bold">{order.collectedAllocations}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-ink-muted">Served:</span>
+            <span className="text-ink-muted">{tr('waiter.servedLabel')}</span>
             <span className="font-bold">{order.servedAllocations}</span>
           </div>
         </div>
@@ -319,69 +328,69 @@ function OrderCard({ order, onClaim, onCollect, onServe, claimBusy, collectBusy,
         )}
 
         {order.readyAge !== null && (
-          <p className="mt-2 text-[10px] font-bold text-ink-muted">Ready for {formatElapsed(order.readyAge)}</p>
+          <p className="mt-2 text-[10px] font-bold text-ink-muted">{tr('waiter.readyFor', { duration: formatElapsed(order.readyAge) })}</p>
         )}
 
         <div className="mt-4 flex gap-2">
           {order.canClaim && onClaim && (
             <Button onClick={onClaim} disabled={claimBusy} className="flex-1">
-              {claimBusy ? 'Claiming...' : 'Claim'}
+              {claimBusy ? tr('waiter.claiming') : tr('waiter.claim')}
             </Button>
           )}
           {order.canCollect && onCollect && (
             <Button onClick={onCollect} disabled={collectBusy} className="flex-1">
-              {collectBusy ? 'Collecting...' : 'Collect'}
+              {collectBusy ? tr('waiter.collecting') : tr('waiter.collect')}
             </Button>
           )}
           {order.canServe && onServe && (
             <Button onClick={onServe} disabled={serveBusy} className="flex-1">
-              {serveBusy ? 'Serving...' : 'Serve'}
+              {serveBusy ? tr('waiter.serving') : tr('waiter.serve')}
             </Button>
           )}
           <Button variant="secondary" onClick={() => setShowDetail(true)} className="flex-1">
-            Details
+            {tr('waiter.details')}
           </Button>
         </div>
       </article>
 
       {showDetail && (
         <Dialog open onOpenChange={(o) => { if (!o) setShowDetail(false); }}>
-          <DialogContent className="max-w-lg" aria-label={`Order ${order.orderNumber} detail`}>
-            <DialogTitle>Order #{order.orderNumber}</DialogTitle>
+          <DialogContent className="max-w-lg" aria-label={tr('waiter.detailAria', { order: order.orderNumber })}>
+            <DialogTitle>{tr('waiter.detailTitle', { order: order.orderNumber })}</DialogTitle>
             <div className="mt-4 space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <p className="text-xs font-black text-ink-muted">Type</p>
-                  <p className="font-bold">{order.orderType}</p>
+                  <p className="text-xs font-black text-ink-muted">{tr('waiter.dType')}</p>
+                  <p className="font-bold">{labelFor(orderTypeKeys, order.orderType, tr)}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-black text-ink-muted">Table</p>
+                  <p className="text-xs font-black text-ink-muted">{tr('waiter.dTable')}</p>
                   <p className="font-bold">{order.tableLabel ?? '—'}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-black text-ink-muted">Assigned waiter</p>
-                  <p className="font-bold">{order.assignedWaiterName ?? 'Unassigned'}</p>
+                  <p className="text-xs font-black text-ink-muted">{tr('waiter.dAssignedWaiter')}</p>
+                  <p className="font-bold">{order.assignedWaiterName ?? tr('waiter.unassigned')}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-black text-ink-muted">Version</p>
+                  <p className="text-xs font-black text-ink-muted">{tr('waiter.dVersion')}</p>
                   <p className="font-bold">{order.version}</p>
                 </div>
               </div>
 
               <div>
-                <p className="text-xs font-black text-ink-muted mb-2">Allocations</p>
+                <p className="text-xs font-black text-ink-muted mb-2">{tr('waiter.allocations')}</p>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   <div className="rounded-xl bg-surface p-3">
                     <p className="text-lg font-black">{order.readyAllocations}</p>
-                    <p className="text-[10px] font-bold text-ink-muted">Ready</p>
+                    <p className="text-[10px] font-bold text-ink-muted">{tr('waiter.readyShort')}</p>
                   </div>
                   <div className="rounded-xl bg-surface p-3">
                     <p className="text-lg font-black">{order.collectedAllocations}</p>
-                    <p className="text-[10px] font-bold text-ink-muted">Collected</p>
+                    <p className="text-[10px] font-bold text-ink-muted">{tr('waiter.collectedShort')}</p>
                   </div>
                   <div className="rounded-xl bg-surface p-3">
                     <p className="text-lg font-black">{order.servedAllocations}</p>
-                    <p className="text-[10px] font-bold text-ink-muted">Served</p>
+                    <p className="text-[10px] font-bold text-ink-muted">{tr('waiter.servedShort')}</p>
                   </div>
                 </div>
               </div>
@@ -394,26 +403,28 @@ function OrderCard({ order, onClaim, onCollect, onServe, claimBusy, collectBusy,
 }
 
 function EmptyState({ message }: { message: string }) {
+  const { tr } = useLocale();
   return (
     <div className="grid min-h-72 place-items-center rounded-2xl border border-dashed border-line bg-white/60 text-center">
       <div>
         <span className="mx-auto grid size-12 place-items-center rounded-full bg-muted text-xl">🍽</span>
         <p className="mt-4 text-lg font-black">{message}</p>
-        <p className="mt-2 text-sm text-ink-muted">Orders will appear here when kitchen tickets are ready.</p>
+        <p className="mt-2 text-sm text-ink-muted">{tr('waiter.emptyHint')}</p>
       </div>
     </div>
   );
 }
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { tr } = useLocale();
   return (
     <div className="grid min-h-[400px] place-items-center">
       <div className="text-center">
         <span className="mx-auto grid size-12 place-items-center rounded-full bg-red-100 text-xl">⚠</span>
-        <h2 className="mt-4 font-black">Failed to load</h2>
+        <h2 className="mt-4 font-black">{tr('waiter.failedToLoad')}</h2>
         <p className="mt-2 text-sm text-ink-muted">{message}</p>
         <button onClick={onRetry} className="mt-4 rounded-xl bg-dark px-5 py-3 text-sm font-black text-white">
-          Try again
+          {tr('common.tryAgain')}
         </button>
       </div>
     </div>

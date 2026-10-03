@@ -34,7 +34,7 @@ export const DropdownMenuItem = React.forwardRef<
     ref={ref}
     className={cn(
       'flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink outline-none data-[highlighted]:bg-surface-subtle',
-      inset && 'pl-8',
+      inset && 'ps-8',
       className,
     )}
     {...props}
@@ -51,5 +51,5 @@ export const DropdownMenuSeparator = React.forwardRef<
 DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName;
 
 export function DropdownMenuLabel({ className, inset, ...props }: React.HTMLAttributes<HTMLDivElement> & { inset?: boolean }) {
-  return <div className={cn('px-2 py-1.5 text-xs font-bold text-ink-muted', inset && 'pl-8', className)} {...props} />;
+  return <div className={cn('px-2 py-1.5 text-xs font-bold text-ink-muted', inset && 'ps-8', className)} {...props} />;
 }

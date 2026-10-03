@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useBranch } from '@/components/shell/branch-provider';
 import { apiRequest } from '@/lib/api-client';
-import { formatEtbMinor } from '@/lib/money';
+import { useLocale, type MessageKey } from '@/components/locale-provider';
+import { labelFor, orderStatusKeys, orderTypeKeys } from '@/lib/status-labels';
 import { cn } from '@/lib/cn';
 import { StatusChip } from '@/components/ui/status-chip';
 import { Button } from '@/components/ui/button';
@@ -46,15 +47,15 @@ interface OrdersResponse {
   };
 }
 
-const STATUS_FILTERS: { label: string; value: string }[] = [
-  { label: 'All', value: '' },
-  { label: 'Pending payment', value: 'PENDING_PAYMENT' },
-  { label: 'Pending confirm', value: 'PENDING_CONFIRMATION' },
-  { label: 'Confirmed', value: 'CONFIRMED' },
-  { label: 'In progress', value: 'IN_PROGRESS' },
-  { label: 'Ready', value: 'READY' },
-  { label: 'Completed', value: 'COMPLETED' },
-  { label: 'Cancelled', value: 'CANCELLED' },
+const STATUS_FILTERS: { labelKey: MessageKey; value: string }[] = [
+  { labelKey: 'orders.filterAll', value: '' },
+  { labelKey: 'orders.filterPendingPayment', value: 'PENDING_PAYMENT' },
+  { labelKey: 'orders.filterPendingConfirm', value: 'PENDING_CONFIRMATION' },
+  { labelKey: 'orders.filterConfirmed', value: 'CONFIRMED' },
+  { labelKey: 'orders.filterInProgress', value: 'IN_PROGRESS' },
+  { labelKey: 'orders.filterReady', value: 'READY' },
+  { labelKey: 'orders.filterCompleted', value: 'COMPLETED' },
+  { labelKey: 'orders.filterCancelled', value: 'CANCELLED' },
 ];
 
 const statusVariant: Record<string, 'idle' | 'active' | 'success' | 'warning' | 'danger' | 'info'> = {
@@ -69,21 +70,24 @@ const statusVariant: Record<string, 'idle' | 'active' | 'success' | 'warning' | 
   VOIDED: 'danger',
 };
 
-function timeAgo(dateStr: string): string {
+type Tr = (key: MessageKey, variables?: Record<string, string | number>) => string;
+
+function timeAgo(dateStr: string, tr: Tr): string {
   const now = Date.now();
   const then = new Date(dateStr).getTime();
   const diffMs = now - then;
   const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return tr('orders.timeJustNow');
+  if (mins < 60) return tr('orders.timeMinutesAgo', { count: mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
+  if (hrs < 24) return tr('orders.timeHoursAgo', { count: hrs });
   const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+  return tr('orders.timeDaysAgo', { count: days });
 }
 
 export function OrdersList() {
   const { accessToken, csrfToken, profile } = useAuth();
+  const { formatCurrency, tr } = useLocale();
   const { branchId } = useBranch();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,11 +116,11 @@ export function OrdersList() {
       setOrders(res.data.orders);
       setNextCursor(res.data.nextCursor);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load orders');
+      setError(err instanceof Error ? err.message : tr('orders.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [branchId, accessToken, csrfToken, tenantId, statusFilter]);
+  }, [branchId, accessToken, csrfToken, tenantId, statusFilter, tr]);
 
   useEffect(() => {
     fetchOrders();
@@ -132,12 +136,12 @@ export function OrdersList() {
     <div>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">Operations</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Orders</h1>
-          <p className="mt-2 text-sm text-ink-muted">Track every active and completed order across this branch.</p>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">{tr('orders.eyebrowOperations')}</p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{tr('orders.title')}</h1>
+          <p className="mt-2 text-sm text-ink-muted">{tr('orders.description')}</p>
         </div>
         <Link href="/pos">
-          <Button>+ New order</Button>
+          <Button>{tr('orders.newOrder')}</Button>
         </Link>
       </div>
 
@@ -153,29 +157,29 @@ export function OrdersList() {
                 : 'bg-white text-ink-muted hover:bg-surface-subtle border border-line',
             )}
           >
-            {f.label}
+            {tr(f.labelKey)}
           </button>
         ))}
       </div>
 
       {error && (
-        <Banner variant="danger" title="Error loading orders" onDismiss={() => setError(null)}>
+        <Banner variant="danger" title={tr('orders.errorTitle')} onDismiss={() => setError(null)}>
           {error}
         </Banner>
       )}
 
       {loading && orders.length === 0 && (
         <div className="grid min-h-64 place-items-center">
-          <p className="text-sm text-ink-muted animate-pulse">Loading orders…</p>
+          <p className="text-sm text-ink-muted animate-pulse">{tr('orders.loading')}</p>
         </div>
       )}
 
       {!loading && orders.length === 0 && (
         <div className="grid min-h-64 place-items-center text-center">
           <div>
-            <p className="text-lg font-black">No orders</p>
+            <p className="text-lg font-black">{tr('orders.emptyTitle')}</p>
             <p className="mt-2 text-sm text-ink-muted">
-              {statusFilter ? 'No orders match this filter.' : 'Orders will appear here once created.'}
+              {statusFilter ? tr('orders.emptyFiltered') : tr('orders.emptyAll')}
             </p>
           </div>
         </div>
@@ -189,7 +193,7 @@ export function OrdersList() {
               .slice(0, 2)
               .map((l) => `${l.quantity}× ${l.itemNameSnapshot}`)
               .join(' · ');
-            const extra = lineCount > 2 ? ` +${lineCount - 2} more` : '';
+            const extra = lineCount > 2 ? ` ${tr('orders.moreLines', { count: lineCount - 2 })}` : '';
 
             return (
               <Link
@@ -201,11 +205,11 @@ export function OrdersList() {
                   <div>
                     <p className="text-xs font-black text-brand">#{order.orderNumber}</p>
                     <h2 className="mt-1 text-base font-black">
-                      {order.customerName || order.orderType.replace('_', ' ')}
+                      {order.customerName || labelFor(orderTypeKeys, order.orderType, tr)}
                     </h2>
                   </div>
                   <StatusChip status={statusVariant[order.status] || 'idle'}>
-                    {order.status.replace('_', ' ')}
+                    {labelFor(orderStatusKeys, order.status, tr)}
                   </StatusChip>
                 </div>
 
@@ -214,8 +218,8 @@ export function OrdersList() {
                 </p>
 
                 <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
-                  <span className="text-sm font-black tabular-nums">{formatEtbMinor(Number(order.totalMinor))}</span>
-                  <span className="text-xs text-ink-muted">{timeAgo(order.createdAt)}</span>
+                  <span className="text-sm font-black tabular-nums">{formatCurrency(Number(order.totalMinor))}</span>
+                  <span className="text-xs text-ink-muted">{timeAgo(order.createdAt, tr)}</span>
                 </div>
               </Link>
             );
@@ -225,7 +229,7 @@ export function OrdersList() {
 
       {nextCursor && !loading && (
         <div className="mt-6 text-center">
-          <Button variant="secondary" onClick={loadMore}>Load more</Button>
+          <Button variant="secondary" onClick={loadMore}>{tr('orders.loadMore')}</Button>
         </div>
       )}
     </div>
