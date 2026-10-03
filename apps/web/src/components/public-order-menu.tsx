@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
-import { apiRequest, type ApiEnvelope } from '@/lib/api-client';
+import { apiRequest, ApiError, type ApiEnvelope } from '@/lib/api-client';
+import { useTableServiceRequests, useCreateServiceRequest, type ServiceRequestType } from '@/lib/use-service-requests';
 import { normalizePublicMenu } from '@/lib/public-menu';
 import { useLocale } from './locale-provider';
 import { LanguagePicker } from './language-picker';
@@ -136,6 +137,7 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
           <p className="text-xs font-black uppercase tracking-[.16em] text-accent-gold">{isPickup ? tr('ordering.pickupPreorder') : tr('ordering.table', { table: tableLabel ?? '' })}</p>
           <h1 className="mt-3 text-4xl font-black tracking-[-.045em]">{tr('ordering.chooseMeal')}</h1>
           <p className="mt-3 max-w-xl text-sm leading-6 text-white/70">{isPickup ? tr('ordering.pickupIntro') : tr('ordering.tableIntro')}</p>
+          {entry.kind === 'table' && <TableAssistance qrToken={entry.token} />}
         </div>
       </section>
       {disabled ? <PublicState title={tr('ordering.pickupUnavailable')} detail={tr('ordering.contactRestaurant')} /> : (
@@ -156,6 +158,75 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
       {count > 0 && <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white p-3"><button onClick={continueOrder} className="mx-auto flex min-h-14 w-full max-w-3xl items-center justify-between rounded-2xl bg-brand px-5 font-black text-white"><span>{tr('ordering.reviewOrderCount', { count })}</span><span dir="ltr">{formatCurrency(subtotal)}</span></button></div>}
       {customizing && <CustomerItemOptions item={customizing} onClose={() => setCustomizing(null)} onConfirm={(variant, ids, names, notes) => addConfigured(customizing, variant, ids, names, notes)} />}
     </main>
+  );
+}
+
+function TableAssistance({ qrToken }: { qrToken: string }) {
+  const { tr } = useLocale();
+  const requests = useTableServiceRequests(qrToken, true);
+  const create = useCreateServiceRequest();
+  const [error, setError] = useState<string | null>(null);
+  const active = requests.data ?? [];
+
+  function send(type: ServiceRequestType) {
+    setError(null);
+    create.mutate(
+      { qrToken, type },
+      {
+        onError: (cause) => {
+          const code = cause instanceof ApiError ? (cause.details as { code?: string } | undefined)?.code : undefined;
+          setError(code === 'NO_ACTIVE_SESSION' ? tr('ordering.serviceNoSession') : tr('ordering.serviceError'));
+        },
+      },
+    );
+  }
+
+  const options: Array<{ type: ServiceRequestType; label: string }> = [
+    { type: 'CALL_WAITER', label: tr('ordering.callWaiter') },
+    { type: 'REQUEST_BILL', label: tr('ordering.requestBill') },
+  ];
+
+  return (
+    <div className="mt-6" role="group" aria-label={tr('ordering.assistanceGroup')}>
+      <div className="flex flex-wrap gap-3">
+        {options.map(({ type, label }) => {
+          const state = active.find((request) => request.type === type);
+          if (state) {
+            const statusText =
+              state.status === 'CLAIMED'
+                ? tr('ordering.serviceOnTheWay')
+                : state.status === 'ESCALATED'
+                  ? tr('ordering.serviceEscalated')
+                  : tr('ordering.serviceWaiting');
+            return (
+              <span
+                key={type}
+                aria-live="polite"
+                className="inline-flex min-h-11 items-center rounded-xl border border-accent-gold/40 bg-accent-gold/10 px-4 text-sm font-black text-accent-gold"
+              >
+                {label} · {statusText}
+              </span>
+            );
+          }
+          return (
+            <button
+              key={type}
+              type="button"
+              onClick={() => send(type)}
+              disabled={create.isPending}
+              className="min-h-11 rounded-xl border border-white/30 bg-white/10 px-4 text-sm font-black text-white transition-colors hover:bg-white/20 disabled:opacity-60"
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+      {error && (
+        <p role="alert" className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-800">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

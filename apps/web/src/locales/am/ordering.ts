@@ -109,4 +109,12 @@ export const ordering = {
   modifierSelectionError: '{group}: ትክክለኛ የአማራጮች ብዛት ይምረጡ',
   specialInstructions: 'ልዩ መመሪያዎች',
   addConfiguredItem: 'ወደ ትዕዛዝ ጨምር · {price}',
+  callWaiter: 'አገልጋይ ጠራ',
+  requestBill: 'ደረሰኝ ይጠይቁ',
+  serviceWaiting: 'ጥያቄ ተልኳል',
+  serviceOnTheWay: 'በመንገድ ላይ ነው',
+  serviceEscalated: 'አስቸኳይ ጥያቄ',
+  serviceNoSession: 'መጀመሪያ ያዙ፤ ከዚያ አገልጋዩን ይጠሩ።',
+  serviceError: 'ጥያቄውን መላክ አልቻልንም። እባክዎ እንደገና ይሞክሩ።',
+  assistanceGroup: 'የጠረጴዛ እርዳታ',
 } as const;

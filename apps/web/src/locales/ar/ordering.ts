@@ -121,4 +121,12 @@ export const ordering = {
   modifierSelectionError: '{group}: اختر عددًا صالحًا من الخيارات',
   specialInstructions: 'تعليمات خاصة',
   addConfiguredItem: 'أضف إلى الطلب · {price}',
+  callWaiter: 'نادِ الخادم',
+  requestBill: 'اطلب الفاتورة',
+  serviceWaiting: 'تم الإرسال',
+  serviceOnTheWay: 'الخدّام في الطريق',
+  serviceEscalated: 'طلب عاجل',
+  serviceNoSession: 'اطلب أولاً ثم نادِ الخادم.',
+  serviceError: 'تعذّر إرسال طلبك. حاول مرة أخرى.',
+  assistanceGroup: 'مساعدة الطاولة',
 } as const;
