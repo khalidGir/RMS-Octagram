@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "nest start --watch",
+    "dev": "node api.js && nest start --watch",
     "build": "nest build",
-    "start": "node dist/main",
-    "start:prod": "node dist/main",
+    "start": "node api.js && node dist/main",
+    "start:prod": "node api.js && node dist/main",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
