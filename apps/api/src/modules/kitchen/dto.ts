@@ -49,6 +49,11 @@ export class AssignMenuItemToStationDto {
 // ─── Kitchen Tickets ────────────────────────
 
 export class TicketQueryDto {
+  @ApiPropertyOptional({ description: 'Filter by kitchen ID' })
+  @IsOptional()
+  @IsString()
+  kitchenId?: string;
+
   @ApiPropertyOptional({ description: 'Filter by station ID' })
   @IsOptional()
   @IsString()

@@ -4,6 +4,7 @@ export interface KdsTicketEvent {
   id: string;
   orderId: string;
   stationId: string;
+  kitchenId?: string | null;
   ticketNumber: string;
   status: string;
   priority: number;
@@ -32,6 +33,7 @@ export interface KdsTicket {
   id: string;
   orderId: string;
   stationId: string;
+  kitchenId?: string | null;
   ticketNumber: string;
   status: string;
   priority: number;
@@ -59,6 +61,7 @@ export interface KdsTicket {
 export interface KdsStation {
   id: string;
   name: string;
+  kitchenId?: string | null;
   displayOrder: number;
   isActive: boolean;
   menuItemIds: string[];

@@ -279,6 +279,7 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
     cancelTicket,
   } = useKdsTickets({
     branchId,
+    kitchenId: selectedKitchenId,
     stationId: selectedStationId,
   });
 
@@ -290,7 +291,7 @@ export function KitchenDisplay({ branchId }: KitchenDisplayProps) {
 
   const filteredStations = useMemo(() => {
     if (!selectedKitchenId) return stations;
-    return stations;
+    return stations.filter((s) => s.kitchenId === selectedKitchenId);
   }, [stations, selectedKitchenId]);
 
   const activeStation = selectedStationId ? stationMap.get(selectedStationId) : null;

@@ -291,6 +291,7 @@ export class KitchenStationsService {
     return {
       id: station.id,
       name: station.name,
+      kitchenId: station.kitchenId ?? null,
       displayOrder: station.displayOrder,
       isActive: station.isActive,
       createdAt: station.createdAt,

@@ -46,6 +46,7 @@ export class KitchenTicketsController {
     const tickets = await this.ticketsService.listTickets({
       tenantId: ctx.tenantId!,
       branchId,
+      kitchenId: query.kitchenId,
       stationId: query.stationId,
       status: query.status,
       limit: query.limit,

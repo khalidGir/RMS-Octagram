@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from '@/components/auth-provider';
 import { useKdsSocket } from './use-kds-socket';
@@ -11,6 +11,7 @@ export type { KdsTicket, KdsStation };
 interface UseKdsTicketsOptions {
   branchId: string;
   stationId?: string | null;
+  kitchenId?: string | null;
   statusFilter?: string | null;
   pollingIntervalMs?: number;
 }
@@ -20,6 +21,7 @@ const POLLING_INTERVAL = 15000;
 export function useKdsTickets({
   branchId,
   stationId,
+  kitchenId,
   statusFilter,
   pollingIntervalMs = POLLING_INTERVAL,
 }: UseKdsTicketsOptions) {
@@ -39,6 +41,7 @@ export function useKdsTickets({
 
     try {
       const params = new URLSearchParams();
+      if (kitchenId) params.set('kitchenId', kitchenId);
       if (stationId) params.set('stationId', stationId);
       if (statusFilter) params.set('status', statusFilter);
       params.set('limit', '100');
@@ -57,7 +60,7 @@ export function useKdsTickets({
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [accessToken, branchId, tenantId, stationId, statusFilter]);
+  }, [accessToken, branchId, tenantId, kitchenId, stationId, statusFilter]);
 
   const fetchStations = useCallback(async () => {
     if (!accessToken || !branchId || !tenantId) return;
@@ -126,15 +129,17 @@ export function useKdsTickets({
   }, [accessToken, branchId, tenantId]);
 
   const handleSocketTicketCreated = useCallback((ticket: KdsTicket) => {
+    if (kitchenId && ticket.kitchenId !== kitchenId) return;
     setTickets(prev => {
       if (prev.some(t => t.id === ticket.id)) return prev;
       return [...prev, ticket];
     });
-  }, []);
+  }, [kitchenId]);
 
   const handleSocketTicketUpdated = useCallback((updated: KdsTicket) => {
+    if (kitchenId && updated.kitchenId && updated.kitchenId !== kitchenId) return;
     setTickets(prev => prev.map(t => t.id === updated.id ? { ...t, ...updated } : t));
-  }, []);
+  }, [kitchenId]);
 
   const handleSocketConnect = useCallback(() => {
     fetchTickets(true);
@@ -179,8 +184,16 @@ export function useKdsTickets({
     };
   }, [socketStatus, pollingIntervalMs, fetchTickets]);
 
+  // Show only the selected kitchen's tickets immediately, so switching
+  // kitchens never briefly displays the previous kitchen's tickets while
+  // the filtered refetch is still in flight.
+  const visibleTickets = useMemo(
+    () => (kitchenId ? tickets.filter((t) => t.kitchenId === kitchenId) : tickets),
+    [tickets, kitchenId],
+  );
+
   return {
-    tickets,
+    tickets: visibleTickets,
     stations,
     loading,
     error,

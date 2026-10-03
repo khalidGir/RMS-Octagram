@@ -384,7 +384,7 @@ Rate limit key: `{name}:{clientIp}:{tenantId}:{userId}`
 
 | Method | Path | Auth | Roles | Body | Response |
 |--------|------|------|-------|------|----------|
-| `GET` | `/api/v1/branches/:branchId/kitchen-tickets` | JWT+BranchScope | Any | `?stationId?, status?, limit?, after?` | `{ data: ticket[] }` |
+| `GET` | `/api/v1/branches/:branchId/kitchen-tickets` | JWT+BranchScope | Any | `?kitchenId?, stationId?, status?, limit?, after?` | `{ data: ticket[] }` |
 | `GET` | `/api/v1/branches/:branchId/kitchen-tickets/:ticketId` | JWT+BranchScope | Any | — | `{ data: ticket }` |
 | `POST` | `/api/v1/branches/:branchId/kitchen-tickets/:ticketId/bump` | JWT+BranchScope | Any | `{ reason?, expectedVersion }` | `{ data: ticket }` |
 | `POST` | `/api/v1/branches/:branchId/kitchen-tickets/:ticketId/recall` | JWT+BranchScope | Any | `{ reason?, expectedVersion }` | `{ data: ticket }` |

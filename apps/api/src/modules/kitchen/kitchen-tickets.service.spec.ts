@@ -331,4 +331,52 @@ describe('KitchenTicketsService', () => {
       ).rejects.toThrow('Cannot cancel');
     });
   });
+
+  describe('listTickets', () => {
+    it('should filter by kitchen when kitchenId is provided', async () => {
+      prisma.kitchenTicket.findMany.mockResolvedValue([]);
+
+      await service.listTickets({ tenantId: 't1', branchId: 'b1', kitchenId: 'k-2' });
+
+      expect(prisma.kitchenTicket.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: 't1', branchId: 'b1', kitchenId: 'k-2' },
+        }),
+      );
+    });
+
+    it('should omit the kitchen filter when kitchenId is not provided', async () => {
+      prisma.kitchenTicket.findMany.mockResolvedValue([]);
+
+      await service.listTickets({ tenantId: 't1', branchId: 'b1' });
+
+      expect(prisma.kitchenTicket.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { tenantId: 't1', branchId: 'b1' },
+        }),
+      );
+    });
+
+    it('should serialize kitchenId onto each ticket', async () => {
+      prisma.kitchenTicket.findMany.mockResolvedValue([
+        {
+          id: 't1', orderId: 'o1', stationId: 's1', kitchenId: 'k-2',
+          ticketNumber: 1n, status: 'QUEUED', priority: 0, version: 1,
+          createdAt: new Date(), estimatedReadyAt: null, startedAt: null,
+          readyAt: null, completedAt: null,
+          station: { name: 'Grill' },
+          order: { orderNumber: 42, tableId: null, customerName: null },
+          lines: [],
+        },
+      ]);
+      prisma.orderLine.findMany.mockResolvedValue([]);
+
+      const tickets = await service.listTickets({
+        tenantId: 't1', branchId: 'b1', kitchenId: 'k-2',
+      });
+
+      expect(tickets).toHaveLength(1);
+      expect(tickets[0]).toMatchObject({ kitchenId: 'k-2', stationName: 'Grill' });
+    });
+  });
 });

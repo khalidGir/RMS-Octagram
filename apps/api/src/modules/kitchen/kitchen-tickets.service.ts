@@ -191,17 +191,19 @@ export class KitchenTicketsService {
   async listTickets(params: {
     tenantId: string;
     branchId: string;
+    kitchenId?: string;
     stationId?: string;
     status?: string;
     limit?: number;
     after?: string;
   }) {
-    const { tenantId, branchId, stationId, status, limit = 50, after } = params;
+    const { tenantId, branchId, kitchenId, stationId, status, limit = 50, after } = params;
 
     const tickets = await this.prisma.kitchenTicket.findMany({
       where: {
         tenantId,
         branchId,
+        ...(kitchenId && { kitchenId }),
         ...(stationId && { stationId }),
         ...(status && { status }),
       },
@@ -904,6 +906,7 @@ export class KitchenTicketsService {
       id: ticket.id,
       orderId: ticket.orderId,
       stationId: ticket.stationId,
+      kitchenId: ticket.kitchenId ?? null,
       ticketNumber: ticket.ticketNumber?.toString?.() ?? ticket.ticketNumber,
       status: ticket.status,
       priority: ticket.priority,
