@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { QRCodeSVG } from 'qrcode.react';
 import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
 import { useBranch } from './shell/branch-provider';
@@ -52,6 +53,7 @@ export function TablesManagement() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreateArea, setShowCreateArea] = useState(false);
   const [showCreateTable, setShowCreateTable] = useState(false);
+  const [qrTarget, setQrTarget] = useState<{ label: string; tableId: string; raw?: string } | null>(null);
 
   const queryClient = useQueryClient();
   const invalidateAll = () => {
@@ -158,6 +160,7 @@ export function TablesManagement() {
               isManager={isManager}
               onNotice={setNotice}
               onInvalidate={invalidateAll}
+              onShowQr={(t) => setQrTarget({ label: t.label, tableId: t.tableId })}
             />
           </TabsContent>
 
@@ -211,12 +214,25 @@ export function TablesManagement() {
           tenantId={tenantId}
           branchId={branchId}
           onClose={() => setShowCreateTable(false)}
-          onCreated={async (label) => {
+          onCreated={async (label, tableId, qrTokenRaw) => {
             setShowCreateTable(false);
             await occupancy.refetch();
             await areas.refetch();
             setNotice(tr('tables.tableCreated', { label }));
+            if (qrTokenRaw) setQrTarget({ label, tableId, raw: qrTokenRaw });
           }}
+        />
+      )}
+      {qrTarget && (
+        <TableQrDialog
+          label={qrTarget.label}
+          tableId={qrTarget.tableId}
+          initialRaw={qrTarget.raw}
+          accessToken={accessToken!}
+          csrfToken={csrfToken}
+          tenantId={tenantId}
+          branchId={branchId}
+          onClose={() => setQrTarget(null)}
         />
       )}
     </>
@@ -236,6 +252,7 @@ function TablesGrid({
   isManager,
   onNotice,
   onInvalidate,
+  onShowQr,
 }: {
   tables: TableOccupancy[];
   accessToken: string;
@@ -245,6 +262,7 @@ function TablesGrid({
   isManager: boolean;
   onNotice: (msg: string | null) => void;
   onInvalidate: () => void;
+  onShowQr: (table: TableOccupancy) => void;
 }) {
   const { tr } = useLocale();
   const [editingTable, setEditingTable] = useState<TableOccupancy | null>(null);
@@ -293,12 +311,20 @@ function TablesGrid({
                   : tr('tables.seatsLabel', { count: t.capacity })}
               </p>
               {isManager && (
-                <button
-                  onClick={() => setEditingTable(t)}
-                  className="mt-4 w-full rounded-xl border border-line py-2 text-xs font-black"
-                >
-                  {tr('tables.manageBtn')}
-                </button>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setEditingTable(t)}
+                    className="rounded-xl border border-line py-2 text-xs font-black"
+                  >
+                    {tr('tables.manageBtn')}
+                  </button>
+                  <button
+                    onClick={() => onShowQr(t)}
+                    className="rounded-xl border border-line py-2 text-xs font-black"
+                  >
+                    {tr('tables.qrBtn')}
+                  </button>
+                </div>
               )}
             </div>
           );
@@ -593,7 +619,7 @@ function CreateTableDialog({
   tenantId: string;
   branchId: string;
   onClose: () => void;
-  onCreated: (label: string) => Promise<void>;
+  onCreated: (label: string, tableId: string, qrTokenRaw?: string) => Promise<void>;
 }) {
   const [label, setLabel] = useState('');
   const [capacity, setCapacity] = useState('4');
@@ -611,14 +637,17 @@ function CreateTableDialog({
     setBusy(true);
     setError(null);
     try {
-      await apiRequest(`/branches/${branchId}/tables`, {
-        method: 'POST',
-        accessToken,
-        csrfToken,
-        tenantId,
-        body: { label: trimmedLabel, capacity: cap, diningAreaId: diningAreaId || undefined },
-      });
-      await onCreated(trimmedLabel);
+      const response = await apiRequest<ApiEnvelope<{ id: string; qrTokenRaw?: string }>>(
+        `/branches/${branchId}/tables`,
+        {
+          method: 'POST',
+          accessToken,
+          csrfToken,
+          tenantId,
+          body: { label: trimmedLabel, capacity: cap, diningAreaId: diningAreaId || undefined },
+        },
+      );
+      await onCreated(trimmedLabel, response.data.id, response.data.qrTokenRaw);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : tr('tables.createTableError'));
     } finally {
@@ -861,6 +890,124 @@ function EditAreaDialog({
             </button>
           </div>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                             TableQrDialog                                  */
+/* -------------------------------------------------------------------------- */
+
+function TableQrDialog({
+  label,
+  tableId,
+  initialRaw,
+  accessToken,
+  csrfToken,
+  tenantId,
+  branchId,
+  onClose,
+}: {
+  label: string;
+  tableId: string;
+  initialRaw?: string;
+  accessToken: string;
+  csrfToken: string | null;
+  tenantId: string;
+  branchId: string;
+  onClose: () => void;
+}) {
+  const { tr } = useLocale();
+  const [raw, setRaw] = useState<string | null>(initialRaw ?? null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  // The raw token exists only in this response (the server keeps a hash), so
+  // the ordering URL can only be built while a fresh raw token is in hand.
+  const url = raw ? `${window.location.origin}/o/${raw}` : '';
+
+  async function generate() {
+    setBusy(true);
+    setError(null);
+    setCopied(false);
+    try {
+      const response = await apiRequest<ApiEnvelope<{ raw: string }>>(
+        `/branches/${branchId}/tables/${tableId}/qr-token/rotate`,
+        { method: 'POST', accessToken, csrfToken, tenantId, body: {} },
+      );
+      setRaw(response.data.raw);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : tr('tables.qrRotateError'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-sm" aria-label={tr('tables.qrTitle', { label })}>
+        <DialogTitle>{tr('tables.qrTitle', { label })}</DialogTitle>
+        {!raw ? (
+          <div className="mt-4 grid gap-4">
+            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">
+              {tr('tables.qrRotateWarning')}
+            </p>
+            {error && (
+              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
+                {error}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
+                {tr('common.cancel')}
+              </button>
+              <button type="button" onClick={generate} disabled={busy} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
+                {busy ? tr('tables.qrGenerating') : tr('tables.qrGenerateBtn')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-4">
+            <div className="qr-print-area grid justify-items-center gap-2 rounded-2xl border border-line bg-white p-5">
+              <QRCodeSVG value={url} size={208} marginSize={2} />
+              <p className="text-sm font-black">{tr('tables.qrForTable', { label })}</p>
+              <p className="text-xs font-bold text-ink-muted">{tr('tables.qrUrlLabel')}</p>
+              <p className="break-all text-center text-xs text-ink-muted">{url}</p>
+            </div>
+            {error && (
+              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
+                {error}
+              </div>
+            )}
+            {copied && (
+              <p role="status" className="text-xs font-bold text-emerald-700">{tr('tables.qrCopied')}</p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" onClick={copyLink} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
+                {tr('tables.qrCopyBtn')}
+              </button>
+              <button type="button" onClick={() => window.print()} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
+                {tr('tables.qrPrintBtn')}
+              </button>
+              <button type="button" onClick={generate} disabled={busy} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
+                {busy ? tr('tables.qrGenerating') : tr('tables.qrRotateBtn')}
+              </button>
+              <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
+                {tr('tables.qrDoneBtn')}
+              </button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

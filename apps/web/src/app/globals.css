@@ -189,3 +189,17 @@ html[lang="am"] .uppercase, html[lang="ar"] .uppercase {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Table QR printing: when the print dialog is opened from the QR dialog only
+   the QR card is printed, centred on an otherwise blank page. */
+@media print {
+  body * { visibility: hidden; }
+  .qr-print-area, .qr-print-area * { visibility: visible; }
+  .qr-print-area {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border: none;
+  }
+}
