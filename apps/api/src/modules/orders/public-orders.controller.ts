@@ -125,4 +125,11 @@ export class PublicOrdersController {
     const result = await this.orders.trackOrder({ trackingToken });
     return { data: result };
   }
+
+  @Get('orders/:trackingToken/receipt')
+  @ApiOperation({ summary: 'Get printable non-fiscal receipt through the opaque tracking token' })
+  async receipt(@Param('trackingToken') trackingToken: string) {
+    const result = await this.orders.getPublicReceipt(trackingToken);
+    return { data: result };
+  }
 }

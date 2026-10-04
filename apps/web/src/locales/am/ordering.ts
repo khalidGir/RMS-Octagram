@@ -117,4 +117,5 @@ export const ordering = {
   serviceNoSession: 'መጀመሪያ ያዙ፤ ከዚያ አገልጋዩን ይጠሩ።',
   serviceError: 'ጥያቄውን መላክ አልቻልንም። እባክዎ እንደገና ይሞክሩ።',
   assistanceGroup: 'የጠረጴዛ እርዳታ',
+  viewReceipt: 'ደረሰኝ ይመልከቱ',
 } as const;

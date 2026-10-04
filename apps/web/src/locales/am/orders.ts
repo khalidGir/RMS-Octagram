@@ -62,4 +62,10 @@ export const orders = {
   stepReady: 'ዝግጁ',
   stepCollected: 'ወርዷል',
   stepServed: 'አገለግሏል',
+  receiptTitle: 'ደረሰኝ', receiptReprint: 'ደረሰኝ ይመልከቱ', receiptLoading: 'ደረሰኝ በመጫን ላይ…',
+  receiptLoadFailed: 'ደረሰኙን መጫን አልተቻለም።', receiptNotSettled: 'የመጨረሻ ደረሰኝ ክፍያው ከተረጋገጠ በኋላ ይገኛል።',
+  receiptOrder: 'ትዕዛዝ #{number}', receiptTable: 'ጠረጴዛ {table}', receiptSubtotal: 'ንዑስ ድምር', receiptTax: 'ተ.እ.ታ',
+  receiptDiscount: 'ቅናሽ', receiptTotal: 'ጠቅላላ', receiptPayment: 'በ{method} ተከፍሏል', receiptReference: 'ማጣቀሻ፦ {reference}',
+  receiptNonFiscal: 'የRestaurantMS ደረሰኝ — የፊስካል መሳሪያ ደረሰኝ አይደለም። የኢትዮጵያ ግብርና ፊስካል ተገዢነት የምግብ ቤቱ ኃላፊነት ነው።',
+  receiptDownload: 'ደረሰኝ ያውርዱ', receiptPrint: 'ደረሰኝ ያትሙ',
 } as const;

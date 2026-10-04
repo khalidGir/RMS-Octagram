@@ -62,4 +62,10 @@ export const orders = {
   stepReady: 'Ready',
   stepCollected: 'Collected',
   stepServed: 'Served',
+  receiptTitle: 'Receipt', receiptReprint: 'View receipt', receiptLoading: 'Loading receipt…',
+  receiptLoadFailed: 'Receipt could not be loaded.', receiptNotSettled: 'A final receipt is available after payment is approved.',
+  receiptOrder: 'Order #{number}', receiptTable: 'Table {table}', receiptSubtotal: 'Subtotal', receiptTax: 'VAT',
+  receiptDiscount: 'Discount', receiptTotal: 'Total', receiptPayment: 'Paid by {method}', receiptReference: 'Reference: {reference}',
+  receiptNonFiscal: 'RestaurantMS receipt — not a fiscal-device receipt. Ethiopian tax and fiscal compliance remains the restaurant’s responsibility.',
+  receiptDownload: 'Download receipt', receiptPrint: 'Print receipt',
 } as const;

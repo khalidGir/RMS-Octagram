@@ -246,6 +246,10 @@ html[lang="am"] .uppercase, html[lang="ar"] .uppercase {
    jobs add the `rms-printing` body flag (see lib/qr-export.ts printAnchor),
    which drops hidden flow content entirely so no blank pages are produced. */
 @media print {
+  body.rms-receipt-printing > * { display: none !important; }
+  body.rms-receipt-printing > :has(.receipt-print-area) { display: block !important; }
+  body.rms-receipt-printing .receipt-print-area { position: fixed; inset: 0; margin: 0; border: 0; box-shadow: none; }
+  body.rms-receipt-printing [role="dialog"] > *:not(.receipt-print-area):not(:has(.receipt-print-area)) { display: none !important; }
   body * { visibility: hidden; }
   .qr-print-area, .qr-print-area *, .qr-print-sheet, .qr-print-sheet * { visibility: visible; }
   .qr-print-area {

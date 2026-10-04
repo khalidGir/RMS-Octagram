@@ -86,4 +86,10 @@ export const orders = {
   stepReady: 'جاهز',
   stepCollected: 'تم الاستلام',
   stepServed: 'تم التقديم',
+  receiptTitle: 'الإيصال', receiptReprint: 'عرض الإيصال', receiptLoading: 'جارٍ تحميل الإيصال…',
+  receiptLoadFailed: 'تعذر تحميل الإيصال.', receiptNotSettled: 'يتوفر الإيصال النهائي بعد اعتماد الدفع.',
+  receiptOrder: 'الطلب رقم {number}', receiptTable: 'الطاولة {table}', receiptSubtotal: 'المجموع الفرعي', receiptTax: 'ضريبة القيمة المضافة',
+  receiptDiscount: 'الخصم', receiptTotal: 'الإجمالي', receiptPayment: 'تم الدفع بواسطة {method}', receiptReference: 'المرجع: {reference}',
+  receiptNonFiscal: 'إيصال RestaurantMS — ليس إيصال جهاز مالي رسمي. تبقى مسؤولية الامتثال الضريبي والمالي الإثيوبي على المطعم.',
+  receiptDownload: 'تنزيل الإيصال', receiptPrint: 'طباعة الإيصال',
 } as const;

@@ -117,4 +117,5 @@ export const ordering = {
   serviceNoSession: 'Place your order first, then call your waiter.',
   serviceError: 'We could not send your request. Please try again.',
   assistanceGroup: 'Table assistance',
+  viewReceipt: 'View receipt',
 } as const;

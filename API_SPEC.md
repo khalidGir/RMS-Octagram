@@ -349,6 +349,15 @@ Support context is carried in a secure server-validated session/header binding a
 - Polling fallback is 20-30 seconds with backoff/jitter and authoritative refetch after reconnect.
 - Staff mutation endpoints return no optimistic success when server acknowledgement is unavailable.
 
+### Non-fiscal receipts
+
+| Method | Path | Role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/public/orders/:trackingToken/receipt` | Customer with opaque tracking token | Stored order/payment snapshot after an approved payment. |
+| `GET` | `/orders/:orderId/receipt` | Scoped staff | Reprint the same stored receipt projection. |
+
+Receipt reads never recalculate current menu prices. They return snapshotted item, variant, modifier, tax, discount and total values plus the approved payment method/reference. Public reads expose no internal IDs, staff identities, kitchen metadata or audit data. A `409` response means payment is not yet approved. This RestaurantMS document is explicitly non-fiscal; regulated Ethiopian fiscal-device integration remains outside the pilot.
+
 ### Table assistance service requests
 
 | Method | Path | Role | Purpose |

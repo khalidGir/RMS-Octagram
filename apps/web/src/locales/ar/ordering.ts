@@ -129,4 +129,5 @@ export const ordering = {
   serviceNoSession: 'اطلب أولاً ثم نادِ الخادم.',
   serviceError: 'تعذّر إرسال طلبك. حاول مرة أخرى.',
   assistanceGroup: 'مساعدة الطاولة',
+  viewReceipt: 'عرض الإيصال',
 } as const;

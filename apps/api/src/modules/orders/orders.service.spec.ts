@@ -202,4 +202,35 @@ describe('OrdersService', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('receipt projection', () => {
+    const settledOrder = () => ({
+      id: 'order-1', tenantId: 't1', branchId: 'b1', orderNumber: 42n, orderType: 'DINE_IN',
+      currency: 'ETB', subtotalMinor: 10000n, discountMinor: 500n, taxMinor: 1500n,
+      serviceChargeMinor: 0n, totalMinor: 11000n, completedAt: new Date('2026-10-04T10:00:00Z'),
+      updatedAt: new Date('2026-10-04T10:00:00Z'),
+      branch: { name: 'Bole Main', phone: null, tenant: { name: 'Buna House' } },
+      table: { label: 'T4' },
+      lines: [{ itemNameSnapshot: 'Shiro', variantNameSnapshot: 'Regular', quantity: 1, unitPriceMinor: 10000n, lineTotalMinor: 10000n, modifiers: [{ nameSnapshot: 'Spicy', quantity: 1, unitPriceDeltaMinor: 0n, totalDeltaMinor: 0n }] }],
+      payments: [{ id: 'pay-1', method: 'CASH', status: 'APPROVED', amountMinor: 11000n, currency: 'ETB', reviewedAt: new Date('2026-10-04T09:58:00Z'), providerReference: null, customerReference: 'CASH-42' }],
+    });
+
+    it('returns snapshot values for a settled public order without internal fields', async () => {
+      prisma.order.findFirst.mockResolvedValue(settledOrder());
+      const result = await service.getPublicReceipt('opaque-token');
+      expect(result).toMatchObject({ restaurantName: 'Buna House', branchName: 'Bole Main', orderNumber: '42', totalMinor: '11000', payment: { status: 'APPROVED' } });
+      expect(JSON.stringify(result)).not.toContain('tenantId');
+      expect(JSON.stringify(result)).not.toContain('trackingToken');
+    });
+
+    it('does not reveal a receipt across an unassigned branch', async () => {
+      prisma.order.findFirst.mockResolvedValue(settledOrder());
+      await expect(service.getStaffReceipt({ orderId: 'order-1', tenantId: 't1', callerBranchIds: ['other'], callerIsOwner: false })).rejects.toThrow(NotFoundException);
+    });
+
+    it('does not issue a final receipt before payment approval', async () => {
+      prisma.order.findFirst.mockResolvedValue({ ...settledOrder(), payments: [] });
+      await expect(service.getPublicReceipt('opaque-token')).rejects.toThrow(ConflictException);
+    });
+  });
 });

@@ -10,6 +10,7 @@ import { StatusChip } from '@/components/ui/status-chip';
 import { Banner } from '@/components/ui/banner';
 import { Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui';
 import { FulfillmentTimeline } from '@/components/order-fulfillment-timeline';
+import { ReceiptButton } from '@/components/receipt-viewer';
 
 type OrderStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'IN_PROGRESS' | 'READY' | 'COMPLETED' | 'CANCELLED' | 'VOIDED';
 
@@ -169,7 +170,10 @@ export function OrderDetail({ orderId }: { orderId: string }) {
   if (error) {
     return (
       <div>
-        <Link href="/orders" className="text-sm font-black text-brand">{tr('orders.detailBack')}</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <ReceiptButton endpoint={`/orders/${orderId}/receipt`} accessToken={accessToken} tenantId={tenantId} label={tr('orders.receiptReprint')} />
+          <Link href="/orders" className="grid min-h-11 place-items-center px-2 text-sm font-black text-brand">{tr('orders.detailBack')}</Link>
+        </div>
         <div className="mt-6">
           <Banner variant="danger" title={tr('orders.detailErrorTitle')}>{error}</Banner>
         </div>
