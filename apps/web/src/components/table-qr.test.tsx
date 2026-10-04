@@ -270,6 +270,13 @@ describe('TableQrBatchDialog', () => {
     fireEvent.click(within(confirm).getByRole('button', { name: 'Generate codes' }));
 
     await screen.findByTestId('qr-batch-preview');
+    // Layout can be switched from the preview itself without re-rotating tokens.
+    const preview = within(screen.getByTestId('qr-batch-preview'));
+    fireEvent.click(preview.getByRole('button', { name: 'Compact sticker' }));
+    expect(screen.getByTestId('qr-batch-sheet').className).toContain('qr-sheet-sticker');
+    fireEvent.click(preview.getByRole('button', { name: 'A6 tabletop card' }));
+    expect(screen.getByTestId('qr-batch-sheet').className).toContain('qr-sheet-a6');
+
     fireEvent.click(screen.getByTestId('qr-batch-print'));
     expect(mockPrintAnchor).toHaveBeenCalledWith('.qr-print-sheet', A4_RULES);
 
