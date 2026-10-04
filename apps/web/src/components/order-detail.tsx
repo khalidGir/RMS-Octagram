@@ -199,7 +199,10 @@ export function OrderDetail({ orderId }: { orderId: string }) {
             {` · ${dateFmt(order.createdAt)}`}
           </p>
         </div>
-        <Link href="/orders" className="text-sm font-black text-brand">{tr('orders.detailBack')}</Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <ReceiptButton endpoint={`/orders/${order.id}/receipt`} accessToken={accessToken} tenantId={tenantId} label={tr('orders.receiptReprint')} />
+          <Link href="/orders" className="grid min-h-11 place-items-center px-2 text-sm font-black text-brand">{tr('orders.detailBack')}</Link>
+        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]">
