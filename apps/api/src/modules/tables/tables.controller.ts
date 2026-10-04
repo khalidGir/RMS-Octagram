@@ -19,6 +19,7 @@ import {
   CreateTableDto,
   UpdateTableDto,
   RotateQrTokenDto,
+  RotateQrTokensBatchDto,
   ClearSessionDto,
 } from './dto';
 
@@ -137,6 +138,34 @@ export class TablesController {
   async listTokenHistory(@Req() req: Request, @Param('branchId') branchId: string, @Param('tableId') tableId: string) {
     const ctx = req.tenantContext as TenantContext;
     return { data: await this.tables.listTokens(tableId, ctx.tenantId!, branchId) };
+  }
+
+  @Post('branches/:branchId/tables/qr-token/rotate-batch')
+  @BranchScoped()
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER)
+  @ApiOperation({ summary: 'Rotate QR tokens for selected tables in one transaction' })
+  async rotateQrTokensBatch(
+    @Req() req: Request,
+    @Param('branchId') branchId: string,
+    @Body() body: RotateQrTokensBatchDto,
+  ) {
+    const ctx = req.tenantContext as TenantContext;
+    const data = await this.tables.generateQrTokenBatch({
+      tableIds: body.tableIds,
+      tenantId: ctx.tenantId!,
+      branchId,
+      reason: body.reason,
+      actorUserId: ctx.userId,
+    });
+    return { data };
+  }
+
+  @Get('branches/:branchId/qr-branding')
+  @BranchScoped()
+  @ApiOperation({ summary: 'Restaurant/branch identity for QR cards and the short fallback link' })
+  async getQrBranding(@Req() req: Request, @Param('branchId') branchId: string) {
+    const ctx = req.tenantContext as TenantContext;
+    return { data: await this.tables.getQrBranding(ctx.tenantId!, branchId) };
   }
 
   // ─── Table Operations & Sessions ──────────

@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { QRCodeSVG } from 'qrcode.react';
 import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import { useAuth } from './auth-provider';
 import { useBranch } from './shell/branch-provider';
@@ -10,6 +9,7 @@ import { useLocale } from '@/components/locale-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TableQrBatchDialog, TableQrDialog } from './table-qr';
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -53,6 +53,7 @@ export function TablesManagement() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreateArea, setShowCreateArea] = useState(false);
   const [showCreateTable, setShowCreateTable] = useState(false);
+  const [showBatchQr, setShowBatchQr] = useState(false);
   const [qrTarget, setQrTarget] = useState<{ label: string; tableId: string; raw?: string } | null>(null);
 
   const queryClient = useQueryClient();
@@ -115,6 +116,13 @@ export function TablesManagement() {
               className="min-h-11 rounded-xl border border-line bg-white px-4 text-sm font-bold"
             >
               {tr('tables.addAreaBtn')}
+            </button>
+            <button
+              onClick={() => { setNotice(null); setShowBatchQr(true); }}
+              disabled={occupancy.isLoading || (occupancy.data?.length ?? 0) === 0}
+              className="min-h-11 rounded-xl border border-line bg-white px-4 text-sm font-bold disabled:opacity-50"
+            >
+              {tr('tables.batchQrBtn')}
             </button>
             <button
               onClick={() => { setNotice(null); setShowCreateTable(true); }}
@@ -235,6 +243,16 @@ export function TablesManagement() {
           onClose={() => setQrTarget(null)}
         />
       )}
+      {showBatchQr && (
+        <TableQrBatchDialog
+          tables={(occupancy.data ?? []).map((t) => ({ tableId: t.tableId, label: t.label }))}
+          accessToken={accessToken!}
+          csrfToken={csrfToken}
+          tenantId={tenantId}
+          branchId={branchId}
+          onClose={() => setShowBatchQr(false)}
+        />
+      )}
     </>
   );
 }
@@ -307,7 +325,7 @@ function TablesGrid({
               <h2 className="mt-4 font-black">{tr('tables.tableHeading', { label: t.label })}</h2>
               <p className="mt-1 text-sm text-ink-muted">
                 {isOccupied
-                  ? `${tr('tables.openOrdersCount', { count: t.openOrderCount })} · ${tr('tables.seatsCount', { count: t.capacity })}`
+                  ? `${tr('tables.openOrdersCount', { count: t.openOrderCount })} Â· ${tr('tables.seatsCount', { count: t.capacity })}`
                   : tr('tables.seatsLabel', { count: t.capacity })}
               </p>
               {isManager && (
@@ -398,7 +416,7 @@ function SessionsList({
             <div>
               <p className="text-sm font-black">{tr('tables.sessionPrefix', { id: s.id.slice(0, 8) })}</p>
               <p className="mt-1 text-sm text-ink-muted">
-                {tr('tables.guestCount', { count: s.guestCount })} · {tr('tables.sessionOrdersCount', { count: s.orderCount })} · {tr('tables.openedAt', { time: formatTime(s.openedAt) })}
+                {tr('tables.guestCount', { count: s.guestCount })} Â· {tr('tables.sessionOrdersCount', { count: s.orderCount })} Â· {tr('tables.openedAt', { time: formatTime(s.openedAt) })}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -890,124 +908,6 @@ function EditAreaDialog({
             </button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*                             TableQrDialog                                  */
-/* -------------------------------------------------------------------------- */
-
-function TableQrDialog({
-  label,
-  tableId,
-  initialRaw,
-  accessToken,
-  csrfToken,
-  tenantId,
-  branchId,
-  onClose,
-}: {
-  label: string;
-  tableId: string;
-  initialRaw?: string;
-  accessToken: string;
-  csrfToken: string | null;
-  tenantId: string;
-  branchId: string;
-  onClose: () => void;
-}) {
-  const { tr } = useLocale();
-  const [raw, setRaw] = useState<string | null>(initialRaw ?? null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  // The raw token exists only in this response (the server keeps a hash), so
-  // the ordering URL can only be built while a fresh raw token is in hand.
-  const url = raw ? `${window.location.origin}/o/${raw}` : '';
-
-  async function generate() {
-    setBusy(true);
-    setError(null);
-    setCopied(false);
-    try {
-      const response = await apiRequest<ApiEnvelope<{ raw: string }>>(
-        `/branches/${branchId}/tables/${tableId}/qr-token/rotate`,
-        { method: 'POST', accessToken, csrfToken, tenantId, body: {} },
-      );
-      setRaw(response.data.raw);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : tr('tables.qrRotateError'));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function copyLink() {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-sm" aria-label={tr('tables.qrTitle', { label })}>
-        <DialogTitle>{tr('tables.qrTitle', { label })}</DialogTitle>
-        {!raw ? (
-          <div className="mt-4 grid gap-4">
-            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900">
-              {tr('tables.qrRotateWarning')}
-            </p>
-            {error && (
-              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
-                {error}
-              </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-                {tr('common.cancel')}
-              </button>
-              <button type="button" onClick={generate} disabled={busy} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-                {busy ? tr('tables.qrGenerating') : tr('tables.qrGenerateBtn')}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4 grid gap-4">
-            <div className="qr-print-area grid justify-items-center gap-2 rounded-2xl border border-line bg-white p-5">
-              <QRCodeSVG value={url} size={208} marginSize={2} />
-              <p className="text-sm font-black">{tr('tables.qrForTable', { label })}</p>
-              <p className="text-xs font-bold text-ink-muted">{tr('tables.qrUrlLabel')}</p>
-              <p className="break-all text-center text-xs text-ink-muted">{url}</p>
-            </div>
-            {error && (
-              <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
-                {error}
-              </div>
-            )}
-            {copied && (
-              <p role="status" className="text-xs font-bold text-emerald-700">{tr('tables.qrCopied')}</p>
-            )}
-            <div className="flex flex-wrap justify-end gap-2">
-              <button type="button" onClick={copyLink} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-                {tr('tables.qrCopyBtn')}
-              </button>
-              <button type="button" onClick={() => window.print()} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-                {tr('tables.qrPrintBtn')}
-              </button>
-              <button type="button" onClick={generate} disabled={busy} className="min-h-10 rounded-lg bg-dark px-4 text-sm font-bold text-white disabled:opacity-50">
-                {busy ? tr('tables.qrGenerating') : tr('tables.qrRotateBtn')}
-              </button>
-              <button type="button" onClick={onClose} disabled={busy} className="min-h-10 rounded-lg border border-line px-4 text-sm font-bold">
-                {tr('tables.qrDoneBtn')}
-              </button>
-            </div>
-          </div>
-        )}
       </DialogContent>
     </Dialog>
   );

@@ -70,6 +70,7 @@ describe('TablesManagement QR codes', () => {
 
   it('rotates the QR token from the card and shows the ordering URL', async () => {
     render(<TablesManagement />);
+    expect(await screen.findByRole('button', { name: 'Print QR codes' })).toBeDefined();
     const qrButton = await screen.findByRole('button', { name: 'QR code' });
     fireEvent.click(qrButton);
 
@@ -119,6 +120,7 @@ describe('TablesManagement QR codes', () => {
     expect(await screen.findByRole('heading', { name: 'Tables & sessions' })).toBeDefined();
     expect(screen.queryByRole('button', { name: 'QR code' })).toBeNull();
     expect(screen.queryByRole('button', { name: '+ Add table' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Print QR codes' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Manage' })).toBeNull();
   });
 });

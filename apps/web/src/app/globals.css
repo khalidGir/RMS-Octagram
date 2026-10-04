@@ -190,16 +190,148 @@ html[lang="am"] .uppercase, html[lang="ar"] .uppercase {
   }
 }
 
+/* ── Table QR assets ──────────────────────────────────────────────────────── */
+
+.qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  text-align: center;
+  color: #18181b;
+  overflow: hidden;
+}
+.qr-card-a6 { width: min(340px, 100%); aspect-ratio: 105 / 148; }
+.qr-card-sticker { width: 180px; }
+.qr-code-box { display: grid; place-items: center; }
+.qr-card-brand { font-size: 15px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+.qr-card-branch { font-size: 11px; font-weight: 700; color: #52525b; }
+.qr-card-table { font-size: 16px; font-weight: 900; }
+.qr-card-prompt { font-size: 11px; font-weight: 700; color: #3f3f46; }
+.qr-card-short { font-size: 10px; font-weight: 700; color: #52525b; word-break: break-all; }
+.qr-card-attrib { margin-top: auto; font-size: 9px; font-weight: 700; color: #71717a; }
+.qr-card-meta { font-size: 9px; font-weight: 700; color: #71717a; }
+
+/* Full-screen print preview for generated batches (portalled to body). */
+.qr-print-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: auto;
+  background: #f4f4f5;
+  padding: 24px;
+}
+.qr-print-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+.qr-print-sheet { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+.qr-print-sheet .qr-card { box-shadow: 0 1px 4px rgb(0 0 0 / 0.08); }
+
 /* Table QR printing: when the print dialog is opened from the QR dialog only
-   the QR card is printed, centred on an otherwise blank page. */
+   the QR card is printed, centred on an otherwise blank page. Button-driven
+   jobs add the `rms-printing` body flag (see lib/qr-export.ts printAnchor),
+   which drops hidden flow content entirely so no blank pages are produced. */
 @media print {
   body * { visibility: hidden; }
-  .qr-print-area, .qr-print-area * { visibility: visible; }
+  .qr-print-area, .qr-print-area *, .qr-print-sheet, .qr-print-sheet * { visibility: visible; }
   .qr-print-area {
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
   }
+
+  /* Button-driven jobs (body.rms-printing, set by printAnchor): keep exactly
+     one body child — the one holding the print surface — and drop every other
+     body child from the printed flow so no blank pages are produced. */
+  body.rms-printing > * { display: none !important; }
+  body.rms-printing > .rms-print-keep {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    z-index: auto !important;
+  }
+  body.rms-printing > .rms-print-keep * {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    margin: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  /* Hide branches of the kept subtree that do not lead to the print surface. */
+  body.rms-printing .rms-print-keep *:not(
+      .qr-print-area,
+      .qr-print-area *,
+      .qr-print-sheet,
+      .qr-print-sheet *,
+      :has(.qr-print-area),
+      :has(.qr-print-sheet)
+    ) {
+    display: none !important;
+  }
+  body.rms-printing [role="dialog"] {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+  .qr-print-toolbar { display: none !important; }
+
+  /* Physical card sizes for the injected @page rules (A6 card, A4 sheet). */
+  .qr-print-area .qr-card { width: 95mm; height: 138mm; border: none; border-radius: 0; padding: 6mm; }
+  .qr-print-sheet {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6mm !important;
+    justify-content: flex-start !important;
+  }
+  .qr-sheet-a6 .qr-card { width: 94mm; height: 132mm; border: none; border-radius: 0; padding: 6mm; }
+  .qr-sheet-sticker .qr-card { width: 50mm; height: 66mm; border: none; border-radius: 0; padding: 4mm; gap: 3px; }
+
+  /* Vector re-scaling: the SVG keeps its viewBox, so one rule per layout. */
+  .qr-print-area .qr-code-box svg, .qr-sheet-a6 .qr-code-box svg {
+    width: 44mm !important;
+    height: 44mm !important;
+  }
+  .qr-sheet-sticker .qr-code-box svg { width: 30mm !important; height: 30mm !important; }
+
+  .qr-card-brand { font-size: 13px; }
+  .qr-card-branch { font-size: 10px; }
+  .qr-card-table { font-size: 14px; }
+  .qr-card-prompt { font-size: 10px; }
+  .qr-card-short { font-size: 9px; }
+  .qr-card-attrib, .qr-card-meta { font-size: 8px; }
+  .qr-sheet-sticker .qr-card-brand { font-size: 9px; }
+  .qr-sheet-sticker .qr-card-branch, .qr-sheet-sticker .qr-card-prompt { font-size: 7px; }
+  .qr-sheet-sticker .qr-card-table { font-size: 10px; }
+  .qr-sheet-sticker .qr-card-short,
+  .qr-sheet-sticker .qr-card-attrib,
+  .qr-sheet-sticker .qr-card-meta { font-size: 6px; }
 }
