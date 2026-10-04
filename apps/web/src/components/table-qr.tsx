@@ -519,6 +519,7 @@ export function TableQrBatchDialog({
         <BatchQrPreview
           rotations={results}
           layout={layout}
+          onLayoutChange={setLayout}
           identity={identityQuery.data ?? null}
           onClose={() => setResults(null)}
         />
@@ -533,17 +534,20 @@ export function TableQrBatchDialog({
 
 /**
  * Full-screen print preview for generated codes, portalled to `document.body`
- * so the print stylesheet can isolate it from the app and the open dialog.
+ * so the print stylesheet can isolate it from the app. The batch dialog stays
+ * closed while this is shown so its modal lock cannot swallow toolbar clicks.
  * Raw tokens live only in this component's props until `onClose` drops them.
  */
 function BatchQrPreview({
   rotations,
   layout,
+  onLayoutChange,
   identity,
   onClose,
 }: {
   rotations: QrTokenRotation[];
   layout: QrLayout;
+  onLayoutChange: (layout: QrLayout) => void;
   identity: QrIdentity | null;
   onClose: () => void;
 }) {
@@ -554,7 +558,22 @@ function BatchQrPreview({
     <div className="qr-print-preview" data-testid="qr-batch-preview" role="region" aria-label={tr('tables.batchPreviewAria')}>
       <div className="qr-print-toolbar">
         <p className="text-sm font-bold text-ink">{tr('tables.batchPrintNotice', { count: rotations.length })}</p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-2" role="group" aria-label={tr('tables.batchLayout')}>
+            {(['a6', 'sticker'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={layout === option}
+                onClick={() => onLayoutChange(option)}
+                className={`min-h-11 rounded-xl border px-4 text-xs font-black ${
+                  layout === option ? 'border-dark bg-dark text-white' : 'border-line bg-white'
+                }`}
+              >
+                {tr(option === 'a6' ? 'tables.batchLayoutA6' : 'tables.batchLayoutSticker')}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             data-testid="qr-batch-print"
