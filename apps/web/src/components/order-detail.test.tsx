@@ -71,6 +71,29 @@ function orderFixture(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function receiptFixture() {
+  return {
+    receiptNumber: 'RMS-1001',
+    restaurantName: 'Demo Coffee House',
+    branchName: 'Main Branch',
+    branchPhone: null,
+    orderNumber: 'ORD-1001',
+    orderType: 'POS',
+    tableLabel: null,
+    currency: 'ETB',
+    subtotalMinor: '50000',
+    discountMinor: '0',
+    taxMinor: '7500',
+    serviceChargeMinor: '0',
+    totalMinor: '57500',
+    settledAt: '2024-01-01T10:05:00Z',
+    payment: { method: 'CASH', status: 'APPROVED', amountMinor: '57500', currency: 'ETB', reference: null },
+    lines: [
+      { itemName: 'Special Tibs', variantName: 'Regular', quantity: 2, unitPriceMinor: '25000', lineTotalMinor: '50000', modifiers: [] },
+    ],
+  };
+}
+
 function render(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return baseRender(
@@ -149,6 +172,26 @@ describe('OrderDetail edit and cancel actions', () => {
       expect(screen.queryByRole('dialog')).toBeNull();
     });
     expect(dialog).toBeDefined();
+  });
+
+  it('opens the staff receipt with print and download actions', async () => {
+    mockApiRequest.mockImplementation((async (url: string, options?: { method?: string }) => {
+      if (options?.method === 'POST') return { data: {} };
+      if (url.includes('kitchen-tickets')) return { data: [] };
+      if (url.includes('/receipt')) return { data: receiptFixture() };
+      return { data: orderFixture() };
+    }) as never);
+    render(<OrderDetail orderId="o-1" />);
+    await waitFor(() => {
+      expect(screen.getByText(/ORD-1001/)).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'View receipt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Receipt' });
+    expect(dialog.textContent).toContain('not a fiscal-device receipt');
+    expect(dialog.textContent).toContain('RMS-1001');
+    expect(screen.getByRole('button', { name: 'Print receipt' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Download receipt' })).toBeDefined();
   });
 
   it('shows a version-conflict message and refetches on a 409 cancel', async () => {
