@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useFulfillmentLive } from '@/lib/use-fulfillment-live';
 import { useServiceBoard, useClaimOrder, useCollectOrder, useServeOrder, useServiceNotifications } from '@/lib/use-service-board';
+import { useServiceRequests, useServiceRequestAction, type StaffServiceRequest, type ServiceRequestActionKind } from '@/lib/use-service-requests';
 import { Button, Dialog, DialogContent, DialogTitle, StatusChip, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui';
 import { useLocale, type MessageKey } from '@/components/locale-provider';
 import { orderTypeKeys, labelFor } from '@/lib/status-labels';
@@ -75,6 +76,7 @@ export function WaiterWorkspace() {
             <TabsTrigger value="mine">{tr('waiter.tabMine')}</TabsTrigger>
             <TabsTrigger value="all">{tr('waiter.tabAll')}</TabsTrigger>
             <TabsTrigger value="notifications">{tr('waiter.tabNotifications')}</TabsTrigger>
+            <TabsTrigger value="requests">{tr('waiter.tabRequests')}</TabsTrigger>
           </TabsList>
 
           <TabsContent value="ready">
@@ -91,6 +93,10 @@ export function WaiterWorkspace() {
 
           <TabsContent value="notifications">
             <NotificationsTab />
+          </TabsContent>
+
+          <TabsContent value="requests">
+            <ServiceRequestsTab />
           </TabsContent>
         </Tabs>
       </div>
@@ -250,6 +256,125 @@ function NotificationsTab() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function serviceRequestChip(s: string): 'idle' | 'active' | 'warning' | 'danger' | 'success' | 'info' {
+  switch (s) {
+    case 'OPEN': return 'warning';
+    case 'CLAIMED': return 'active';
+    case 'ESCALATED': return 'danger';
+    default: return 'idle';
+  }
+}
+
+function serviceRequestLabelKey(request: StaffServiceRequest): MessageKey {
+  if (request.type === 'CALL_WAITER') return 'ordering.callWaiter';
+  if (request.type === 'REQUEST_BILL') return 'ordering.requestBill';
+  return 'ordering.assistanceGroup';
+}
+
+function ServiceRequestsTab() {
+  const { data: requests = [], isLoading, error, refetch } = useServiceRequests();
+  const action = useServiceRequestAction();
+  const { profile } = useAuth();
+  const { tr, formatTime } = useLocale();
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const membership = profile?.memberships?.[0];
+  const role = membership?.role;
+  const isWaiterOnly = role === 'WAITER';
+  const me = profile?.id;
+
+  function run(request: StaffServiceRequest, kind: ServiceRequestActionKind) {
+    setActionError(null);
+    action.mutate(
+      { requestId: request.id, action: kind, expectedVersion: request.version },
+      { onError: () => setActionError(tr('waiter.reqActionFailed')) },
+    );
+  }
+
+  if (isLoading) return <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('waiter.loadingOrders')}</p>;
+  if (error) return <ErrorState message={error.message} onRetry={refetch} />;
+
+  return (
+    <div className="mt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-sm text-ink-muted">{tr('waiter.reqCount', { count: requests.length })}</p>
+        <button onClick={() => refetch()} className="rounded-lg border border-line bg-white px-3 py-2 text-xs font-black transition-colors hover:bg-muted">
+          {tr('waiter.refresh')}
+        </button>
+      </div>
+      {actionError && (
+        <p role="alert" className="mb-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-800">{actionError}</p>
+      )}
+
+      {requests.length === 0 ? (
+        <EmptyState message={tr('waiter.reqEmpty')} />
+      ) : (
+        <div className="space-y-3">
+          {requests.map((request) => {
+            const statusKey =
+              request.status === 'CLAIMED'
+                ? tr('waiter.reqStatusClaimed')
+                : request.status === 'ESCALATED'
+                  ? tr('waiter.reqStatusEscalated')
+                  : tr('waiter.reqStatusOpen');
+            const canClaim =
+              (request.status === 'OPEN' || request.status === 'ESCALATED') &&
+              (!isWaiterOnly || !request.assignedWaiterUserId || request.assignedWaiterUserId === me);
+            const canResolve = request.status === 'CLAIMED' && (!isWaiterOnly || request.claimedByUserId === me);
+            const canCancel =
+              request.status !== 'RESOLVED' &&
+              request.status !== 'CANCELLED' &&
+              (!isWaiterOnly || request.claimedByUserId === me || request.assignedWaiterUserId === me);
+            const age = Math.max(0, Math.floor((Date.now() - new Date(request.createdAt).getTime()) / 1000));
+
+            return (
+              <article key={request.id} className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-black">{tr(serviceRequestLabelKey(request))}</h3>
+                      {request.tableLabel && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-black">{request.tableLabel}</span>
+                      )}
+                      {request.orderNumber !== null && (
+                        <span className="rounded-full bg-surface px-2 py-0.5 text-[10px] font-black">#{request.orderNumber}</span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-ink-muted">
+                      {formatElapsed(age)} · {formatTime(request.createdAt)}
+                      {request.claimedByUserId === me ? ` · ${tr('waiter.reqMine')}` : ''}
+                    </p>
+                    {request.note && <p className="mt-1 text-sm text-ink-muted">{request.note}</p>}
+                  </div>
+                  <StatusChip status={serviceRequestChip(request.status)}>{statusKey}</StatusChip>
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  {canClaim && (
+                    <Button onClick={() => run(request, 'claim')} disabled={action.isPending} className="flex-1">
+                      {action.isPending ? tr('waiter.claiming') : tr('waiter.claim')}
+                    </Button>
+                  )}
+                  {canResolve && (
+                    <Button onClick={() => run(request, 'resolve')} disabled={action.isPending} className="flex-1">
+                      {tr('waiter.reqResolve')}
+                    </Button>
+                  )}
+                  {canCancel && (
+                    <Button variant="secondary" onClick={() => run(request, 'cancel')} disabled={action.isPending} className="flex-1">
+                      {tr('waiter.reqCancel')}
+                    </Button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

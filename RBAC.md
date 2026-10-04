@@ -60,6 +60,8 @@ Legend: `A` all tenants/platform, `T` tenant-wide, `B` assigned branches, `O` ow
 | Clear eligible table session | - | T | - | - | - | B | - |
 | Create POS order | - | T | B | B | - | - | - |
 | Create guest order | - | - | - | - | - | - | O |
+| Raise table assistance request | - | - | - | - | - | - | O context only |
+| View/claim/resolve assistance requests | - | T | B | - | - | B | - |
 | Edit unconfirmed order | - | T | B | B | - | - | policy-limited |
 | Open/close own cash shift | - | T owner shift | - | B own | - | - | - |
 | View shift reports | - | T | B read | own | - | - | - |

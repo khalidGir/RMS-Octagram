@@ -1244,12 +1244,92 @@ export class OrdersService {
     };
   }
 
+  async getPublicReceipt(trackingToken: string): Promise<Record<string, unknown>> {
+    const tokenHash = crypto.createHash('sha256').update(trackingToken).digest('hex');
+    const order = await this.findReceiptOrder({ trackingTokenHash: tokenHash });
+    if (!order) throw new NotFoundException('Receipt not found');
+    return this.serializeReceipt(order);
+  }
+
+  async getStaffReceipt(params: {
+    orderId: string;
+    tenantId: string;
+    callerBranchIds: string[];
+    callerIsOwner: boolean;
+  }): Promise<Record<string, unknown>> {
+    const order = await this.findReceiptOrder({ id: params.orderId, tenantId: params.tenantId });
+    if (!order || (!params.callerIsOwner && !params.callerBranchIds.includes(order.branchId))) {
+      throw new NotFoundException('Receipt not found');
+    }
+    return this.serializeReceipt(order);
+  }
+
   // ─── PRIVATE HELPERS ────────────────────────
 
   private generateTrackingToken(): { raw: string; hash: string } {
     const raw = crypto.randomBytes(32).toString('hex');
     const hash = crypto.createHash('sha256').update(raw).digest('hex');
     return { raw, hash };
+  }
+
+  private findReceiptOrder(where: { id?: string; tenantId?: string; trackingTokenHash?: string }) {
+    return this.prisma.order.findFirst({
+      where,
+      include: {
+        branch: { select: { name: true, phone: true, tenant: { select: { name: true } } } },
+        table: { select: { label: true } },
+        lines: { include: { modifiers: true } },
+        payments: {
+          where: { status: 'APPROVED' },
+          orderBy: { reviewedAt: 'desc' as const },
+          take: 1,
+          select: { id: true, method: true, status: true, amountMinor: true, currency: true, reviewedAt: true, providerReference: true, customerReference: true },
+        },
+      },
+    });
+  }
+
+  private serializeReceipt(order: Awaited<ReturnType<OrdersService['findReceiptOrder']>>): Record<string, unknown> {
+    if (!order) throw new NotFoundException('Receipt not found');
+    const payment = order.payments[0];
+    if (!payment) throw new ConflictException('Receipt is available after payment approval');
+    const settledAt = payment.reviewedAt ?? order.completedAt ?? order.updatedAt;
+    return {
+      receiptNumber: `RMS-${order.orderNumber.toString()}`,
+      restaurantName: order.branch.tenant.name,
+      branchName: order.branch.name,
+      branchPhone: order.branch.phone,
+      orderNumber: order.orderNumber.toString(),
+      orderType: order.orderType,
+      tableLabel: order.table?.label ?? null,
+      currency: order.currency,
+      subtotalMinor: order.subtotalMinor.toString(),
+      discountMinor: order.discountMinor.toString(),
+      taxMinor: order.taxMinor.toString(),
+      serviceChargeMinor: order.serviceChargeMinor.toString(),
+      totalMinor: order.totalMinor.toString(),
+      settledAt: settledAt.toISOString(),
+      payment: {
+        method: payment.method,
+        status: payment.status,
+        amountMinor: payment.amountMinor.toString(),
+        currency: payment.currency,
+        reference: payment.providerReference ?? payment.customerReference ?? null,
+      },
+      lines: order.lines.map((line) => ({
+        itemName: line.itemNameSnapshot,
+        variantName: line.variantNameSnapshot,
+        quantity: line.quantity,
+        unitPriceMinor: line.unitPriceMinor.toString(),
+        lineTotalMinor: line.lineTotalMinor.toString(),
+        modifiers: line.modifiers.map((modifier) => ({
+          name: modifier.nameSnapshot,
+          quantity: modifier.quantity,
+          unitPriceDeltaMinor: modifier.unitPriceDeltaMinor.toString(),
+          totalDeltaMinor: modifier.totalDeltaMinor.toString(),
+        })),
+      })),
+    };
   }
 
   private serializeOrder(order: Record<string, unknown>): Record<string, unknown> {

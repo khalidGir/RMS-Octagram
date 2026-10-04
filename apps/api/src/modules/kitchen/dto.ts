@@ -281,6 +281,29 @@ export class ReplaceRoutesDto {
 // ─── Fulfillment Policy ─────────────
 
 export class UpsertFulfillmentPolicyDto {
+  @ApiPropertyOptional({ description: 'How customer orders are accepted', enum: ['AUTO_AFTER_PAYMENT', 'CASHIER_CONFIRMATION', 'WAITER_APPROVAL'], default: 'CASHIER_CONFIRMATION' })
+  @IsOptional()
+  @IsString()
+  @IsIn(['AUTO_AFTER_PAYMENT', 'CASHIER_CONFIRMATION', 'WAITER_APPROVAL'])
+  orderAcceptancePolicy?: string;
+
+  @ApiPropertyOptional({ description: 'Seconds before an unresolved assistance request escalates', default: 180 })
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  @Max(3600)
+  assistanceEscalationSeconds?: number;
+
+  @ApiPropertyOptional({ description: 'Allow customers to choose cash at the counter', default: true })
+  @IsOptional()
+  @IsBoolean()
+  cashAtCounterEnabled?: boolean;
+
+  @ApiPropertyOptional({ description: 'Allow customers to choose cash paid to a waiter', default: true })
+  @IsOptional()
+  @IsBoolean()
+  cashToWaiterEnabled?: boolean;
+
   @ApiPropertyOptional({ description: 'Service mode', enum: ['ALL_AT_ONCE', 'PARTIAL_ALLOWED'], default: 'ALL_AT_ONCE' })
   @IsOptional()
   @IsString()
@@ -479,4 +502,66 @@ export class AssignStationToDeviceDto {
   @IsInt()
   @Min(0)
   displayOrder?: number;
+}
+
+// ------ Service Requests ------
+
+export class CreateServiceRequestDto {
+  @ApiProperty({ description: 'Raw table QR token from the table QR code' })
+  @IsString()
+  @IsNotEmpty()
+  qrToken!: string;
+
+  @ApiProperty({
+    description: 'Assistance type',
+    enum: ['CALL_WAITER', 'REQUEST_BILL', 'OTHER_ASSISTANCE'],
+    example: 'CALL_WAITER',
+  })
+  @IsIn(['CALL_WAITER', 'REQUEST_BILL', 'OTHER_ASSISTANCE'])
+  type!: string;
+
+  @ApiPropertyOptional({ description: 'Optional customer note', maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @Length(1, 500)
+  note?: string;
+
+  @ApiPropertyOptional({ description: 'Client idempotency key for safe retries', maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  idempotencyKey?: string;
+}
+
+export class PublicServiceRequestsStatusDto {
+  @ApiProperty({ description: 'Raw table QR token from the table QR code' })
+  @IsString()
+  @IsNotEmpty()
+  qrToken!: string;
+}
+
+export class ServiceRequestActionDto {
+  @ApiProperty({ description: 'Expected version for optimistic concurrency', example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  expectedVersion!: number;
+}
+
+export class ServiceRequestListQueryDto {
+  @ApiPropertyOptional({
+    description: 'Filter by request status (defaults to open/claimed/escalated)',
+    enum: ['OPEN', 'CLAIMED', 'RESOLVED', 'CANCELLED', 'ESCALATED'],
+  })
+  @IsOptional()
+  @IsIn(['OPEN', 'CLAIMED', 'RESOLVED', 'CANCELLED', 'ESCALATED'])
+  status?: string;
+
+  @ApiPropertyOptional({ description: 'Max results (default 50, max 100)', default: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
 }

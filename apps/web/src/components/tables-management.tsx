@@ -9,6 +9,7 @@ import { useLocale } from '@/components/locale-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TableQrBatchDialog, TableQrDialog } from './table-qr';
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -52,6 +53,8 @@ export function TablesManagement() {
   const [notice, setNotice] = useState<string | null>(null);
   const [showCreateArea, setShowCreateArea] = useState(false);
   const [showCreateTable, setShowCreateTable] = useState(false);
+  const [showBatchQr, setShowBatchQr] = useState(false);
+  const [qrTarget, setQrTarget] = useState<{ label: string; tableId: string; raw?: string } | null>(null);
 
   const queryClient = useQueryClient();
   const invalidateAll = () => {
@@ -115,6 +118,13 @@ export function TablesManagement() {
               {tr('tables.addAreaBtn')}
             </button>
             <button
+              onClick={() => { setNotice(null); setShowBatchQr(true); }}
+              disabled={occupancy.isLoading || (occupancy.data?.length ?? 0) === 0}
+              className="min-h-11 rounded-xl border border-line bg-white px-4 text-sm font-bold disabled:opacity-50"
+            >
+              {tr('tables.batchQrBtn')}
+            </button>
+            <button
               onClick={() => { setNotice(null); setShowCreateTable(true); }}
               className="min-h-11 rounded-xl bg-dark px-5 text-sm font-bold text-white shadow-sm transition hover:bg-dark-muted"
             >
@@ -158,6 +168,7 @@ export function TablesManagement() {
               isManager={isManager}
               onNotice={setNotice}
               onInvalidate={invalidateAll}
+              onShowQr={(t) => setQrTarget({ label: t.label, tableId: t.tableId })}
             />
           </TabsContent>
 
@@ -211,12 +222,35 @@ export function TablesManagement() {
           tenantId={tenantId}
           branchId={branchId}
           onClose={() => setShowCreateTable(false)}
-          onCreated={async (label) => {
+          onCreated={async (label, tableId, qrTokenRaw) => {
             setShowCreateTable(false);
             await occupancy.refetch();
             await areas.refetch();
             setNotice(tr('tables.tableCreated', { label }));
+            if (qrTokenRaw) setQrTarget({ label, tableId, raw: qrTokenRaw });
           }}
+        />
+      )}
+      {qrTarget && (
+        <TableQrDialog
+          label={qrTarget.label}
+          tableId={qrTarget.tableId}
+          initialRaw={qrTarget.raw}
+          accessToken={accessToken!}
+          csrfToken={csrfToken}
+          tenantId={tenantId}
+          branchId={branchId}
+          onClose={() => setQrTarget(null)}
+        />
+      )}
+      {showBatchQr && (
+        <TableQrBatchDialog
+          tables={(occupancy.data ?? []).map((t) => ({ tableId: t.tableId, label: t.label }))}
+          accessToken={accessToken!}
+          csrfToken={csrfToken}
+          tenantId={tenantId}
+          branchId={branchId}
+          onClose={() => setShowBatchQr(false)}
         />
       )}
     </>
@@ -236,6 +270,7 @@ function TablesGrid({
   isManager,
   onNotice,
   onInvalidate,
+  onShowQr,
 }: {
   tables: TableOccupancy[];
   accessToken: string;
@@ -245,6 +280,7 @@ function TablesGrid({
   isManager: boolean;
   onNotice: (msg: string | null) => void;
   onInvalidate: () => void;
+  onShowQr: (table: TableOccupancy) => void;
 }) {
   const { tr } = useLocale();
   const [editingTable, setEditingTable] = useState<TableOccupancy | null>(null);
@@ -289,16 +325,24 @@ function TablesGrid({
               <h2 className="mt-4 font-black">{tr('tables.tableHeading', { label: t.label })}</h2>
               <p className="mt-1 text-sm text-ink-muted">
                 {isOccupied
-                  ? `${tr('tables.openOrdersCount', { count: t.openOrderCount })} · ${tr('tables.seatsCount', { count: t.capacity })}`
+                  ? `${tr('tables.openOrdersCount', { count: t.openOrderCount })} Â· ${tr('tables.seatsCount', { count: t.capacity })}`
                   : tr('tables.seatsLabel', { count: t.capacity })}
               </p>
               {isManager && (
-                <button
-                  onClick={() => setEditingTable(t)}
-                  className="mt-4 w-full rounded-xl border border-line py-2 text-xs font-black"
-                >
-                  {tr('tables.manageBtn')}
-                </button>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setEditingTable(t)}
+                    className="rounded-xl border border-line py-2 text-xs font-black"
+                  >
+                    {tr('tables.manageBtn')}
+                  </button>
+                  <button
+                    onClick={() => onShowQr(t)}
+                    className="rounded-xl border border-line py-2 text-xs font-black"
+                  >
+                    {tr('tables.qrBtn')}
+                  </button>
+                </div>
               )}
             </div>
           );
@@ -372,7 +416,7 @@ function SessionsList({
             <div>
               <p className="text-sm font-black">{tr('tables.sessionPrefix', { id: s.id.slice(0, 8) })}</p>
               <p className="mt-1 text-sm text-ink-muted">
-                {tr('tables.guestCount', { count: s.guestCount })} · {tr('tables.sessionOrdersCount', { count: s.orderCount })} · {tr('tables.openedAt', { time: formatTime(s.openedAt) })}
+                {tr('tables.guestCount', { count: s.guestCount })} Â· {tr('tables.sessionOrdersCount', { count: s.orderCount })} Â· {tr('tables.openedAt', { time: formatTime(s.openedAt) })}
               </p>
             </div>
             <div className="flex items-center gap-3">
@@ -593,7 +637,7 @@ function CreateTableDialog({
   tenantId: string;
   branchId: string;
   onClose: () => void;
-  onCreated: (label: string) => Promise<void>;
+  onCreated: (label: string, tableId: string, qrTokenRaw?: string) => Promise<void>;
 }) {
   const [label, setLabel] = useState('');
   const [capacity, setCapacity] = useState('4');
@@ -611,14 +655,17 @@ function CreateTableDialog({
     setBusy(true);
     setError(null);
     try {
-      await apiRequest(`/branches/${branchId}/tables`, {
-        method: 'POST',
-        accessToken,
-        csrfToken,
-        tenantId,
-        body: { label: trimmedLabel, capacity: cap, diningAreaId: diningAreaId || undefined },
-      });
-      await onCreated(trimmedLabel);
+      const response = await apiRequest<ApiEnvelope<{ id: string; qrTokenRaw?: string }>>(
+        `/branches/${branchId}/tables`,
+        {
+          method: 'POST',
+          accessToken,
+          csrfToken,
+          tenantId,
+          body: { label: trimmedLabel, capacity: cap, diningAreaId: diningAreaId || undefined },
+        },
+      );
+      await onCreated(trimmedLabel, response.data.id, response.data.qrTokenRaw);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : tr('tables.createTableError'));
     } finally {

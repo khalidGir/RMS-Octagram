@@ -46,6 +46,10 @@ export class FulfillmentPolicyController {
       readyReminderSeconds: body.readyReminderSeconds,
       readyEscalationSeconds: body.readyEscalationSeconds,
       autoCompleteKitchenTicketOnCollected: body.autoCompleteKitchenTicketOnCollected,
+      orderAcceptancePolicy: body.orderAcceptancePolicy,
+      assistanceEscalationSeconds: body.assistanceEscalationSeconds,
+      cashAtCounterEnabled: body.cashAtCounterEnabled,
+      cashToWaiterEnabled: body.cashToWaiterEnabled,
       actorUserId: ctx.userId,
     });
     return { data: policy };

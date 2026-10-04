@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, Min, MaxLength, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, MaxLength, IsBoolean, IsArray, ArrayNotEmpty, ArrayMaxSize } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateDiningAreaDto {
@@ -71,6 +71,25 @@ export class UpdateTableDto {
 
 export class RotateQrTokenDto {
   @ApiPropertyOptional({ example: 'Reprint requested' })
+  @IsString()
+  @IsOptional()
+  reason?: string;
+}
+
+export class RotateQrTokensBatchDto {
+  @ApiProperty({
+    description: 'Table ids to rotate in one transaction. Fresh plaintext tokens are issued for every selected table.',
+    type: [String],
+    example: ['3f1d2a4e-0000-4000-8000-000000000001'],
+  })
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(100)
+  @IsString({ each: true })
+  @MaxLength(64, { each: true })
+  tableIds!: string[];
+
+  @ApiPropertyOptional({ example: 'Batch reprint for tabletop cards' })
   @IsString()
   @IsOptional()
   reason?: string;

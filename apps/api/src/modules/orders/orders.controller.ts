@@ -113,6 +113,19 @@ export class OrdersController {
     return { data: result };
   }
 
+  @Get('orders/:orderId/receipt')
+  @ApiOperation({ summary: 'Get printable non-fiscal receipt for an approved payment' })
+  async getReceipt(@Req() req: Request, @Param('orderId') orderId: string) {
+    const ctx = req.tenantContext as TenantContext;
+    const result = await this.orders.getStaffReceipt({
+      orderId,
+      tenantId: ctx.tenantId!,
+      callerBranchIds: ctx.branchIds ?? [],
+      callerIsOwner: ctx.tenantRole === TenantRole.OWNER,
+    });
+    return { data: result };
+  }
+
   // ─── EDIT ORDER ─────────────────────────────
 
   @Patch('orders/:orderId')
