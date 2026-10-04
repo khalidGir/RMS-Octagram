@@ -420,7 +420,7 @@ export function TableQrBatchDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Dialog open={!results} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-h-[90vh] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto" aria-label={tr('tables.batchQrTitle')}>
         <DialogTitle>{tr('tables.batchQrTitle')}</DialogTitle>
         <p className="mt-2 text-sm text-ink-muted">{tr('tables.batchHint')}</p>
