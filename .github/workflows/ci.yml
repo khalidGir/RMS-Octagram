@@ -10,6 +10,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
+      TEST_DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
+      NODE_ENV: test
+
     services:
       postgres:
         image: postgres:16-alpine
@@ -28,9 +33,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Version comes from package.json "packageManager"; pinning it here too
+      # makes pnpm/action-setup fail with "Multiple versions of pnpm specified".
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -52,18 +57,15 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
-      - name: Run tests
-        run: pnpm test
-        env:
-          DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
-
-      - name: Run e2e security tests
-        run: pnpm test:e2e
-        env:
-          DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
-          NODE_ENV: test
-
+      # Tests run against a fresh database, so migrations must be applied first.
       - name: Validate migrations
         run: pnpm db:migrate:deploy
-        env:
-          DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
+
+      - name: Run unit tests
+        run: pnpm test
+
+      # API security/contract e2e only: the web Playwright suite needs a full
+      # running app stack (browser + API + seeded data) and is tracked as a
+      # separate CI follow-up.
+      - name: Run API e2e security tests
+        run: pnpm --filter @rms/api test:e2e
