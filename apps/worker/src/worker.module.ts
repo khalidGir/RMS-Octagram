@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MenuImageProcessor } from './menu-image.processor';
 import { MenuImageQueueConsumer } from './menu-image.queue-consumer';
 
@@ -7,6 +7,17 @@ import { MenuImageQueueConsumer } from './menu-image.queue-consumer';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env.local', '.env'] }),
   ],
-  providers: [MenuImageProcessor, MenuImageQueueConsumer],
+  providers: [
+    {
+      provide: MenuImageProcessor,
+      useFactory: (config: ConfigService) => new MenuImageProcessor(config),
+      inject: [ConfigService],
+    },
+    {
+      provide: MenuImageQueueConsumer,
+      useFactory: (config: ConfigService, processor: MenuImageProcessor) => new MenuImageQueueConsumer(config, processor),
+      inject: [ConfigService, MenuImageProcessor],
+    },
+  ],
 })
 export class WorkerModule {}
