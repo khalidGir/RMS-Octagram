@@ -94,6 +94,18 @@ export const ordering = {
   branchPickup: '{branch} · ለመውሰድ',
   heroLine1: 'በደስታ ይዘጋጀል።',
   heroLine2: 'በክብር ይቀርበዋል።',
+  categoryCount: {
+    one: '{count} ምድብ',
+    other: '{count} ምድቦች',
+  },
+  menuItemCount: {
+    one: '{count} የምናሌ ዕቃ',
+    other: '{count} የምናሌ ዕቃዎች',
+  },
+  categoryItemCount: {
+    one: '{count} ዕቃ',
+    other: '{count} ዕቃዎች',
+  },
   pickupTagline: 'ለመውሰድ አስቀድመው ያዙ · ክፍያ በባንክ ዝውውር ወይም በቴሌብር',
   exploreMenu: 'ምናሌውን ይፈልጉ',
   noItemsCategory: 'በዚህ ምድብ እስካሁን ዕቃ የለም።',
