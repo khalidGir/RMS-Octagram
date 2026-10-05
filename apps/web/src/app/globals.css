@@ -3,11 +3,339 @@
 @tailwind utilities;
 
 :root {
-  --foreground: #f8fafc;
-  --background: #0f172a;
+  /* Brand */
+  --brand-primary: 0 113 227;
+  --brand-primary-foreground: 255 255 255;
+  --brand-accent: 0 113 227;
+  --brand-50: 240 247 255;
+  --brand-100: 222 238 255;
+  --brand-500: 0 113 227;
+  --brand-600: 0 94 204;
+  --brand-700: 0 74 173;
+
+  /* Ink / Text */
+  --ink: 29 29 31;
+  --ink-muted: 99 99 102;
+  --ink-faint: 142 142 147;
+
+  /* Canvas / Surface */
+  --canvas: 247 246 242;
+  --surface: 255 255 255;
+  --surface-subtle: 245 245 247;
+  --surface-sunken: 235 235 240;
+  --surface-warm: 252 250 246;
+  --surface-cream: 247 246 242;
+
+  /* Dark surfaces */
+  --dark: 29 29 31;
+  --dark-deep: 18 18 20;
+  --dark-muted: 44 44 46;
+
+  /* Accent */
+  --accent-teal: 49 88 74;
+  --accent-gold: 227 178 98;
+  --accent-gold-muted: 240 199 122;
+
+  /* Text tones */
+  --text-secondary: 98 93 87;
+  --text-secondary-light: 111 105 97;
+  --text-secondary-dark: 102 95 87;
+
+  /* Border */
+  --border: 222 222 226;
+  --border-strong: 199 199 204;
+
+  /* Status */
+  --success: 19 122 82;
+  --success-surface: 230 247 240;
+  --warning: 167 90 0;
+  --warning-surface: 255 243 220;
+  --danger: 179 38 30;
+  --danger-surface: 254 235 233;
+  --info: 40 100 220;
+  --info-surface: 234 242 255;
+
+  /* Elevation */
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 30px rgb(0 0 0 / 0.05);
+  --shadow-floating: 0 18px 50px rgb(0 0 0 / 0.12);
+  --shadow-modal: 0 28px 90px rgb(0 0 0 / 0.2);
+
+  /* Focus */
+  --focus-ring: 3px solid rgb(var(--brand-primary) / 0.65);
+  --focus-offset: 2px;
+
+  /* Motion */
+  --duration-fast: 140ms;
+  --duration-normal: 190ms;
+  --duration-slow: 240ms;
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
+
+  /* Legacy (preserved) */
+  --surface-customer: 255 250 243;
+  --surface-card: 255 255 255;
+  --surface-muted: 245 240 233;
+  --text-primary: 32 26 23;
+  --text-secondary: 107 98 92;
+  --border-default: 224 216 207;
+  --radius-control: 0.75rem;
+  --radius-card: 1rem;
+  --radius-panel: 1.5rem;
+
+  /* Data visualization */
+  --chart-1: 0 113 227;
+  --chart-2: 52 199 89;
+  --chart-3: 255 159 10;
+  --chart-4: 175 82 222;
+  --chart-5: 255 69 58;
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
+@layer base {
+  * { box-sizing: border-box; }
+
+  html {
+    background: rgb(var(--canvas));
+    color: rgb(var(--ink));
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", var(--font-inter), "Noto Sans Ethiopic", "Noto Sans Arabic", Arial, sans-serif;
+    text-rendering: optimizeLegibility;
+  }
+
+  body { min-height: 100vh; margin: 0; background: rgb(var(--canvas)); }
+  html[lang="am"] { font-family: "Noto Sans Ethiopic", "Nyala", "Segoe UI", var(--font-inter), sans-serif; }
+  html[lang="ar"] { font-family: "Noto Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif; }
+  html[dir="rtl"] body { text-align: start; }
+  html[dir="rtl"] .page-eyebrow { letter-spacing: 0; }
+  button, input, select, textarea { font: inherit; }
+  button, a, input, select { -webkit-tap-highlight-color: transparent; }
+
+  :focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: var(--focus-offset);
+  }
+
+  ::selection { background: rgb(var(--brand-primary) / 0.18); }
+}
+
+@layer components {
+  .staff-grid {
+    background-color: rgb(var(--canvas));
+    background-image: radial-gradient(circle at 12% 0%, rgb(255 255 255 / 0.95), transparent 34rem);
+  }
+
+  .control-select {
+    min-height: 2.75rem;
+    width: 100%;
+    cursor: pointer;
+    border: 1px solid rgb(var(--border));
+    border-radius: var(--radius-control);
+    background: rgb(var(--surface));
+    padding: 0 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    outline: none;
+  }
+
+  .page-shell { width: 100%; max-width: 1500px; margin-inline: auto; }
+  .page-header { display: flex; flex-direction: column; gap: 0.5rem; }
+  .page-eyebrow { color: rgb(var(--brand-primary)); font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+  .page-title { color: rgb(var(--ink)); font-size: clamp(1.75rem, 3vw, 2.5rem); font-weight: 700; letter-spacing: -0.035em; line-height: 1.08; }
+  .page-description { max-width: 48rem; color: rgb(var(--ink-muted)); font-size: 0.9375rem; line-height: 1.6; }
+  .glass-surface { background: rgb(var(--surface) / 0.82); border: 1px solid rgb(var(--border) / 0.8); backdrop-filter: blur(22px) saturate(160%); }
+
+  [data-tenant-theme] {
+    --brand-primary: var(--tenant-primary, 180 83 42);
+    --brand-accent: var(--tenant-accent, 192 138 46);
+    --radius-card: var(--tenant-radius, 0.875rem);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+}
+
+.hide-scrollbar { scrollbar-width: none; }
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Localization typography — negative tracking harms Ethiopic and Arabic
+   glyphs, so the app-wide tracking utilities are neutralized for those
+   languages. Unlayered on purpose so it outranks Tailwind's utility layer. */
+html[lang="am"] h1, html[lang="am"] h2, html[lang="am"] h3,
+html[lang="ar"] h1, html[lang="ar"] h2, html[lang="ar"] h3,
+html[lang="am"] .page-eyebrow, html[lang="ar"] .page-eyebrow,
+html[lang="am"] .uppercase, html[lang="ar"] .uppercase {
+  letter-spacing: normal;
+}
+
+/* Mobile nav rail: in RTL the logical inset flips, so the off-canvas slide
+   must move the opposite way. Unlayered so it outranks max-lg: utilities. */
+@media (max-width: 1023px) {
+  html[dir="rtl"] .nav-rail-offcanvas { transform: translateX(100%); }
+  html[dir="rtl"] .nav-rail-offcanvas.is-open { transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ── Table QR assets ──────────────────────────────────────────────────────── */
+
+.qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  text-align: center;
+  color: #18181b;
+  overflow: hidden;
+}
+.qr-card-a6 { width: min(340px, 100%); aspect-ratio: 105 / 148; }
+.qr-card-sticker { width: 180px; }
+.qr-code-box { display: grid; place-items: center; }
+.qr-card-brand { font-size: 15px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+.qr-card-branch { font-size: 11px; font-weight: 700; color: #52525b; }
+.qr-card-table { font-size: 16px; font-weight: 900; }
+.qr-card-prompt { font-size: 11px; font-weight: 700; color: #3f3f46; }
+.qr-card-short { font-size: 10px; font-weight: 700; color: #52525b; word-break: break-all; }
+.qr-card-attrib { margin-top: auto; font-size: 9px; font-weight: 700; color: #71717a; }
+.qr-card-meta { font-size: 9px; font-weight: 700; color: #71717a; }
+
+/* Full-screen print preview for generated batches (portalled to body). */
+.qr-print-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: auto;
+  background: #f4f4f5;
+  padding: 24px;
+}
+.qr-print-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+.qr-print-sheet { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; }
+.qr-print-sheet .qr-card { box-shadow: 0 1px 4px rgb(0 0 0 / 0.08); }
+
+/* Table QR printing: when the print dialog is opened from the QR dialog only
+   the QR card is printed, centred on an otherwise blank page. Button-driven
+   jobs add the `rms-printing` body flag (see lib/qr-export.ts printAnchor),
+   which drops hidden flow content entirely so no blank pages are produced. */
+@media print {
+  body.rms-receipt-printing > * { display: none !important; }
+  body.rms-receipt-printing > :has(.receipt-print-area) { display: block !important; }
+  body.rms-receipt-printing .receipt-print-area { position: fixed; inset: 0; margin: 0; border: 0; box-shadow: none; }
+  body.rms-receipt-printing [role="dialog"] > *:not(.receipt-print-area):not(:has(.receipt-print-area)) { display: none !important; }
+  body * { visibility: hidden; }
+  .qr-print-area, .qr-print-area *, .qr-print-sheet, .qr-print-sheet * { visibility: visible; }
+  .qr-print-area {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+  }
+
+  /* Button-driven jobs (body.rms-printing, set by printAnchor): keep exactly
+     one body child — the one holding the print surface — and drop every other
+     body child from the printed flow so no blank pages are produced. */
+  body.rms-printing > * { display: none !important; }
+  body.rms-printing > .rms-print-keep {
+    display: block !important;
+    position: static !important;
+    inset: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    z-index: auto !important;
+  }
+  body.rms-printing > .rms-print-keep * {
+    position: static !important;
+    inset: auto !important;
+    transform: none !important;
+    margin: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  /* Hide branches of the kept subtree that do not lead to the print surface. */
+  body.rms-printing .rms-print-keep *:not(
+      .qr-print-area,
+      .qr-print-area *,
+      .qr-print-sheet,
+      .qr-print-sheet *,
+      :has(.qr-print-area),
+      :has(.qr-print-sheet)
+    ) {
+    display: none !important;
+  }
+  body.rms-printing [role="dialog"] {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+  .qr-print-toolbar { display: none !important; }
+
+  /* Physical card sizes for the injected @page rules (A6 card, A4 sheet). */
+  .qr-print-area .qr-card { width: 95mm; height: 138mm; border: none; border-radius: 0; padding: 6mm; }
+  .qr-print-sheet {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6mm !important;
+    justify-content: flex-start !important;
+  }
+  .qr-sheet-a6 .qr-card { width: 94mm; height: 132mm; border: none; border-radius: 0; padding: 6mm; }
+  .qr-sheet-sticker .qr-card { width: 50mm; height: 66mm; border: none; border-radius: 0; padding: 4mm; gap: 3px; }
+
+  /* Vector re-scaling: the SVG keeps its viewBox, so one rule per layout. */
+  .qr-print-area .qr-code-box svg, .qr-sheet-a6 .qr-code-box svg {
+    width: 44mm !important;
+    height: 44mm !important;
+  }
+  .qr-sheet-sticker .qr-code-box svg { width: 30mm !important; height: 30mm !important; }
+
+  .qr-card-brand { font-size: 13px; }
+  .qr-card-branch { font-size: 10px; }
+  .qr-card-table { font-size: 14px; }
+  .qr-card-prompt { font-size: 10px; }
+  .qr-card-short { font-size: 9px; }
+  .qr-card-attrib, .qr-card-meta { font-size: 8px; }
+  .qr-sheet-sticker .qr-card-brand { font-size: 9px; }
+  .qr-sheet-sticker .qr-card-branch, .qr-sheet-sticker .qr-card-prompt { font-size: 7px; }
+  .qr-sheet-sticker .qr-card-table { font-size: 10px; }
+  .qr-sheet-sticker .qr-card-short,
+  .qr-sheet-sticker .qr-card-attrib,
+  .qr-sheet-sticker .qr-card-meta { font-size: 6px; }
 }

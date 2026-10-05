@@ -27,4 +27,4 @@ Architecture and implementation specifications for a multi-tenant, multi-branch 
 
 An implementation agent must read `AGENTS.md` and the linked documents before changing code, then begin with Phase 0 in `IMPLEMENTATION_PLAN.md`.
 
-The initial implementation must not assume final Ethiopian tax/receipt rules or a specific electronic payment provider. Manual transfer proof with cashier approval is the MVP payment workflow; `ETB` is the default currency and `Africa/Addis_Ababa` is the default operational timezone.
+The implementation must not assume final Ethiopian tax/receipt rules or a specific electronic payment provider. Bank/Telebirr proof with Owner approval and cash confirmation through an active Cashier/Owner shift are the pilot workflows; `ETB` is the default currency and `Africa/Addis_Ababa` is the default operational timezone.

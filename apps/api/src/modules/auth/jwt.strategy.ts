@@ -1,15 +1,17 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Inject, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import type { ConfigService } from '@nestjs/config';
-import type { PrismaService } from '../prisma/prisma.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { ConfigService } from '@nestjs/config';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
 import type { JwtPayload } from './auth.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    config: ConfigService,
-    private readonly prisma: PrismaService,
+    @Inject(ConfigService) config: ConfigService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {
     const secret = config.get<string>('JWT_ACCESS_SECRET');
     if (!secret) {
@@ -36,7 +38,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     return {
       sub: payload.sub,
-      email: payload.email,
+      phone: payload.phone ?? null,
+      email: payload.email ?? null,
       platformRole: user.platformRole, // Use fresh platform role from DB
     };
   }

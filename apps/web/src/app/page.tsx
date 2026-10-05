@@ -1,10 +1,5 @@
-export default function HomePage() {
-  return (
-    <main className="flex min-h-screen items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold">RMS</h1>
-        <p className="mt-2 text-slate-400">Restaurant Management System</p>
-      </div>
-    </main>
-  );
-}
+import { MarketingLanding } from '@/components/marketing-site';
+
+export const metadata = { title: 'RestaurantMS — One calm system for every service', description: 'Restaurant operations, POS, kitchen, payments, inventory, and multi-branch reporting—built for hospitality teams in Ethiopia.' };
+
+export default function HomePage() { return <MarketingLanding />; }

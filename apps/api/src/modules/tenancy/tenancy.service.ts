@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   ConflictException,
   ForbiddenException,
@@ -8,10 +9,16 @@ import {
 } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { createHash } from 'crypto';
-import type { PrismaService } from '../prisma/prisma.service';
-import type { AuthService } from '../auth/auth.service';
-import type { AuditService } from '../audit/audit.service';
-import { TenantRole } from '@rms/contracts';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuthService } from '../auth/auth.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { AuditService } from '../audit/audit.service';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { FeatureResolver } from '../features/feature-resolver.service';
+import { TenantRole, FeatureKey, normalizeEthiopianPhone, maskEthiopianPhone } from '@rms/contracts';
+import { getAllFeatureKeys, DEFAULT_NEW_TENANT_FEATURES } from '../features/feature-catalog';
 
 /** Role hierarchy: who can grant what */
 const GRANTABLE_BY_ROLE: Record<string, TenantRole[]> = {
@@ -20,10 +27,12 @@ const GRANTABLE_BY_ROLE: Record<string, TenantRole[]> = {
     TenantRole.MANAGER,
     TenantRole.CASHIER,
     TenantRole.KITCHEN_STAFF,
+    TenantRole.WAITER,
   ],
   [TenantRole.MANAGER]: [
     TenantRole.CASHIER,
     TenantRole.KITCHEN_STAFF,
+    TenantRole.WAITER,
   ],
 };
 
@@ -31,6 +40,7 @@ const GRANTABLE_BY_ROLE: Record<string, TenantRole[]> = {
 const MANAGEABLE_BY_MANAGER: TenantRole[] = [
   TenantRole.CASHIER,
   TenantRole.KITCHEN_STAFF,
+  TenantRole.WAITER,
 ];
 
 @Injectable()
@@ -38,9 +48,10 @@ export class TenancyService {
   private readonly logger = new Logger(TenancyService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly authService: AuthService,
-    private readonly audit: AuditService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(FeatureResolver) private readonly featureResolver: FeatureResolver,
   ) {}
 
   /**
@@ -65,13 +76,24 @@ export class TenancyService {
   async createTenant(data: {
     name: string;
     slug: string;
-    ownerEmail: string;
+    ownerPhone: string;
     ownerPassword: string;
     ownerName: string;
   }) {
     const existing = await this.prisma.tenant.findUnique({ where: { slug: data.slug } });
     if (existing) {
       throw new ConflictException('Tenant slug already exists');
+    }
+
+    const ownerPhone = normalizeEthiopianPhone(data.ownerPhone);
+    if (!ownerPhone) {
+      throw new BadRequestException('Enter a valid Ethiopian mobile number');
+    }
+
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(data.ownerPassword)) {
+      throw new BadRequestException(
+        'Password must contain at least one uppercase, one lowercase, and one digit',
+      );
     }
 
     const passwordHash = await this.authService.hashPassword(data.ownerPassword);
@@ -83,7 +105,7 @@ export class TenancyService {
 
       const owner = await tx.user.create({
         data: {
-          email: data.ownerEmail,
+          phoneE164: ownerPhone,
           passwordHash,
           displayName: data.ownerName,
           status: 'ACTIVE',
@@ -98,6 +120,33 @@ export class TenancyService {
           status: 'ACTIVE',
         },
       });
+
+      // Seed default entitlements for new tenant
+      const allKeys = getAllFeatureKeys();
+      const defaultKeys = DEFAULT_NEW_TENANT_FEATURES;
+
+      for (const key of allKeys) {
+        await tx.tenantEntitlement.create({
+          data: {
+            tenantId: tenant.id,
+            featureKey: key,
+            status: defaultKeys.includes(key) ? 'ENABLED' : 'DISABLED',
+          },
+        });
+      }
+
+      // Seed tenant-level feature settings (enabled for default features)
+      for (const key of defaultKeys) {
+        await tx.featureSetting.create({
+          data: {
+            tenantId: tenant.id,
+            branchId: null,
+            featureKey: key,
+            enabled: true,
+            updatedByUserId: owner.id,
+          },
+        });
+      }
 
       this.logger.log(`Tenant created: ${tenant.id} (${tenant.slug}), owner: ${owner.id}`);
       return { tenant, owner, membership };
@@ -124,6 +173,9 @@ export class TenancyService {
   }
 
   async createBranch(tenantId: string, data: { name: string; slug: string }) {
+    // Service-level MULTI_BRANCH feature assertion
+    await this.featureResolver.assertEffective(tenantId, FeatureKey.MULTI_BRANCH);
+
     const existing = await this.prisma.branch.findFirst({
       where: { tenantId, slug: data.slug },
     });
@@ -157,15 +209,25 @@ export class TenancyService {
   }
 
   async listMemberships(tenantId: string) {
-    return this.prisma.tenantMembership.findMany({
+    const memberships = await this.prisma.tenantMembership.findMany({
       where: { tenantId },
       include: {
-        user: { select: { id: true, email: true, displayName: true } },
+        user: { select: { id: true, email: true, displayName: true, phoneE164: true } },
         branchAssignments: {
           include: { branch: { select: { id: true, name: true, slug: true } } },
         },
       },
     });
+
+    return memberships.map((membership) => ({
+      ...membership,
+      user: {
+        id: membership.user.id,
+        email: membership.user.email,
+        displayName: membership.user.displayName,
+        phone: membership.user.phoneE164,
+      },
+    }));
   }
 
   /**
@@ -310,7 +372,7 @@ export class TenancyService {
   async inviteMember(
     tenantId: string,
     data: {
-      email: string;
+      phone: string;
       role: TenantRole;
       branchIds?: string[];
       invitedByUserId: string;
@@ -324,6 +386,11 @@ export class TenancyService {
       throw new ForbiddenException(
         `Your role (${data.callerRole}) cannot invite as ${data.role}. Grantable: ${grantable.join(', ')}`,
       );
+    }
+
+    const phone = normalizeEthiopianPhone(data.phone);
+    if (!phone) {
+      throw new BadRequestException('Enter a valid Ethiopian mobile number');
     }
 
     // Validate branches
@@ -354,8 +421,9 @@ export class TenancyService {
     const invitationExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     const result = await this.prisma.$transaction(async (tx) => {
-      // Find or create user
-      let user = await tx.user.findFirst({ where: { email: data.email } });
+      // Find or create user by normalized phone (equivalent input formats
+      // resolve to the same user).
+      let user = await tx.user.findFirst({ where: { phoneE164: phone } });
 
       if (!user) {
         const tempPassword = randomBytes(16).toString('hex');
@@ -363,9 +431,9 @@ export class TenancyService {
 
         user = await tx.user.create({
           data: {
-            email: data.email,
+            phoneE164: phone,
             passwordHash,
-            displayName: data.email.split('@')[0],
+            displayName: `Staff ${phone.slice(-4)}`,
             status: 'ACTIVE',
           },
         });
@@ -413,7 +481,7 @@ export class TenancyService {
       action: 'MEMBERSHIP_INVITE',
       entityType: 'TenantMembership',
       entityId: result.membershipId,
-      after: { email: data.email, role: data.role, branchIds: data.branchIds },
+      after: { phone: maskEthiopianPhone(phone), role: data.role, branchIds: data.branchIds },
     });
 
     return {
@@ -540,6 +608,12 @@ export class TenancyService {
     callerRole?: string,
     callerBranchIds?: string[],
   ) {
+    // Validate feature key
+    const validKeys = getAllFeatureKeys();
+    if (!validKeys.includes(featureKey as FeatureKey)) {
+      throw new BadRequestException(`Invalid feature key: ${featureKey}. Valid keys: ${validKeys.join(', ')}`);
+    }
+
     if (branchId) {
       const branch = await this.prisma.branch.findFirst({
         where: { id: branchId, tenantId },
@@ -551,6 +625,26 @@ export class TenancyService {
       if (callerRole === TenantRole.MANAGER && callerBranchIds && !callerBranchIds.includes(branchId)) {
         throw new ForbiddenException('You are not assigned to this branch');
       }
+    } else {
+      // Tenant-level setting: check platform entitlement gate
+      const entitlement = await this.prisma.tenantEntitlement.findUnique({
+        where: { tenantId_featureKey: { tenantId, featureKey } },
+      });
+
+      const platformStatus = entitlement?.status ?? 'DISABLED';
+      const platformAllows =
+        platformStatus === 'ENABLED' ||
+        (platformStatus === 'TRIAL' && entitlement?.trialEndsAt && entitlement.trialEndsAt > new Date());
+
+      if (!platformAllows && enabled) {
+        throw new ForbiddenException({
+          statusCode: 403,
+          code: 'FEATURE_DISABLED',
+          feature: featureKey,
+          reason: platformStatus === 'TRIAL' ? 'TRIAL_EXPIRED' : platformStatus,
+          message: `Cannot enable ${featureKey}: platform entitlement is ${platformStatus}.`,
+        });
+      }
     }
 
     const existing = await this.prisma.featureSetting.findFirst({
@@ -558,14 +652,88 @@ export class TenancyService {
     });
 
     if (existing) {
-      return this.prisma.featureSetting.update({
+      const updated = await this.prisma.featureSetting.update({
         where: { id: existing.id },
         data: { enabled, updatedByUserId: userId },
       });
+
+      await this.audit.log({
+        actorUserId: userId,
+        tenantId,
+        branchId: branchId ?? undefined,
+        action: 'FEATURE_SETTING_UPDATE',
+        entityType: 'FeatureSetting',
+        entityId: existing.id,
+        before: { enabled: existing.enabled },
+        after: { enabled },
+      });
+
+      return updated;
     }
 
-    return this.prisma.featureSetting.create({
+    const created = await this.prisma.featureSetting.create({
       data: { tenantId, branchId, featureKey, enabled, updatedByUserId: userId },
     });
+
+    await this.audit.log({
+      actorUserId: userId,
+      tenantId,
+      branchId: branchId ?? undefined,
+      action: 'FEATURE_SETTING_UPDATE',
+      entityType: 'FeatureSetting',
+      entityId: created.id,
+        after: { enabled },
+    });
+
+    return created;
+  }
+
+  // ─── TENANT-LEVEL FEATURES ─────────────────
+
+  async getTenantFeatures(tenantId: string) {
+    const allKeys = getAllFeatureKeys();
+    const entitlements = await this.prisma.tenantEntitlement.findMany({
+      where: { tenantId },
+    });
+    const entitlementMap = new Map(entitlements.map((e) => [e.featureKey, e]));
+
+    const tenantSettings = await this.prisma.featureSetting.findMany({
+      where: { tenantId, branchId: null },
+    });
+    const tenantSettingMap = new Map(tenantSettings.map((s) => [s.featureKey, s]));
+
+    const result: Array<{
+      featureKey: string;
+      entitlementStatus: string;
+      trialEndsAt: Date | null;
+      tenantEnabled: boolean;
+      effective: boolean;
+    }> = [];
+
+    for (const key of allKeys) {
+      const entitlement = entitlementMap.get(key);
+      const tenantSetting = tenantSettingMap.get(key);
+      const effective = await this.featureResolver.resolve(tenantId, key as FeatureKey);
+
+      result.push({
+        featureKey: key,
+        entitlementStatus: entitlement?.status ?? 'DISABLED',
+        trialEndsAt: entitlement?.trialEndsAt ?? null,
+        tenantEnabled: tenantSetting?.enabled ?? false,
+        effective: effective.effective,
+      });
+    }
+
+    return result;
+  }
+
+  async setTenantFeature(
+    tenantId: string,
+    featureKey: string,
+    enabled: boolean,
+    userId: string,
+  ) {
+    // Reuse setFeature with branchId=null (which also checks entitlement gate)
+    return this.setFeature(tenantId, null, featureKey, enabled, userId);
   }
 }

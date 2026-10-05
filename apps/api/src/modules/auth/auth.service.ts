@@ -1,18 +1,25 @@
 import {
   Injectable,
+  Inject,
   UnauthorizedException,
   Logger,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import type { JwtService } from '@nestjs/jwt';
-import type { ConfigService } from '@nestjs/config';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { JwtService } from '@nestjs/jwt';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
 import { randomBytes, createHash } from 'crypto';
-import type { PrismaService } from '../prisma/prisma.service';
+import { normalizeEthiopianPhone } from '@rms/contracts';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface JwtPayload {
   sub: string;
+  phone: string | null;
+  /** TEMPORARY compatibility claim during the phone-first migration — removed with the email login window. */
   email: string | null;
   platformRole: string | null;
 }
@@ -22,7 +29,13 @@ export interface TokenPair {
   refreshToken: string;
 }
 
-/** In-memory rate limiter: 10 failed attempts per email per 15 minutes */
+export interface LoginCredentials {
+  phone?: string;
+  /** TEMPORARY compatibility identifier during the phone-first migration. */
+  email?: string;
+}
+
+/** In-memory rate limiter: 10 failed attempts per normalized identity per 15 minutes */
 const FAILED_ATTEMPTS = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
@@ -32,9 +45,9 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly jwtService: JwtService,
-    private readonly config: ConfigService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(JwtService) private readonly jwtService: JwtService,
+    @Inject(ConfigService) private readonly config: ConfigService,
   ) {}
 
   async hashPassword(password: string): Promise<string> {
@@ -45,9 +58,9 @@ export class AuthService {
     return argon2.verify(hash, password);
   }
 
-  private checkRateLimit(email: string): void {
+  private checkRateLimit(rateKey: string): void {
     const now = Date.now();
-    const record = FAILED_ATTEMPTS.get(email);
+    const record = FAILED_ATTEMPTS.get(rateKey);
 
     if (record && now < record.resetAt) {
       if (record.count >= RATE_LIMIT_MAX) {
@@ -58,40 +71,93 @@ export class AuthService {
         );
       }
     } else {
-      FAILED_ATTEMPTS.set(email, { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS });
+      FAILED_ATTEMPTS.set(rateKey, { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS });
     }
   }
 
-  private recordFailedAttempt(email: string): void {
-    const record = FAILED_ATTEMPTS.get(email);
+  private recordFailedAttempt(rateKey: string): void {
+    const record = FAILED_ATTEMPTS.get(rateKey);
     if (record) {
       record.count++;
     }
   }
 
-  private clearFailedAttempts(email: string): void {
-    FAILED_ATTEMPTS.delete(email);
+  private clearFailedAttempts(rateKey: string): void {
+    FAILED_ATTEMPTS.delete(rateKey);
   }
 
-  async login(email: string, password: string): Promise<TokenPair> {
-    this.checkRateLimit(email);
+  async login(credentials: LoginCredentials, password: string): Promise<TokenPair> {
+    const phone = credentials.phone?.trim();
+    const email = credentials.email?.trim();
+
+    if (phone) {
+      const normalized = normalizeEthiopianPhone(phone);
+      if (!normalized) {
+        // Malformed identifiers can never match a user; do not key the
+        // rate limiter with unnormalized input.
+        throw new UnauthorizedException('Invalid credentials');
+      }
+      return this.loginWithPhone(normalized, password);
+    }
+
+    if (email) {
+      // TEMPORARY compatibility path during the phone-first migration.
+      // Remove once staging verification is complete (DECISIONS.md).
+      return this.loginWithEmail(email, password);
+    }
+
+    throw new UnauthorizedException('Invalid credentials');
+  }
+
+  private async loginWithPhone(normalizedPhone: string, password: string): Promise<TokenPair> {
+    const rateKey = `phone:${normalizedPhone}`;
+    this.checkRateLimit(rateKey);
+
+    const user = await this.prisma.user.findFirst({
+      where: { phoneE164: normalizedPhone, status: 'ACTIVE' },
+    });
+
+    if (!user) {
+      this.recordFailedAttempt(rateKey);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const valid = await this.verifyPassword(user.passwordHash, password);
+    if (!valid) {
+      this.recordFailedAttempt(rateKey);
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    this.clearFailedAttempts(rateKey);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
+
+    return this.generateTokenPair(user);
+  }
+
+  private async loginWithEmail(email: string, password: string): Promise<TokenPair> {
+    const rateKey = `email:${email.toLowerCase()}`;
+    this.checkRateLimit(rateKey);
 
     const user = await this.prisma.user.findFirst({
       where: { email, status: 'ACTIVE' },
     });
 
     if (!user) {
-      this.recordFailedAttempt(email);
+      this.recordFailedAttempt(rateKey);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const valid = await this.verifyPassword(user.passwordHash, password);
     if (!valid) {
-      this.recordFailedAttempt(email);
+      this.recordFailedAttempt(rateKey);
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    this.clearFailedAttempts(email);
+    this.clearFailedAttempts(rateKey);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -226,7 +292,7 @@ export class AuthService {
   }
 
   async getProfile(userId: string) {
-    return this.prisma.user.findUnique({
+    const profile = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -255,11 +321,34 @@ export class AuthService {
         },
       },
     });
+
+    // Owners are authorized for every active branch and intentionally do not
+    // require explicit BranchAssignment rows. Expose those branches in the
+    // same shape as assigned staff so clients can use one branch picker model.
+    if (profile) {
+      for (const membership of profile.memberships) {
+        if (membership.role !== 'OWNER') continue;
+        const branches = await this.prisma.branch.findMany({
+          where: { tenantId: membership.tenant.id, isActive: true },
+          select: { id: true, name: true, slug: true, isActive: true },
+          orderBy: { name: 'asc' },
+        });
+        membership.branchAssignments = branches.map((branch) => ({
+          branchId: branch.id,
+          branch,
+        }));
+      }
+    }
+
+    if (!profile) return profile;
+    const { phoneE164, ...rest } = profile;
+    return { ...rest, phone: phoneE164 };
   }
 
   private async generateTokenPair(user: {
     id: string;
     email: string | null;
+    phoneE164: string | null;
     platformRole: string | null;
     familyId?: string;
   }): Promise<TokenPair> {
@@ -293,10 +382,12 @@ export class AuthService {
   private issueAccessToken(user: {
     id: string;
     email: string | null;
+    phoneE164: string | null;
     platformRole: string | null;
   }): string {
     const payload: JwtPayload = {
       sub: user.id,
+      phone: user.phoneE164,
       email: user.email,
       platformRole: user.platformRole,
     };

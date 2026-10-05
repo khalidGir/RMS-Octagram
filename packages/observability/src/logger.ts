@@ -8,6 +8,26 @@ export function createLogger(context: string) {
         ? { target: 'pino-pretty', options: { colorize: true } }
         : undefined,
     base: { context },
+    redact: {
+      paths: [
+        'password',
+        'passwordHash',
+        'accessToken',
+        'refreshToken',
+        'paymentToken',
+        'trackingToken',
+        'qrToken',
+        'invitationToken',
+        'authorization',
+        'cookie',
+        'signature',
+        'secret',
+        'secretHash',
+        'selectorHash',
+        'token',
+      ],
+      censor: '[REDACTED]',
+    },
   });
 }
 

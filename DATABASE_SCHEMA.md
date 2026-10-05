@@ -19,18 +19,21 @@
 
 ```text
 PlatformRole: SUPER_ADMIN
-TenantRole: OWNER, MANAGER, CASHIER, KITCHEN_STAFF
+TenantRole: OWNER, MANAGER, CASHIER, KITCHEN_STAFF, WAITER
 MembershipStatus: INVITED, ACTIVE, SUSPENDED, REVOKED
 OrderType: DINE_IN, PICKUP, POS
 OrderStatus: DRAFT, PENDING_PAYMENT, PENDING_CONFIRMATION, CONFIRMED,
              IN_PROGRESS, READY, COMPLETED, CANCELLED, VOIDED
-PaymentMethod: CASH, MANUAL_TRANSFER, GATEWAY
+PaymentMethod: CASH, BANK_TRANSFER, TELEBIRR, GATEWAY
 PaymentStatus: PENDING, PENDING_VERIFICATION, APPROVED, REJECTED,
                FAILED, REFUNDED, CANCELLED
 TicketStatus: QUEUED, IN_PROGRESS, READY, COMPLETED, RECALLED, CANCELLED
 SessionStatus: OPEN, SETTLING, CLOSED, CANCELLED
 InventoryMovementType: RECEIVE, DEDUCT, ADJUST, VOID_RESTORE, WASTE, TRANSFER
 FeatureKey: PAYMENT_GATEWAY, TABLE_QR_ORDERING, KDS, BATCH_INVENTORY
+ShiftStatus: OPEN, CLOSED
+BusinessDayStatus: OPEN, CLOSED, REOPENED
+SupportContextStatus: ACTIVE, EXPIRED, REVOKED
 ```
 
 Enums are documented here for clarity. Use PostgreSQL enums only when migrations remain manageable; otherwise use validated text with check constraints.
@@ -385,5 +388,103 @@ Use a database transaction for:
 - Inventory adjustment plus movement ledger and balance update.
 - Order void plus payment/stock consequences, histories, audit log, and outbox event.
 
+- Cash confirmation plus active-shift validation/payment attribution, order confirmation, inventory, audit and outbox.
+- Table-session open/join during confirmed dine-in processing.
+- Shift close plus immutable totals snapshot and audit.
+- Business-day close/reopen plus immutable snapshot/history and audit.
+
 External calls, S3 operations, and notifications must not remain open inside long database transactions.
+
+## 14. Product v0.2 Schema Amendments
+
+These amendments supersede conflicting earlier examples while preserving historical rows through additive migrations.
+
+### Tenant and branch configuration
+
+Add locale and operating configuration:
+
+- `tenants.default_locale` with `en`, `am`, or `ar`.
+- `tenant_memberships.preferred_locale` nullable.
+- `branches.public_slug` globally unique or tenant-safe with an unambiguous resolver.
+- `branches.business_day_cutoff_local` represented as local time and interpreted using branch timezone.
+
+### `tax_configuration_versions`
+
+| Column | Type | Notes |
+| :--- | :--- | :--- |
+| `id` | UUID PK | |
+| `tenant_id`, `branch_id` | UUID | Branch nullable for tenant default. |
+| `vat_applicable` | BOOLEAN | Confirmed during onboarding. |
+| `vat_rate` | NUMERIC(9,6) | Decimal-safe rate; never float. |
+| `effective_from`, `effective_until` | TIMESTAMPTZ | Non-overlapping effective window per scope. |
+| `confirmed_by`, `confirmation_note` | TEXT | Business confirmation metadata, not legal advice. |
+| `created_by_user_id`, `created_at` | UUID, TIMESTAMPTZ | Audit actor/time. |
+
+Orders snapshot `tax_configuration_version_id`, `vat_rate_snapshot`, `subtotal_minor`, `tax_minor`, and `total_minor`. `service_charge_minor` remains zero for backward compatibility and is not exposed as configurable behavior.
+
+### Localized catalog content
+
+Use translation rows keyed by entity and locale or equivalent validated JSON. Translation records include tenant scope, locale, name/description fields and timestamps. Required fallback order is requested locale -> tenant default -> English -> base value. Unique constraints include tenant, entity and locale.
+
+### Table-session amendments
+
+`dining_sessions` gains `cleared_by_user_id`, `clear_reason` nullable and optimistic `version`. The session opens atomically on first confirmed dine-in order, not on QR scan or draft creation. `orders.dining_session_id` is assigned during confirmation. A partial unique index continues to enforce one active session per table.
+
+### Explicit transfer methods and snapshots
+
+Migrate historical `MANUAL_TRANSFER` rows without data loss to a compatible legacy value or resolved `BANK_TRANSFER`/`TELEBIRR` subtype. New payments use explicit methods. Store an immutable payment-instruction snapshot on payment/order checkout records containing safe display fields, method, version and applicable total/tax snapshot; never provider secrets.
+
+### `cashier_shifts`
+
+| Column | Type | Notes |
+| :--- | :--- | :--- |
+| `id` | UUID PK | |
+| `tenant_id`, `branch_id`, `cashier_user_id` | UUID | Mandatory scope/actor. |
+| `status` | TEXT | OPEN or CLOSED. |
+| `opening_cash_minor` | BIGINT | Defaults to zero. |
+| `expected_cash_minor`, `counted_cash_minor`, `variance_minor` | BIGINT nullable | Finalized on close. |
+| `variance_reason` | VARCHAR nullable | Required when variance is non-zero. |
+| `opened_at`, `closed_at` | TIMESTAMPTZ | |
+| `closed_by_user_id` | UUID nullable | Cashier or Owner. |
+| `version`, `created_at`, `updated_at` | INTEGER/TIMESTAMPTZ | Concurrency. |
+
+Partial unique constraint: one OPEN shift per `(tenant_id, branch_id, cashier_user_id)`. Cash payments store immutable `cashier_shift_id` assigned at confirmation; closed-shift attribution cannot be rewritten.
+
+### `shift_report_snapshots`
+
+One immutable snapshot per closed shift containing opening, approved cash, expected drawer, counted, variance, order/payment counts, cancellations/void metadata, local/UTC boundaries, cashier and close actor. Corrections append audit/history; they do not rewrite the snapshot.
+
+### `business_day_closes`
+
+| Column | Type | Notes |
+| :--- | :--- | :--- |
+| `id` | UUID PK | |
+| `tenant_id`, `branch_id` | UUID | Branch snapshot; tenant summary may reference multiple branch closes. |
+| `local_business_date` | DATE | Interpreted with branch timezone/cutoff. |
+| `status` | TEXT | CLOSED or REOPENED current state with append-only history. |
+| `snapshot_json` | JSONB | Validated immutable totals and exception references. |
+| `closed_with_exception`, `reason` | BOOLEAN/VARCHAR | Reason required for exception close. |
+| `closed_by_user_id`, `closed_at` | UUID/TIMESTAMPTZ | Owner only. |
+| `reopened_by_user_id`, `reopened_at`, `reopen_reason` | nullable | Owner only; reason required. |
+| `version`, `created_at` | INTEGER/TIMESTAMPTZ | |
+
+Unique current close per `(tenant_id, branch_id, local_business_date)`. Reopen/close cycles append `business_day_history`; prior snapshots remain immutable.
+
+### `support_contexts`
+
+Short-lived platform context: `id`, super-admin user ID, target tenant ID, reason, status, expires/revoked timestamps, correlation metadata and timestamps. It grants only catalog allowlisted operations. Each support mutation includes `support_context_id` in its audit record.
+
+### Privacy retention
+
+No loyalty-phone table is activated in the pilot. Payment proof/media retention adds policy version, retention deadline, legal hold nullable, deletion timestamp and deletion audit. Exact periods remain configuration blocked until approved.
+
+## 15. Product v0.2 Indexes and Constraints
+
+- Active cashier shift partial unique by tenant/branch/cashier.
+- Business-day close lookup by tenant/branch/local date and status.
+- Public branch slug unique index using case-insensitive normalized value.
+- Tax version effective-window lookup by tenant/branch/effective time, with overlap prevention at service/database level.
+- Active support context by super-admin/target tenant/expiry.
+- Session terminal-eligibility query on dining-session ID plus order status.
+- Payment reporting by explicit method, approval status and reviewed time.
 

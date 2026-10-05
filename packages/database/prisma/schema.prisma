@@ -25,6 +25,10 @@ model User {
   authSessions    AuthSession[]
   createdInvites  TenantMembership[] @relation("InvitedBy")
   auditLogs       AuditLog[]
+  waiterSessions  DiningSession[] @relation("DiningSessionWaiter")
+  waiterOrders    Order[] @relation("OrderWaiter")
+  assignedServiceRequests ServiceRequest[] @relation("ServiceRequestAssignee")
+  claimedServiceRequests  ServiceRequest[] @relation("ServiceRequestClaimant")
 
   @@index([email])
   @@index([phoneE164])
@@ -57,15 +61,19 @@ model Tenant {
   status          String         @default("TRIAL")
   defaultCurrency String         @default("ETB") @db.VarChar(3)
   defaultTimezone  String        @default("Africa/Addis_Ababa")
+  defaultLocale   String         @default("en") // en, am, ar
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
   memberships     TenantMembership[]
   branches        Branch[]
   featureSettings FeatureSetting[]
+  entitlements    TenantEntitlement[]
   menuCategories  MenuCategory[]
   menuItems       MenuItem[]
   modifierGroups  ModifierGroup[]
+  taxConfigurations TenantTaxConfiguration[]
+  menuTranslations MenuItemTranslation[]
 }
 
 model TenantMembership {
@@ -78,6 +86,7 @@ model TenantMembership {
   invitationTokenHash   String?
   invitationExpiresAt   DateTime?
   acceptedAt            DateTime?
+  preferredLocale       String?   // en, am, ar — staff preference
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -96,10 +105,12 @@ model Branch {
   tenantId        String
   name            String         @db.VarChar(200)
   slug            String
+  publicSlug      String?        // globally unique, customer-facing URL slug
   phone           String?
   addressJson     Json?
   timezone        String         @default("Africa/Addis_Ababa")
   currency        String         @default("ETB") @db.VarChar(3)
+  businessDayCutoffLocal String  @default("06:00") @db.VarChar(5)
   isActive        Boolean        @default(true)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -110,15 +121,26 @@ model Branch {
   diningAreas     DiningArea[]
   tables          RestaurantTable[]
   kitchenStations KitchenStation[]
+  kitchens        Kitchen[]
   orders          Order[]
   payments        Payment[]
   mediaObjects    MediaObject[]
   inventoryItems  InventoryItem[]
   paymentInstructions PaymentInstruction[]
   branchMenuItems BranchMenuItem[]
+  orderCounter     BranchOrderCounter?
+  stationCounters  StationTicketCounter[]
+  taxConfigurations TenantTaxConfiguration[]
+  cashShifts        CashShift[]
+  shiftReports      ShiftReportSnapshot[]
+  businessDayCloses BusinessDayClose[]
+  kdsDevices        KdsDevice[]
+  fulfillmentPolicy BranchFulfillmentPolicy?
+  serviceRequests    ServiceRequest[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, id])
+  @@unique([publicSlug])
   @@index([tenantId])
 }
 
@@ -133,6 +155,17 @@ model BranchAssignment {
 
   @@id([branchId, membershipId])
   @@index([tenantId])
+}
+
+model BranchOrderCounter {
+  branchId   String   @id
+  lastNumber BigInt   @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  branch     Branch   @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
 }
 
 model FeatureSetting {
@@ -150,6 +183,32 @@ model FeatureSetting {
   branch           Branch?   @relation(fields: [branchId], references: [id])
 
   @@index([tenantId, branchId])
+  // Partial unique indexes managed via raw SQL migration:
+  // CREATE UNIQUE INDEX "FeatureSetting_tenant_unique"
+  //   ON "FeatureSetting" ("tenantId", "featureKey") WHERE "branchId" IS NULL;
+  // CREATE UNIQUE INDEX "FeatureSetting_branch_unique"
+  //   ON "FeatureSetting" ("tenantId", "branchId", "featureKey") WHERE "branchId" IS NOT NULL;
+}
+
+// ─── Platform Entitlements ──────────────────
+
+model TenantEntitlement {
+  id               String    @id @default(uuid())
+  tenantId         String
+  featureKey       String
+  status           String    @default("ENABLED")
+  trialEndsAt      DateTime?
+  updatedByUserId  String?
+  notes            String?
+  reason           String?
+  internalNote     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, featureKey])
+  @@index([tenantId])
 }
 
 // ─── Catalog ───────────────────────────────
@@ -190,6 +249,7 @@ model MenuItem {
   branchAvailability BranchMenuItem[]
   stations        MenuItemStation[]
   orderLines      OrderLine[]
+  translations    MenuItemTranslation[]
 
   @@index([tenantId])
   @@index([tenantId, categoryId])
@@ -283,11 +343,16 @@ model MenuItemStation {
   branchId   String
   menuItemId String
   stationId  String
+  routeType  String   @default("PREPARE") // PREPARE | ASSEMBLE
+  isRequired Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   menuItem   MenuItem       @relation(fields: [menuItemId], references: [id])
   station    KitchenStation @relation(fields: [stationId], references: [id])
 
-  @@id([branchId, menuItemId, stationId])
+  @@id([branchId, menuItemId, stationId, routeType])
 }
 
 // ─── Tables ────────────────────────────────
@@ -323,6 +388,7 @@ model RestaurantTable {
   qrTokens      TableQrToken[]
   sessions      DiningSession[]
   orders        Order[]
+  serviceRequests ServiceRequest[]
 
   @@unique([tenantId, branchId, label])
   @@index([tenantId, branchId])
@@ -341,27 +407,38 @@ model TableQrToken {
 
   table       RestaurantTable @relation(fields: [tableId], references: [id])
 
+  @@unique([tableId, version])
   @@index([tenantId, branchId])
   @@index([tokenHash])
 }
 
 model DiningSession {
-  id              String    @id @default(uuid())
-  tenantId        String
-  branchId        String
-  tableId         String
-  status          String    @default("OPEN")
-  guestCount      Int?
-  openedAt        DateTime  @default(now())
-  closedAt        DateTime?
-  openedByUserId  String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                    String    @id @default(uuid())
+  tenantId              String
+  branchId              String
+  tableId               String
+  status                String    @default("OPEN")
+  version               Int       @default(1)
+  guestCount            Int?
+  assignedWaiterUserId String?
+  assignedAt           DateTime?
+  assignedByUserId     String?
+  openedAt             DateTime  @default(now())
+  closedAt             DateTime?
+  openedByUserId       String?
+  clearedByUserId      String?
+  clearReason          String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  table           RestaurantTable @relation(fields: [tableId], references: [id])
-  orders          Order[]
+  table                RestaurantTable @relation(fields: [tableId], references: [id])
+  orders               Order[]
+  assignedWaiter       User?     @relation("DiningSessionWaiter", fields: [assignedWaiterUserId], references: [id])
+  serviceRequests      ServiceRequest[]
 
   @@index([tenantId, branchId])
+  @@index([tableId, status])
+  @@index([tenantId, branchId, assignedWaiterUserId])
 }
 
 // ─── Orders ────────────────────────────────
@@ -373,6 +450,7 @@ model Order {
   orderNumber         BigInt
   orderType           String
   status              String    @default("DRAFT")
+  fulfillmentStatus   String    @default("NOT_ROUTED")
   diningSessionId     String?
   tableId             String?
   customerName        String?
@@ -382,15 +460,29 @@ model Order {
   subtotalMinor       BigInt    @default(0)
   discountMinor       BigInt    @default(0)
   taxMinor            BigInt    @default(0)
-  serviceChargeMinor  BigInt    @default(0)
+  serviceChargeMinor  BigInt    @default(0) // always zero — not configurable
   totalMinor          BigInt    @default(0)
+  taxConfigVersionId  String?   // immutable snapshot reference
+  vatRateSnapshot     Decimal?  @db.Decimal(9,6) // VAT rate at order time
+  roundingModeSnapshot String?  // immutable snapshot of rounding mode used for VAT
   notes               String?
   source              String    @default("CUSTOMER_WEB")
   createdByUserId     String?
+  assignedWaiterUserId String?
   trackingTokenHash   String?
   confirmedAt         DateTime?
+  expoReleasedAt      DateTime?
+  expoReleasedByUserId String?
+  readyForServiceAt   DateTime?
+  servedAt            DateTime?
   completedAt         DateTime?
   cancelledAt         DateTime?
+  acceptedAt          DateTime?
+  acceptedByUserId    String?
+  acceptancePolicySnapshot String?
+  acceptanceChannel   String?
+  cancellationDisposition String?
+  cancellationReason  String?
   version             Int       @default(1)
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
@@ -398,16 +490,21 @@ model Order {
   branch              Branch          @relation(fields: [branchId], references: [id])
   diningSession       DiningSession?  @relation(fields: [diningSessionId], references: [id])
   table               RestaurantTable? @relation(fields: [tableId], references: [id])
+  waiter              User?           @relation("OrderWaiter", fields: [assignedWaiterUserId], references: [id])
   lines               OrderLine[]
   statusHistory       OrderStatusHistory[]
   payments            Payment[]
   kitchenTickets      KitchenTicket[]
   sourceRelations    OrderRelation[] @relation("SourceOrder")
   targetRelations    OrderRelation[] @relation("TargetOrder")
+  serviceNotifications ServiceNotification[]
+  serviceRequests      ServiceRequest[]
 
   @@unique([tenantId, branchId, orderNumber])
   @@index([tenantId, branchId, status, createdAt(sort: Desc)])
   @@index([tenantId, branchId, pickupAt])
+  @@index([tenantId, branchId, fulfillmentStatus, createdAt(sort: Desc)])
+  @@index([tenantId, branchId, assignedWaiterUserId, fulfillmentStatus])
 }
 
 model OrderLine {
@@ -506,52 +603,63 @@ model PaymentInstruction {
 }
 
 model Payment {
-  id                String    @id @default(uuid())
-  tenantId          String
-  branchId          String
-  orderId           String
-  method            String
-  status            String    @default("PENDING")
-  amountMinor       BigInt
-  currency          String    @default("ETB") @db.VarChar(3)
-  provider          String?
-  providerReference String?
-  customerReference String?
-  submittedAt       DateTime?
-  reviewedAt        DateTime?
-  reviewedByUserId  String?
-  reviewNote        String?
-  version           Int       @default(1)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  tenantId            String
+  branchId            String
+  orderId             String
+  method              String
+  status              String    @default("PENDING")
+  amountMinor         BigInt
+  currency            String    @default("ETB") @db.VarChar(3)
+  provider            String?
+  providerReference   String?
+  customerReference   String?
+  paymentTokenHash    String?
+  paymentTokenExpiresAt DateTime?
+  submittedAt         DateTime?
+  reviewedAt          DateTime?
+  reviewedByUserId    String?
+  reviewNote          String?
+  version             Int       @default(1)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  cashierShiftId      String?
 
-  branch            Branch    @relation(fields: [branchId], references: [id])
-  order             Order     @relation(fields: [orderId], references: [id])
-  proofs            PaymentProof[]
+  branch              Branch    @relation(fields: [branchId], references: [id])
+  order               Order     @relation(fields: [orderId], references: [id])
+  proofs              PaymentProof[]
+  mediaObjects        MediaObject[]
+  cashierShift        CashShift? @relation(fields: [cashierShiftId], references: [id])
 
   @@index([tenantId, branchId, status, submittedAt])
   @@index([tenantId, branchId, orderId])
+  @@index([tenantId, branchId, orderId, status]) // one active per order
 }
 
 model MediaObject {
   id            String    @id @default(uuid())
   tenantId      String
   branchId      String
+  paymentId     String?
   purpose       String
   bucket        String
   objectKey     String
   contentType   String
   sizeBytes     BigInt
   sha256        String?
-  scanStatus    String    @default("PENDING")
+  // Scan lifecycle: PENDING_UPLOAD (created, not yet uploaded) → PENDING_SCAN (uploaded, awaiting scan) → CLEAN | REJECTED
+  scanStatus    String    @default("PENDING_UPLOAD")
+  uploadExpiresAt DateTime?
   uploadedByUserId String?
   createdAt     DateTime  @default(now())
   deletedAt     DateTime?
 
   branch        Branch    @relation(fields: [branchId], references: [id])
+  payment       Payment?  @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   paymentProofs PaymentProof[]
 
   @@index([tenantId, branchId])
+  @@index([tenantId, branchId, paymentId])
 }
 
 model PaymentProof {
@@ -572,62 +680,124 @@ model PaymentProof {
 
 // ─── Kitchen ───────────────────────────────
 
+model Kitchen {
+  id              String   @id @default(uuid())
+  tenantId        String
+  branchId        String
+  name            String
+  description     String?
+  collectionLabel String?
+  displayOrder    Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  branch          Branch   @relation(fields: [branchId], references: [id])
+  stations        KitchenStation[]
+  tickets         KitchenTicket[]
+
+  @@unique([branchId, name])
+  @@index([tenantId, branchId, isActive])
+}
+
 model KitchenStation {
   id            String    @id @default(uuid())
   tenantId      String
   branchId      String
+  kitchenId     String?
   name          String
+  code          String?
   displayOrder  Int       @default(0)
   isActive      Boolean   @default(true)
+  isExpo        Boolean   @default(false)
+  defaultPrepMinutes Int?  // CHECK >= 0 via migration SQL
+  collectionLabelOverride String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   branch        Branch    @relation(fields: [branchId], references: [id])
+  kitchen       Kitchen?  @relation(fields: [kitchenId], references: [id])
   tickets       KitchenTicket[]
   menuItemAssignments MenuItemStation[]
+  kdsDeviceStations KdsDeviceStation[]
 
+  // NOTE: Partial unique index enforced via migration SQL:
+  // Only one station per branch may have isExpo = true.
+  // CREATE UNIQUE INDEX "KitchenStation_oneExpoPerBranch_idx"
+  //   ON "KitchenStation"("branchId") WHERE "isExpo" = true AND "isActive" = true;
+
+  @@unique([branchId, code])
   @@index([tenantId, branchId])
+  @@index([tenantId, branchId, kitchenId])
 }
 
 model KitchenTicket {
+  id                    String    @id @default(uuid())
+  tenantId              String
+  branchId              String
+  orderId               String
+  stationId             String
+  kitchenId             String?
+  ticketNumber          BigInt
+  ticketType            String    @default("PREPARATION") // PREPARATION | EXPO
+  status                String    @default("QUEUED")
+  priority              Int       @default(0)
+  estimatedReadyAt      DateTime?
+  startedAt             DateTime?
+  readyAt               DateTime?
+  completedAt           DateTime?
+  releasedAt            DateTime?
+  releasedByUserId      String?
+  collectedAt           DateTime?
+  collectedByUserId     String?
+  lastRecalledAt        DateTime?
+  collectionLabelSnapshot String?
+  version               Int       @default(1)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  order                 Order          @relation(fields: [orderId], references: [id])
+  station               KitchenStation @relation(fields: [stationId], references: [id])
+  kitchen               Kitchen?       @relation(fields: [kitchenId], references: [id])
+  lines                 KitchenTicketLine[]
+  history               KitchenTicketHistory[]
+  serviceNotifications  ServiceNotification[]
+
+  @@unique([tenantId, branchId, orderId, stationId])
+  @@index([tenantId, branchId, stationId, status, createdAt])
+  @@index([tenantId, branchId, kitchenId, status])
+}
+
+model KitchenTicketLine {
   id                String    @id @default(uuid())
   tenantId          String
   branchId          String
-  orderId           String
-  stationId         String
-  ticketNumber      BigInt
+  ticketId          String
+  orderLineId       String
+  routeType         String    @default("PREPARE") // PREPARE | ASSEMBLE
+  isRequired        Boolean   @default(true)
+  quantity              Int       // CHECK >= 0
+  quantityPrepared      Int       @default(0) // CHECK >= 0 AND <= quantity
+  quantityReady         Int       @default(0) // CHECK >= 0 AND <= quantityPrepared
+  quantityCollected     Int       @default(0) // CHECK >= 0 AND <= quantityReady
+  quantityServed        Int       @default(0) // CHECK >= 0 AND <= quantityCollected
+  itemNameSnapshot  String?
+  variantNameSnapshot String?
+  notesSnapshot     String?
   status            String    @default("QUEUED")
-  priority          Int       @default(0)
-  estimatedReadyAt  DateTime?
-  startedAt         DateTime?
   readyAt           DateTime?
-  completedAt       DateTime?
+  collectedAt       DateTime?
+  servedAt          DateTime?
+  cancelledAt       DateTime?
+  cancelReason      String?
   version           Int       @default(1)
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  order             Order          @relation(fields: [orderId], references: [id])
-  station           KitchenStation @relation(fields: [stationId], references: [id])
-  lines             KitchenTicketLine[]
-  history           KitchenTicketHistory[]
-
-  @@index([tenantId, branchId, stationId, status, createdAt])
-}
-
-model KitchenTicketLine {
-  id            String    @id @default(uuid())
-  tenantId      String
-  branchId      String
-  ticketId      String
-  orderLineId   String
-  quantity      Int
-  status        String    @default("QUEUED")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  ticket        KitchenTicket  @relation(fields: [ticketId], references: [id])
+  ticket            KitchenTicket  @relation(fields: [ticketId], references: [id])
 
   @@index([tenantId, branchId, ticketId])
+  @@index([tenantId, branchId, orderLineId])
 }
 
 model KitchenTicketHistory {
@@ -645,6 +815,139 @@ model KitchenTicketHistory {
   ticket      KitchenTicket  @relation(fields: [ticketId], references: [id])
 
   @@index([tenantId, branchId, ticketId])
+}
+
+model StationTicketCounter {
+  branchId   String
+  stationId  String
+  lastNumber BigInt   @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  branch     Branch   @relation(fields: [branchId], references: [id])
+
+  @@id([branchId, stationId])
+}
+
+// ─── KDS Devices ───────────────────────────
+
+model KdsDevice {
+  id              String    @id @default(uuid())
+  tenantId        String
+  branchId        String
+  name            String
+  deviceTokenHash String?   @unique
+  lastSeenAt      DateTime?
+  isActive        Boolean   @default(true)
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  branch          Branch    @relation(fields: [branchId], references: [id])
+  stations        KdsDeviceStation[]
+
+  @@index([tenantId, branchId])
+  @@index([tenantId, branchId, isActive])
+}
+
+model KdsDeviceStation {
+  tenantId     String
+  branchId     String
+  deviceId     String
+  stationId    String
+  displayOrder Int      @default(0)
+
+  device       KdsDevice      @relation(fields: [deviceId], references: [id])
+  station      KitchenStation @relation(fields: [stationId], references: [id])
+
+  @@id([deviceId, stationId])
+  @@index([tenantId, branchId, stationId])
+}
+
+// ─── Service Notifications ─────────────────
+
+model ServiceNotification {
+  id                      String    @id @default(uuid())
+  tenantId                String
+  branchId                String
+  orderId                 String
+  ticketId                String?
+  assignedUserId          String?
+  type                    String    // STATION_READY | ORDER_READY | EXPO_RELEASED | RECALL | REASSIGNED | ESCALATION
+  status                  String    @default("UNREAD") // UNREAD | ACKNOWLEDGED | RESOLVED | CANCELLED
+  collectionLabelSnapshot String?
+  dedupeKey               String    @unique
+  createdAt               DateTime  @default(now())
+  acknowledgedAt          DateTime?
+  resolvedAt              DateTime?
+
+  order                   Order     @relation(fields: [orderId], references: [id])
+  ticket                  KitchenTicket? @relation(fields: [ticketId], references: [id])
+
+  @@index([tenantId, branchId, assignedUserId, status])
+  @@index([tenantId, branchId, orderId])
+  @@index([tenantId, branchId, status, createdAt])
+}
+
+// ─── Branch Fulfillment Policy ─────────────
+
+model BranchFulfillmentPolicy {
+  id                                    String    @id @default(uuid())
+  tenantId                              String
+  branchId                              String    @unique
+  serviceMode                           String    @default("ALL_AT_ONCE") // ALL_AT_ONCE | PARTIAL_ALLOWED
+  expoMode                              String    @default("NONE") // NONE | OPTIONAL | REQUIRED
+  allowWaiterSelfClaim                  Boolean   @default(false)
+  showUnassignedReadyOrdersToWaiters    Boolean   @default(false)
+  readyReminderSeconds Int?     // CHECK >= 0 via migration SQL
+  readyEscalationSeconds Int?   // CHECK >= 0 via migration SQL
+  autoCompleteKitchenTicketOnCollected Boolean @default(false)
+  orderAcceptancePolicy                 String    @default("CASHIER_CONFIRMATION")
+  assistanceEscalationSeconds           Int       @default(180)
+  cashAtCounterEnabled                  Boolean   @default(true)
+  cashToWaiterEnabled                   Boolean   @default(true)
+  createdAt                             DateTime  @default(now())
+  updatedAt                             DateTime  @updatedAt
+
+  branch          Branch    @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId, branchId])
+}
+
+// ─── Customer service requests ─────────────
+
+model ServiceRequest {
+  id                  String    @id @default(uuid())
+  tenantId            String
+  branchId            String
+  tableId             String
+  diningSessionId     String
+  orderId             String?
+  type                String
+  status              String    @default("OPEN")
+  note                String?
+  assignedWaiterUserId String?
+  claimedByUserId     String?
+  idempotencyKey      String
+  version             Int       @default(1)
+  createdAt           DateTime  @default(now())
+  claimedAt           DateTime?
+  resolvedAt          DateTime?
+  cancelledAt         DateTime?
+  escalatedAt         DateTime?
+  updatedAt           DateTime  @updatedAt
+
+  branch              Branch          @relation(fields: [branchId], references: [id])
+  table               RestaurantTable @relation(fields: [tableId], references: [id])
+  diningSession       DiningSession   @relation(fields: [diningSessionId], references: [id])
+  order               Order?          @relation(fields: [orderId], references: [id])
+  assignedWaiter      User?           @relation("ServiceRequestAssignee", fields: [assignedWaiterUserId], references: [id])
+  claimedBy           User?           @relation("ServiceRequestClaimant", fields: [claimedByUserId], references: [id])
+
+  @@unique([tenantId, branchId, idempotencyKey])
+  @@index([tenantId, branchId, status, createdAt])
+  @@index([tenantId, branchId, assignedWaiterUserId, status])
+  @@index([diningSessionId, type, status])
 }
 
 // ─── Inventory ─────────────────────────────
@@ -782,7 +1085,9 @@ model IdempotencyRecord {
   expiresAt     DateTime
   createdAt     DateTime  @default(now())
 
-  @@unique([tenantId, operation, key])
+  // Partial unique indexes enforced by migration (not expressible in Prisma):
+  // - UNIQUE(tenantId, operation, key) WHERE branchId IS NULL
+  // - UNIQUE(tenantId, branchId, operation, key) WHERE branchId IS NOT NULL
   @@index([tenantId, operation])
 }
 
@@ -798,9 +1103,14 @@ model OutboxEvent {
   publishedAt   DateTime?
   attemptCount  Int       @default(0)
   lastError     String?
+  status        String    @default("PENDING") // PENDING, PROCESSING, PUBLISHED, DEAD_LETTER, UNKNOWN_TYPE, RETRY
+  lockedBy      String?   // instance identifier for claim/lease
+  lockedAt      DateTime? // when the event was claimed
+  nextRetryAt   DateTime? // for exponential backoff scheduling
 
   @@index([publishedAt, occurredAt])
   @@index([tenantId, eventType])
+  @@index([status, nextRetryAt]) // for efficient scheduling of retryable events
 }
 
 model ProcessedEvent {
@@ -809,4 +1119,138 @@ model ProcessedEvent {
   processedAt  DateTime @default(now())
 
   @@id([consumerName, eventId])
+}
+
+// ─── Phase 6A: VAT Configuration ─────────────
+
+model TenantTaxConfiguration {
+  id              String    @id @default(uuid())
+  tenantId        String
+  branchId        String?   // null = tenant default; non-null = branch override
+  vatApplicable   Boolean   @default(false)
+  vatRate         Decimal   @db.Decimal(9,6) // e.g. 0.150000 for 15%
+  roundingMode    String    @default("DOWN") // HALF_UP | DOWN — provisional default matches prior behavior
+  effectiveFrom   DateTime  @default(now())
+  effectiveUntil  DateTime? // null = currently effective
+  confirmedBy     String?   // accountant/advisor name
+  confirmationNote String?
+  createdByUserId String
+  createdAt       DateTime  @default(now())
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  branch          Branch?   @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId, branchId, effectiveFrom])
+}
+
+// ─── Phase 6A: Localized Catalog Content ─────
+
+model MenuItemTranslation {
+  id              String    @id @default(uuid())
+  tenantId        String
+  menuItemId      String
+  locale          String    // en, am, ar
+  name            String
+  description     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  menuItem        MenuItem  @relation(fields: [menuItemId], references: [id])
+
+  @@unique([tenantId, menuItemId, locale])
+  @@index([tenantId, menuItemId])
+}
+
+model CashShift {
+  id                String    @id @default(uuid())
+  tenantId          String
+  branchId          String
+  cashierUserId     String
+  status            String    @default("OPEN")
+  openingCashMinor  BigInt    @default(0)
+  expectedCashMinor BigInt?
+  countedCashMinor  BigInt?
+  varianceMinor     BigInt?
+  varianceReason    String?   @db.VarChar(255)
+  openedAt          DateTime  @default(now())
+  closedAt          DateTime?
+  closedByUserId    String?
+  version           Int       @default(1)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  branch            Branch    @relation(fields: [branchId], references: [id])
+  payments          Payment[]
+
+  @@index([tenantId, branchId])
+  @@index([tenantId, branchId, cashierUserId])
+}
+
+model ShiftReportSnapshot {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  branchId             String
+  cashShiftId          String   @unique
+  openingCashMinor     BigInt
+  approvedCashMinor    BigInt   @default(0)
+  expectedCashMinor    BigInt
+  countedCashMinor     BigInt
+  varianceMinor        BigInt
+  varianceReason       String?  @db.VarChar(255)
+  orderCount           Int      @default(0)
+  paymentCount         Int      @default(0)
+  cancellationCount    Int      @default(0)
+  voidCount            Int      @default(0)
+  localOpenedAt        DateTime
+  localClosedAt        DateTime
+  localBusinessDate    DateTime @db.Date
+  openedByUserId       String
+  closedByUserId       String
+  createdAt            DateTime @default(now())
+
+  branch               Branch   @relation(fields: [branchId], references: [id])
+
+  @@index([tenantId, branchId])
+  @@index([tenantId, branchId, localBusinessDate])
+}
+
+model BusinessDayClose {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  branchId             String
+  localBusinessDate    DateTime @db.Date
+  status               String   @default("CLOSED")
+  snapshotJson         Json
+  closedWithException  Boolean  @default(false)
+  reason               String?  @db.VarChar(500)
+  closedByUserId       String
+  closedAt             DateTime @default(now())
+  reopenedByUserId     String?
+  reopenedAt           DateTime?
+  reopenReason         String?  @db.VarChar(500)
+  version              Int      @default(1)
+  createdAt            DateTime @default(now())
+
+  branch               Branch   @relation(fields: [branchId], references: [id])
+
+  @@unique([tenantId, branchId, localBusinessDate])
+  @@index([tenantId, branchId])
+  @@index([tenantId, branchId, status])
+}
+
+model SupportSession {
+  id                String   @id @default(uuid())
+  adminUserId       String
+  tenantId          String
+  reason            String   @db.VarChar(500)
+  startedAt         DateTime @default(now())
+  expiresAt         DateTime
+  endedAt           DateTime?
+  status            String   @default("ACTIVE")
+  createdAt         DateTime @default(now())
+
+  @@index([adminUserId])
+  @@index([tenantId])
+  @@index([status])
 }

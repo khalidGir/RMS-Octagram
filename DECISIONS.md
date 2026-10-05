@@ -93,15 +93,111 @@ This file records decisions that implementation agents must follow unless a late
 - **Reason:** This supports Ethiopian operations while preserving correct storage and future expansion.
 - **Consequence:** Reporting boundaries must convert branch-local dates to UTC ranges explicitly.
 
-## Open Product Decisions
+## ADR-014: Adopt the Product v0.2 pilot operating model
+
+- **Status:** Accepted
+- **Decision:** `PRODUCT_V0_2_DECISIONS.md` governs ordering contexts, payment authority, shifts, business-day close, table occupancy, localization and support mode.
+- **Reason:** The pilot-owner/cofounder documents define real role workflows and recovery states more precisely than the original feature outline.
+- **Consequence:** Functional v0.2 gaps are implemented before final hardening and frontend integration.
+
+## ADR-015: Separate table QR and public pickup contexts
+
+- **Status:** Accepted
+- **Decision:** `/o/{token}` permits configured table-context dine-in/takeaway choices; `/r/{publicSlug}` permits transfer-paid pickup pre-order only.
+- **Reason:** A public link cannot establish physical table presence, and remote preparation must not begin for unpaid cash orders.
+- **Consequence:** The server enforces permitted order/payment types from verified entry context rather than client choice alone.
+
+## ADR-016: Restrict transfer verification to Owner for the pilot
+
+- **Status:** Accepted; supersedes ADR-006 approver wording and older RBAC rows
+- **Decision:** Only Owner verifies/rejects bank-transfer or Telebirr proof. Cashier confirms cash during an active shift. Manager and Super Admin cannot verify transfers.
+- **Reason:** The pilot owner controls the destination accounts and carries verification risk.
+- **Consequence:** Existing broader approval permissions and tests must be migrated without weakening transactional/idempotency guarantees.
+
+## ADR-017: Add Waiter as a least-privilege role
+
+- **Status:** Accepted
+- **Decision:** Waiter sees assigned-branch ready orders and table state, may complete/serve Ready orders and clear eligible table sessions, and has no payment/configuration/inventory authority.
+- **Reason:** Serving and physical table clearance are separate from kitchen and cashier responsibilities.
+- **Consequence:** Contracts, migrations, role grants, guards, seeds and UI navigation include Waiter.
+
+## ADR-018: Use explicit staff-managed table sessions
+
+- **Status:** Accepted
+- **Decision:** Confirmation of the first dine-in order opens or joins one active table session. Completion does not clear occupancy; Waiter or Owner clears after all linked orders are terminal and guests leave.
+- **Reason:** Food completion is not reliable evidence that the physical table is available.
+- **Consequence:** Session open/join/clear is concurrency safe, auditable and reflected through authoritative reads/events.
+
+## ADR-019: Use configurable VAT and zero service charge
+
+- **Status:** Accepted subject to onboarding tax approval
+- **Decision:** Prices are modeled net/pre-VAT; tenant VAT applicability/rate is versioned and snapshotted. Service charge is always zero and absent from product configuration and UI.
+- **Reason:** Pilot checkout and reconciliation require explicit subtotal, VAT and total without an invented tax rate.
+- **Consequence:** Money calculations remain server-authoritative and decimal/integer safe; activation waits for accountant confirmation.
+
+## ADR-020: Require cashier shifts and immutable day close
+
+- **Status:** Accepted
+- **Decision:** Cash confirmation requires an active shift. Shift close records expected/counted cash and variance. Owner business-day close creates an immutable local-day snapshot with blocker and exception workflows.
+- **Reason:** Operational reconciliation is a primary pilot value, not optional reporting polish.
+- **Consequence:** New Shifts and Business Day modules precede final integration.
+
+## ADR-021: Support English, Amharic and Arabic
+
+- **Status:** Accepted
+- **Decision:** One application supports `en`, `am` and `ar`; English is fallback, Arabic is RTL, and production translations require native review.
+- **Reason:** The pilot must serve the approved language audiences without separate deployments.
+- **Consequence:** UI copy is externalized, localized content has fallback rules, and RTL/long-text/accessibility testing is launch blocking.
+
+## ADR-022: Defer loyalty phone collection
+
+- **Status:** Accepted
+- **Decision:** Do not collect or persist loyalty-identification phone data during the pilot until privacy notice, retention, withdrawal and Ethiopia compliance decisions are approved.
+- **Reason:** Accountless ordering does not require this additional personal-data risk.
+- **Consequence:** Loyalty architecture may expose a future boundary but no active field, API or analytics event ships.
+
+## ADR-023: Limit Super Admin support mode to menu operations
+
+- **Status:** Accepted
+- **Decision:** Support requires explicit tenant selection and reason and permits only catalog/category/variant/modifier operations. It cannot access payments, proofs, customers, orders, inventory, reports or staff.
+- **Reason:** Restaurants may need onboarding help without granting uncontrolled operational impersonation.
+- **Consequence:** Support context is short-lived, allowlisted, visibly bannered and fully audited.
+
+## ADR-024: Use a single Lightsail host for temporary staging
+
+- **Status:** Accepted for staging only; ADR-008 remains the production target
+- **Decision:** Run the NestJS API, PostgreSQL 16, and Redis 7 as isolated Docker containers on one 2 GB Amazon Lightsail instance. Store payment proofs and encrypted database backups in a private S3 bucket. Keep the Next.js frontend on Vercel.
+- **Reason:** The current environment is for integration and pilot validation. A single fixed-price host minimizes cost and operational complexity while preserving the application's PostgreSQL, Redis, S3, HTTPS, and WebSocket behavior.
+- **Consequence:** This environment is not approved for business-critical production data. PostgreSQL and Redis are never exposed publicly, nightly off-host backups are mandatory, and the deployment must move to managed RDS/Redis and redundant compute before production availability or recovery guarantees are promised.
+
+## ADR-017: Multi-kitchen fulfillment architecture
+
+- **Status:** Accepted
+- **Decision:** Extend the existing kitchen-ticket system with a physical `Kitchen` entity above `KitchenStation`, add `Order.fulfillmentStatus` as a derived/persisted summary, add expo and waiter-fulfillment workflows, and use transactional outbox events for all real-time coordination.
+- **Reason:** The current system assumes one kitchen per branch. Real restaurants have multiple production areas (main kitchen, bar, bakery, coffee counter). The existing ticket/station foundation is solid but lacks physical-kitchen grouping, fulfillment-status tracking, expo coordination, waiter assignment, and durable service notifications.
+- **Consequence:** Every order confirmation must validate routes across all stations in all kitchens, create one ticket per station, and derive a fulfillment summary. KDS displays must be scoped to kitchen and/or station. The migration must backfill a default "Main Kitchen" for every branch with existing stations.
+
+## ADR-025: Phone-first staff authentication
+
+- **Status:** Accepted for the staging rollout; email-compat removal tracked below
+- **Decision:** Staff sign in with phone number + password. Ethiopian numbers are stored canonically in E.164 (`User.phoneE164`, unique) and accepted from local (`0911 234 567`), national (`911234567`), and full (`+251911234567`) formats via `@rms/contracts` `normalizeEthiopianPhone`. Email is retained only as optional compatibility/recovery data and is no longer collected by the UI. No SMS OTP in this phase — password only. Rate limiting keys on the normalized identity (`phone:<e164>`), so format games cannot dodge the limit. During the staged rollout the API temporarily also accepts the deprecated `email` login property so the old frontend keeps working while phones are backfilled; the window closes after staging verification (remove in a follow-up once: new API deployed, phones backfilled, phone login verified, new frontend deployed).
+- **Reason:** Every target user already has a phone number; email is unreliable for Ethiopian restaurant staff. E.164 storage makes identity comparison exact, enables future SMS/OTP work without schema change, and local-format equivalence (`0911…` ≡ `+251911…`) avoids duplicate accounts.
+- **Consequence:** Invitations, JWT claims, audit payloads, and staff screens carry phone instead of email; passwords remain the only factor, so phone-account takeover resistance equals password strength until OTP ships. The deprecated email path must not outlive the rollout window, and the login route throttle (10 req/min) is keyed by client IP (`login:<ip>`), so many staff behind one NAT share the login budget.
+
+## ADR-026: Add table assistance service requests
+
+- **Status:** Accepted
+- **Decision:** Dine-in customers raise short-lived assistance requests (`CALL_WAITER`, `REQUEST_BILL`, `OTHER_ASSISTANCE`) from their table-QR session. A request requires an OPEN `DiningSession` (opened only by a confirmed dine-in order); otherwise the API rejects with a clear conflict. At creation the request inherits the session's `assignedWaiterUserId` when present, otherwise it enters the unassigned pool. Waiters claim and resolve requests on a branch-scoped board; managers/owners see and may act on all. Unclaimed (`OPEN`) requests escalate to `ESCALATED` after the branch's `assistanceEscalationSeconds` (default 180), evaluated by the existing in-process escalation poll. At most one non-terminal request of a type per session is allowed, enforced by a partial unique index; idempotency keys make customer retries safe.
+- **Reason:** Call-waiter and request-bill are table-service basics that fit the waiter least-privilege role and the existing dining-session model. Requiring an open session preserves the PRD rule that scanning or drafting never occupies a table. Claim/resolve with optimistic `version` locking matches the order/ticket state-machine conventions and keeps requests append-friendly and auditable.
+- **Consequence:** Waiter workspace gains a Requests tab and the customer table menu gains assistance actions. Escalation timing depends on the API process poll (same limitation as ready-order escalation), so restarts delay escalation until the next tick. Customers cannot cancel their own requests in this phase; waiters resolve them. Order-acceptance policy enforcement (`WAITER_APPROVAL` etc.) is deliberately NOT activated by this ADR — dine-in kitchen release timing stays under the pilot rule (pending item 4 below).
 
 These do not block architecture or initial scaffolding, but must be confirmed before their feature is finalized:
 
 1. Exact manual payment instructions and supported external payment apps.
 2. Whether payment proof requires a transaction/reference number in addition to an image.
-3. Tax, VAT, service-charge, and receipt requirements for each restaurant.
-4. Whether dine-in orders may be sent to the kitchen before payment.
+3. Accountant confirmation of each pilot tenant's VAT applicability/rate and receipt wording. Service charge is fixed at zero.
+4. Dine-in orders are not sent to kitchen before the accepted payment/confirmation rule succeeds for the pilot.
 5. Rules for voids, refunds, discounts, and manager approval thresholds.
-6. Whether inventory deducts on confirmation, kitchen start, or completion. The initial plan uses confirmation with compensating restock on an approved void.
-7. Required languages. The initial UI is English-ready with internationalization infrastructure; Amharic copy requires approved translations.
+6. Inventory deducts on confirmation with exact compensating restoration on approved void.
+7. English, Amharic and Arabic are required; final production copy requires native-speaker approval.
 8. Required receipt printers or fiscal-device integrations, if any.

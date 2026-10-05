@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Inject, Logger } from '@nestjs/common';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface AuditContext {
   actorUserId: string;
@@ -16,7 +17,7 @@ export interface AuditContext {
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async log(ctx: AuditContext): Promise<void> {
     try {

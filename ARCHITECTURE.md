@@ -18,10 +18,12 @@ The architecture prioritizes:
 - Primary market: Ethiopia.
 - Default currency: Ethiopian birr (`ETB`).
 - Web only for the MVP.
-- Installable PWA for owners, managers, cashiers, and kitchen staff.
+- Installable PWA for owners, managers, cashiers, kitchen staff, and waiters.
 - Customers order through table QR codes or a remote pickup page.
 - A tenant is a restaurant business and may contain multiple branches.
-- Manual transfer is an MVP payment method. The customer sees the restaurant's payment instructions, pays in an external app, and uploads proof. A cashier verifies or rejects the proof before the order is confirmed for preparation.
+- Bank transfer and Telebirr are explicit manual payment methods. The customer sees the restaurant's payment instructions, pays externally, and uploads proof. The Owner verifies or rejects transfer proof; Cashier confirms cash only during an active shift.
+- Public restaurant links are transfer-paid pickup pre-order only; table QR context supports configured dine-in/takeaway and payment choices.
+- The UI supports English, Amharic, and Arabic, including Arabic RTL.
 - Online payment gateways are optional adapters and are not required for the MVP.
 - This is a greenfield system with no legacy code or database constraints.
 
@@ -98,11 +100,14 @@ One Next.js application serves multiple route groups while keeping authorization
 
 | Surface | Example route | Audience |
 | :--- | :--- | :--- |
-| Public ordering | `/order/[branchSlug]` | Remote pickup customers. |
-| Table ordering | `/table/[qrToken]` | Dine-in customers. |
+| Public ordering | `/r/[publicSlug]` | Transfer-paid pickup pre-order customers. |
+| Table ordering | `/o/[qrToken]` | Table-context dine-in/takeaway customers. |
 | Staff sign-in | `/staff/login` | All staff. |
 | POS | `/staff/pos` | Cashiers and managers. |
 | KDS | `/staff/kitchen` | Kitchen staff and managers. |
+| Waiter operations | `/staff/service` | Waiters: Ready orders and table occupancy. |
+| Cashier shifts | `/staff/shifts` | Cashiers and owners. |
+| Business-day close | `/staff/day-close` | Owners. |
 | Branch operations | `/staff/operations` | Owners and managers. |
 | Menu and inventory | `/staff/catalog`, `/staff/inventory` | Owners and managers. |
 | Analytics | `/staff/reports` | Owners and managers. |
@@ -126,10 +131,13 @@ The API is a modular monolith. Modules communicate through explicit services and
 | Kitchen | Station routing, tickets, status changes, bump, recall, and preparation timestamps. |
 | Inventory | Ingredients/items, batches, portions, recipes, deductions, adjustments, and alerts. |
 | Reporting | Revenue, item performance, peak hours, and inventory consumption read models. |
+| Shifts | Cashier opening/close, cash attribution, variance and immutable shift reports. |
+| Business Day | Local-day blockers, immutable close snapshots, exceptions and audited reopen. |
 | Media | S3 upload authorization, metadata, access control, and retention. |
 | Notifications | In-app events and future SMS/push adapter contracts. |
 | Audit | Immutable security and business action records. |
 | Platform Admin | Tenant provisioning, suspension, and platform-level feature control. |
+| Support Context | Short-lived menu-only super-admin assistance with explicit tenant and reason. |
 
 Keep the modules in one deployable API during the MVP. Extract a service only after measured scaling or team-ownership pressure justifies the operational cost.
 
@@ -168,7 +176,7 @@ Platform
 An order is created as `PENDING_PAYMENT` or `PENDING_CONFIRMATION`. It is not sent to the kitchen until the payment policy for that order is satisfied.
 
 - Cash at cashier: cashier confirms cash receipt, then the order becomes `CONFIRMED`.
-- Manual transfer: customer uploads proof; payment becomes `PENDING_VERIFICATION`; cashier approves it; then the order becomes `CONFIRMED`.
+- Bank transfer/Telebirr: customer uploads proof; payment becomes `PENDING_VERIFICATION`; Owner approves it; then the order becomes `CONFIRMED`.
 - Pay later for dine-in, if enabled: authorized staff confirms the order while payment remains outstanding.
 - Future gateway: a verified provider webhook records successful payment and confirms the order idempotently.
 
@@ -181,7 +189,7 @@ The payment verification and order confirmation update must run in one database 
 - Never use floating-point values for prices, taxes, discounts, or totals.
 - Persist immutable price, tax, and item-name snapshots on order lines.
 - Calculate totals on the server from current catalog rules; never trust totals submitted by a client.
-- Make tax and service-charge rules configurable per tenant or branch. Do not hardcode Ethiopian tax rules without reviewed business requirements.
+- Make VAT applicability/rate versioned and configurable per tenant/branch after business confirmation. Service charge is fixed at zero and is not a configurable/displayed pilot feature. Do not hardcode a VAT rate.
 
 ### 9.3 Payment proof safety
 
@@ -190,7 +198,7 @@ The payment verification and order confirmation update must run in one database 
 - Uploaded objects remain private and are served to authorized cashiers through short-lived signed URLs.
 - Store checksum, content type, size, uploader context, and scan status.
 - Do not treat an uploaded screenshot as payment confirmation.
-- Verification requires an authenticated cashier or manager action, optional note, timestamp, and audit entry.
+- Verification requires an authenticated Owner action, expected version/idempotency, timestamp and audit entry; rejection requires a reason.
 
 ## 10. Real-Time and Reliability Model
 
@@ -268,7 +276,7 @@ Included:
 - Menu, modifiers, branch pricing, and availability.
 - Table QR and pickup ordering.
 - POS order creation and editing before confirmation.
-- Manual transfer proof and cashier approval.
+- Bank/Telebirr proof and Owner approval; cash confirmation through active Cashier/Owner shift.
 - Cash recording.
 - KDS queue and status pipeline.
 - Batch/portion inventory deductions and low-stock alerts.

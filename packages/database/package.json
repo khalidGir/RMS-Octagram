@@ -12,13 +12,16 @@
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
     "migrate:status": "prisma migrate status",
-    "seed": "tsx prisma/seed.ts",
+    "seed": "node --env-file-if-exists=.env --import tsx prisma/seed.ts",
+    "seed:verify": "tsx prisma/verify-demo-seed.ts",
     "studio": "prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "^6.1.0"
+    "@prisma/client": "^6.19.3"
   },
   "devDependencies": {
+    "@rms/contracts": "workspace:*",
+    "argon2": "^0.45.1",
     "prisma": "^6.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"

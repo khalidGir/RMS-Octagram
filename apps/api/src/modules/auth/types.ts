@@ -3,11 +3,13 @@ import type { TenantRole, PlatformRole } from '@rms/contracts';
 
 export interface TenantContext {
   userId: string;
+  phone: string | null;
   email: string | null;
   platformRole: string | null;
   tenantId?: string;
   tenantRole?: TenantRole;
   branchIds?: string[];
+  isSupportSession?: boolean;
 }
 
 export const TENANT_CONTEXT_KEY = 'tenantContext';

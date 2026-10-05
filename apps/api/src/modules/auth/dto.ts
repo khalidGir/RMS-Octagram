@@ -1,19 +1,37 @@
-import { IsEmail, IsString, MinLength, MaxLength, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class LoginDto {
-  @ApiProperty({ example: 'user@example.com' })
-  @IsEmail()
-  email!: string;
+  @ApiProperty({
+    example: '0911 234 567',
+    required: false,
+    description: 'Ethiopian mobile number (0911234567, 911234567, or +251911234567)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  phone?: string;
 
   @ApiProperty({ example: 'StrongP@ss1' })
+  @IsNotEmpty()
   @IsString()
   password!: string;
+
+  /**
+   * TEMPORARY compatibility field during the phone-first migration.
+   * Remove together with AuthService's email lookup once staging has been
+   * verified (see DECISIONS.md / docs/STAGING_DEPLOYMENT.md).
+   */
+  @ApiProperty({ required: false, deprecated: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(254)
+  email?: string;
 }
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@example.com' })
-  @IsEmail()
+  @IsString()
   email!: string;
 
   @ApiProperty({ example: 'StrongP@ss1' })
