@@ -7,7 +7,7 @@ This environment supports integration, demonstrations, and controlled pilot vali
 ## Topology
 
 - Vercel hosts the Next.js frontend.
-- One Amazon Lightsail 2 GB Ubuntu instance runs Caddy, the NestJS API, PostgreSQL 16, and Redis 7.
+- One Amazon Lightsail 2 GB Ubuntu instance runs Caddy, the NestJS API, the menu-image worker (ADR-027), PostgreSQL 16, and Redis 7.
 - A private S3 bucket stores payment proofs and encrypted database backups.
 - Only TCP 80, TCP 443, UDP 443, and restricted SSH are public.
 - PostgreSQL and Redis are reachable only on an internal Docker network.
@@ -55,6 +55,7 @@ Keep the previous image tag until verification is complete. Roll back the API im
 - Private payment-proof upload and owner review
 - KDS WebSocket connection, reconnect, and authoritative refetch
 - Expo and waiter workflow
+- Menu photo upload: intent → direct S3 upload → finalize → worker → `READY` in the UI; DLQ stays empty
 - Restart persistence for PostgreSQL and Redis
 - Backup upload and clean restore
 
@@ -122,6 +123,60 @@ These credentials are for staging only and **must be rotated before any external
 - Live verification on 2026-10-01 (frontend `https://rms-staging-chi.vercel.app`, API image `rms-api:e03c49b`): all six staging phone accounts log in and land on their role pages with reload persistence; cashier POS renders prices (6 on load and after reload, no page errors); customer and pickup menus render prices and add-to-cart subtotals; Kitchen Display, Expo, and Waiter pages render; WebSocket connects (`engine.io` handshake → `kds` namespace → `branch:` room join); login throttle returned 401 ×10 then 429 on attempt 11.
 
 
+
+## Menu item photo pipeline (ADR-027)
+
+Menu photos flow through finalize (outbox) → SQS → the `worker` service. Complete these steps before enabling photo upload.
+
+### One-time AWS setup
+
+1. Create the queue and its dead-letter queue. No static AWS credentials live in the repository; they are stored only in the server's `.env` (see below) or replaced by a least-privilege host credential:
+
+   ```sh
+   aws sqs create-queue --queue-name rms-staging-dlq \
+     --attributes '{"MessageRetentionPeriod":"1209600"}'
+   DLQ_ARN=$(aws sqs get-queue-arn --queue-name rms-staging-dlq)
+   aws sqs create-queue --queue-name rms-staging \
+     --attributes "{\"RedrivePolicy\":{\"deadLetterTargetArn\":\"$DLQ_ARN\",\"maxReceiveCount\":\"5\"},\"VisibilityTimeout\":\"300\"}"
+   ```
+
+2. Create the private media bucket and allow browser direct uploads from the frontend origins only:
+
+   ```sh
+   aws s3api create-bucket --bucket "$S3_MEDIA_BUCKET" --region "$S3_REGION" \
+     --create-bucket-configuration LocationConstraint="$S3_REGION"
+   aws s3api put-bucket-cors --bucket "$S3_MEDIA_BUCKET" --cors-configuration '{
+    "CORSRules": [{
+      "AllowedMethods": ["POST", "PUT"],
+      "AllowedOrigins": ["https://rms-staging-chi.vercel.app", "https://100.57.8.66.nip.io"],
+      "AllowedHeaders": ["*"],
+      "ExposeHeaders": ["ETag", "x-amz-request-id"],
+      "MaxAgeSeconds": 3600
+    }]
+   }'
+   ```
+
+3. Point `MEDIA_CDN_URL` at a CloudFront distribution (or equivalent) whose origin is the media bucket. Public keys have the shape `/menu-items/<itemId>/<randomToken>/<contentHash>` — the CDN serves them, the bucket stays private, and neither tenant nor media object IDs appear in URLs.
+
+### Server configuration
+
+- Populate `deploy/lightsail/.env` on the host only (mode `0600`, mechanism from step 8 of *First deployment*). It is never committed and never rendered into images; `deploy/lightsail/.env.example` carries placeholder names only.
+- Media/SQS variables: `S3_MEDIA_BUCKET`, `MEDIA_CDN_URL` (API and worker), `SQS_QUEUE_URL`, `SQS_REGION` (API outbox dispatcher and worker), plus `S3_ENDPOINT`/`SQS_ENDPOINT` for non-AWS local services (omit on real AWS). `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` in that `.env` must stay least-privilege (media bucket prefixes plus SQS send/receive on the two queues) — or be replaced by a secured host-level credential mechanism; neither option puts keys in version control.
+
+### Bring-up and update
+
+1. Create the queue, DLQ, bucket, and CORS rules (above).
+2. `docker compose --env-file .env build api worker`
+3. Run backward-compatible migrations (`--profile tools run --rm migrate`) when the release contains schema changes.
+4. `docker compose --env-file .env up -d postgres redis api worker caddy`
+5. Require `/api/v1/health/live` and `/api/v1/health/ready` to pass, then confirm the worker log reports its SQS consumer started (a missing `SQS_QUEUE_URL` logs a warning and leaves jobs safely pending).
+
+### Validation
+
+- Owner/Manager uploads a JPEG ≤ 10 MB on `/menu`; the item card shows the photo once status reaches `READY`.
+- A GIF or oversized file is rejected client-side; forcing the request returns `400`.
+- `aws sqs get-queue-attributes --queue-name rms-staging --attribute-names ApproximateNumberOfMessages` stays near zero after uploads, and the DLQ stays empty.
+- Restart the worker mid-upload: the row's 240 s lease expires, the janitor reclaims it, and the photo still completes.
 
 ## Production migration triggers
 
