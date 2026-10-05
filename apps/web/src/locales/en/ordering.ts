@@ -94,6 +94,18 @@ export const ordering = {
   branchPickup: '{branch} · Pickup',
   heroLine1: 'Made with warmth.',
   heroLine2: 'Served with pride.',
+  categoryCount: {
+    one: '{count} category',
+    other: '{count} categories',
+  },
+  menuItemCount: {
+    one: '{count} menu item',
+    other: '{count} menu items',
+  },
+  categoryItemCount: {
+    one: '{count} item',
+    other: '{count} items',
+  },
   pickupTagline: 'Order ahead for pickup · Payment by bank transfer or Telebirr',
   exploreMenu: 'Explore the menu',
   noItemsCategory: 'No items in this category yet.',
