@@ -371,6 +371,17 @@ Receipt reads never recalculate current menu prices. They return snapshotted ite
 
 A request requires the table's open dining session, which is opened only by a confirmed dine-in order; scanning or drafting a cart never occupies a table. The session's assigned waiter is inherited at creation. One open request per type per session is enforced by a partial unique index; concurrent duplicates return the existing request with `alreadyOpen: true`, and idempotency-key replays return the same row. Cashier and kitchen roles are denied. Escalation moves requests open longer than the branch `assistanceEscalationSeconds` threshold (default 180 seconds) to `ESCALATED` on the 30-second escalation poll.
 
+### Menu item photo uploads
+
+| Method | Path | Role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/items/:itemId/image/upload-intent` | Owner/Manager | Validate `contentType` (JPEG/PNG/WebP), `sizeBytes` (≤ 10 MB), `sha256`, `crop` (normalized fractions plus rotation) and `expectedVersion`; return a `mediaObjectId`, presigned S3 upload URL, and form `fields` for direct browser upload. |
+| `POST` | `/items/:itemId/image/finalize` | Owner/Manager | After the direct upload, verify the stored object (size, checksum, content type), snapshot immutable thumbnail/standard/high-resolution URLs on the item, and queue background processing. Idempotent for an already-confirmed object. |
+| `GET` | `/items/:itemId/image/status?mediaObjectId=` | Owner/Manager | Poll `PENDING_PROCESSING`, `READY`, or `REJECTED` with a safe `rejectionReason`. |
+| `DELETE` | `/items/:itemId/image` | Owner/Manager | Remove the photo, version-checked via `expectedVersion`; the replaced object is scheduled for cleanup. |
+
+The browser uploads bytes directly to S3 — the API never proxies file content — and a successful presigned upload alone never changes catalog state; only `finalize` does. Statuses: `201` for created intent and finalized upload, `200` for status and delete, `400` for invalid type/size/checksum or a missing/unreadable object, `403` for insufficient role or mismatched tenant context, `404` for unknown items or foreign-tenant resources, and `409` for a stale `expectedVersion` or expired intent. Finalize moves the object to `PENDING_PROCESSING` and writes the outbox event consumed by the SQS worker pipeline (ADR-027) in one transaction; a duplicate finalize returns success without queueing a second job.
+
 ### New stable errors
 
 - `PUBLIC_CONTEXT_ORDER_TYPE_DENIED`

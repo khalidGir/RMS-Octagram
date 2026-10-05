@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { validateEnv } from '@rms/config';
 import { AppThrottlerGuard } from './modules/rate-limit/app-throttler.guard';
+import { BigIntSerializationInterceptor } from './common/interceptors/bigint-serialization.interceptor';
 import { WsJwtAdapter } from './modules/kitchen/ws-jwt.adapter';
 import { isAllowedOrigin } from './modules/auth/allowed-origin';
 
@@ -79,6 +80,10 @@ async function bootstrap() {
       transformOptions: { enableImplicitConversion: true },
     }),
   );
+
+  // Serialize BigInt leaves (Prisma BigInt columns) as decimal strings;
+  // otherwise every endpoint returning raw rows fails JSON encoding with a 500.
+  app.useGlobalInterceptors(new BigIntSerializationInterceptor());
 
   // Global throttler guard
   try {

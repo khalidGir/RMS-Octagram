@@ -18,7 +18,7 @@ describe('PublicMenuService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new PublicMenuService(mockPrisma as unknown as PrismaService);
+    service = new PublicMenuService(mockPrisma as unknown as PrismaService, { view: () => null } as never);
   });
 
   // ─── getBranchMenu ──────────────────────────

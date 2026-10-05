@@ -9,11 +9,13 @@ import { useAuth } from './auth-provider';
 import { useLocale } from '@/components/locale-provider';
 import { useOnlineStatus } from '@/hooks';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MenuItemPhoto } from './menu-item-photo';
+import type { MenuItemImage } from '@/lib/menu-image';
 
 interface ModifierOption { id: string; name: string; priceDeltaMinor: string; }
 interface ModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number | null; options: ModifierOption[]; }
 interface Variant { id: string; name: string; basePriceMinor: string; isDefault: boolean; sku?: string | null; }
-interface Item { id: string; name: string; description: string | null; variants: Variant[]; modifierGroups: ModifierGroup[]; }
+interface Item { id: string; name: string; description: string | null; variants: Variant[]; modifierGroups: ModifierGroup[]; image?: MenuItemImage | null; }
 interface Menu { categories: Array<{ id: string; name: string; items: Item[] }>; }
 interface Table { id: string; label: string; isActive: boolean; }
 interface Shift { id: string; status: string; }
@@ -518,9 +520,10 @@ export function PosWorkspace() {
                   key={item.id}
                   disabled={!variant}
                   onClick={() => (needsSelection ? openModifierSelector(item) : addQuick(item))}
-                  className="min-h-40 rounded-2xl border border-line bg-white p-4 text-start shadow-card"
+                  className="min-h-40 overflow-hidden rounded-2xl border border-line bg-white text-start shadow-card"
                 >
-                  <b>{item.name}</b>
+                  <MenuItemPhoto image={item.image} name={item.name} className="h-24" />
+                  <div className="p-4"><b>{item.name}</b>
                   <p className="mt-2 line-clamp-2 text-xs text-ink-muted">{item.description}</p>
                   {item.modifierGroups.length > 0 && (
                     <p className="mt-1 text-[10px] font-bold uppercase text-brand">
@@ -530,6 +533,7 @@ export function PosWorkspace() {
                   <p className="mt-3 font-black text-brand">
                     {variant ? formatCurrency(variant.basePriceMinor) : tr('pos.unavailable')}
                   </p>
+                  </div>
                 </button>
               );
             })}

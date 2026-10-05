@@ -10,6 +10,8 @@ import { normalizePublicMenu } from '@/lib/public-menu';
 import { useLocale } from './locale-provider';
 import { LanguagePicker } from './language-picker';
 import { Button, Dialog, DialogContent, DialogTitle } from './ui';
+import { MenuItemPhoto } from './menu-item-photo';
+import type { MenuItemImage } from '@/lib/menu-image';
 
 interface PublicModifierOption { id: string; name: string; priceDeltaMinor: string; isActive?: boolean }
 interface PublicModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number | null; options: PublicModifierOption[] }
@@ -20,6 +22,7 @@ interface PublicMenuItem {
   description: string | null;
   variants: Array<{ id: string; name: string; basePriceMinor: string; isDefault: boolean }>;
   modifierGroups: PublicModifierGroup[];
+  image?: MenuItemImage | null;
 }
 
 interface PublicMenu {
@@ -150,7 +153,7 @@ export function PublicOrderMenu({ entry }: { entry: Entry }) {
             {category.items.map((item) => {
               const variant = item.variants.find((candidate) => candidate.isDefault) ?? item.variants[0];
               const needsOptions = item.modifierGroups.length > 0 || item.variants.length > 1;
-              return <article key={item.id} className="flex min-h-44 flex-col rounded-2xl border border-line bg-white p-5 shadow-card"><h3 className="text-lg font-black">{item.name}</h3><p className="mt-2 flex-1 text-sm leading-6 text-ink-muted">{item.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="font-black text-brand">{variant ? formatCurrency(variant.basePriceMinor) : tr('ordering.itemUnavailable')}</span><button disabled={!variant} onClick={() => add(item)} className="min-h-11 rounded-xl bg-dark px-4 text-sm font-black text-white disabled:bg-stone-300">{needsOptions ? tr('ordering.chooseOptions') : tr('ordering.add')}</button></div></article>;
+              return <article key={item.id} className="overflow-hidden rounded-2xl border border-line bg-white shadow-card"><MenuItemPhoto image={item.image} name={item.name} className="max-h-64" eager /><div className="flex min-h-44 flex-col p-5"><h3 className="text-lg font-black">{item.name}</h3><p className="mt-2 flex-1 text-sm leading-6 text-ink-muted">{item.description}</p><div className="mt-4 flex items-center justify-between gap-3"><span className="font-black text-brand">{variant ? formatCurrency(variant.basePriceMinor) : tr('ordering.itemUnavailable')}</span><button disabled={!variant} onClick={() => add(item)} className="min-h-11 rounded-xl bg-dark px-4 text-sm font-black text-white disabled:bg-stone-300">{needsOptions ? tr('ordering.chooseOptions') : tr('ordering.add')}</button></div></div></article>;
             })}
           </section> : <PublicState title={tr('ordering.noItems')} detail={tr('ordering.checkLater')} />}
         </div>
@@ -268,7 +271,7 @@ function CustomerItemOptions({ item, onClose, onConfirm }: { item: PublicMenuIte
   const modifierTotal = item.modifierGroups.flatMap((group) => group.options).filter((option) => selectedIds.includes(option.id)).reduce((sum, option) => sum + BigInt(option.priceDeltaMinor), 0n);
   const total = variant ? BigInt(variant.basePriceMinor) + modifierTotal : 0n;
 
-  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent className="max-h-[90vh] overflow-y-auto"><DialogTitle>{item.name}</DialogTitle>
+  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}><DialogContent className="max-h-[90vh] overflow-y-auto"><DialogTitle>{item.name}</DialogTitle><MenuItemPhoto image={item.image} name={item.name} className="mt-3 max-h-72 rounded-2xl" eager />
     {item.description && <p className="mt-1 text-sm text-ink-muted">{item.description}</p>}
     {item.variants.length > 1 && <fieldset className="mt-5"><legend className="font-black">{tr('pos.sizeVariant')}</legend><div className="mt-2 grid gap-2 sm:grid-cols-2">{item.variants.map((candidate) => <label key={candidate.id} className="flex min-h-12 items-center gap-3 rounded-xl border border-line p-3"><input type="radio" name="customer-variant" checked={variantId === candidate.id} onChange={() => setVariantId(candidate.id)} /><span className="flex-1 font-bold">{candidate.name}</span><span>{formatCurrency(candidate.basePriceMinor)}</span></label>)}</div></fieldset>}
     {item.modifierGroups.map((group) => <fieldset className="mt-5" key={group.id}><legend className="font-black">{group.name}{(group.isRequired || group.minSelections > 0) && <span className="ms-1 text-red-600">*</span>}</legend><p className="mt-1 text-xs text-ink-muted">{group.maxSelections === null ? tr('ordering.selectionMinimum', { min: group.minSelections }) : tr('ordering.selectionRange', { min: group.minSelections, max: group.maxSelections })}</p><div className="mt-2 space-y-2">{group.options.filter((option) => option.isActive !== false).map((option) => <label key={option.id} className="flex min-h-12 items-center gap-3 rounded-xl border border-line p-3"><input type={group.maxSelections === 1 ? 'radio' : 'checkbox'} name={`modifier-${group.id}`} checked={selected[group.id]?.includes(option.id) ?? false} onChange={() => toggle(group, option.id)} /><span className="flex-1 font-bold">{option.name}</span>{option.priceDeltaMinor !== '0' && <span>{BigInt(option.priceDeltaMinor) > 0 ? '+' : ''}{formatCurrency(option.priceDeltaMinor)}</span>}</label>)}</div></fieldset>)}

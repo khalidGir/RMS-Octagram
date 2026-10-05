@@ -8,6 +8,9 @@ import { useLocale } from '@/components/locale-provider';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MenuItemPhoto } from './menu-item-photo';
+import { MenuImageEditor } from './menu-image-editor';
+import { uploadMenuImage, MenuImageUploadError, type MenuImageDraft, type MenuItemImage } from '@/lib/menu-image';
 
 /* -------------------------------------------------------------------------- */
 /*                                   Types                                    */
@@ -53,6 +56,8 @@ interface MenuItem {
   variants: Variant[];
   modifierGroups?: ModifierGroup[];
   branchAvailability?: BranchAvailability[];
+  version: number;
+  image?: MenuItemImage | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -358,7 +363,7 @@ function CreateMenuItemDialog({
   tenantId: string;
   branchId: string;
   onClose: () => void;
-  onCreated: (name: string) => Promise<void>;
+  onCreated: (name: string, photoFailed: boolean) => Promise<void>;
 }) {
   const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState('');
@@ -369,6 +374,7 @@ function CreateMenuItemDialog({
   const [available, setAvailable] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<MenuImageDraft | null>(null);
   const { tr } = useLocale();
 
   useEffect(() => {
@@ -385,7 +391,7 @@ function CreateMenuItemDialog({
     setBusy(true);
     setError(null);
     try {
-      const created = await apiRequest<ApiEnvelope<{ id: string }>>('/items', {
+      const created = await apiRequest<ApiEnvelope<{ id: string; version: number }>>('/items', {
         method: 'POST',
         accessToken,
         csrfToken,
@@ -412,7 +418,16 @@ function CreateMenuItemDialog({
           tenantId,
           body: { isAvailable: true },
         });
-      await onCreated(trimmedName);
+      if (photo) {
+        try {
+          await uploadMenuImage({ itemId: created.data.id, version: created.data.version, draft: photo, accessToken, csrfToken, tenantId });
+          await onCreated(trimmedName, false);
+        } catch {
+          await onCreated(trimmedName, true);
+        }
+      } else {
+        await onCreated(trimmedName, false);
+      }
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : tr('menu.createFailed'));
     } finally {
@@ -440,6 +455,7 @@ function CreateMenuItemDialog({
               className="mt-2 min-h-12 w-full rounded-xl border border-line bg-white px-4 font-normal outline-none focus:ring-2 focus:ring-brand/20"
             />
           </label>
+          <MenuImageEditor value={photo} onChange={setPhoto} disabled={busy} />
           <label className="text-sm font-black">
             {tr('menu.descriptionLabel')} <span className="font-normal text-ink-muted">{tr('menu.optionalSuffix')}</span>
             <textarea
@@ -536,9 +552,48 @@ function ItemDetailDialog({
   const [categoryId, setCategoryId] = useState(item.category?.id ?? '');
   const [sku, setSku] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<MenuImageDraft | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoMessage, setPhotoMessage] = useState<string | null>(null);
   const { tr } = useLocale();
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['catalog-items', tenantId] });
+
+  async function savePhoto() {
+    if (!photo) return;
+    setPhotoBusy(true); setError(null); setPhotoMessage(tr('menu.photoProcessing'));
+    try {
+      const mediaObjectId = await uploadMenuImage({ itemId: item.id, version: item.version, draft: photo, accessToken, csrfToken, tenantId });
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const status = await apiRequest<ApiEnvelope<{ processingStatus: string; rejectionReason?: string | null }>>(`/items/${item.id}/image/status?mediaObjectId=${encodeURIComponent(mediaObjectId)}`, { accessToken, tenantId });
+        if (status.data.processingStatus === 'READY') { setPhotoMessage(tr('menu.photoReady')); setPhoto(null); await invalidate(); return; }
+        if (status.data.processingStatus === 'REJECTED') throw new Error(tr('menu.photoRejected'));
+      }
+      setPhotoMessage(tr('menu.photoStillProcessing'));
+      await invalidate();
+    } catch (cause) {
+      setError(
+        cause instanceof MenuImageUploadError
+          ? tr('menu.photoUploadFailed')
+          : cause instanceof ApiError
+            ? cause.message
+            : cause instanceof Error && cause.message
+              ? cause.message
+              : tr('menu.photoUploadFailed'),
+      );
+    }
+    finally { setPhotoBusy(false); }
+  }
+
+  async function removePhoto() {
+    setPhotoBusy(true); setError(null);
+    try {
+      await apiRequest(`/items/${item.id}/image`, { method: 'DELETE', accessToken, csrfToken, tenantId, body: { expectedVersion: item.version } });
+      setPhoto(null); setPhotoMessage(tr('menu.photoRemoved')); await invalidate();
+    } catch (cause) { setError(cause instanceof ApiError ? cause.message : tr('menu.photoRemoveFailed')); }
+    finally { setPhotoBusy(false); }
+  }
 
   const updateItemMutation = useMutation({
     mutationFn: () =>
@@ -593,6 +648,10 @@ function ItemDetailDialog({
 
           <TabsContent value="details">
             <div className="mt-4 grid gap-4">
+              {item.image && !photo && <div><MenuItemPhoto image={item.image} name={item.name} className="max-h-64 rounded-2xl" /><button type="button" onClick={() => void removePhoto()} disabled={photoBusy} className="mt-2 min-h-11 rounded-xl border border-red-200 px-4 text-sm font-bold text-red-700">{tr('menu.removePhoto')}</button></div>}
+              <MenuImageEditor value={photo} onChange={setPhoto} disabled={photoBusy} />
+              {photo && <button type="button" onClick={() => void savePhoto()} disabled={photoBusy} className="min-h-11 rounded-xl bg-brand px-5 font-black text-white disabled:opacity-50">{photoBusy ? tr('menu.photoProcessing') : item.image ? tr('menu.replacePhoto') : tr('menu.uploadPhoto')}</button>}
+              {photoMessage && <p aria-live="polite" className="text-sm font-bold text-ink-muted">{photoMessage}</p>}
               <label className="text-sm font-black">
                 {tr('menu.itemName')}
                 <input
@@ -1121,12 +1180,6 @@ export function MenuManagement() {
             <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {items.data?.map((item) => {
                 const variant = item.variants.find((entry) => entry.isDefault) ?? item.variants[0];
-                const initials = item.name
-                  .split(/\s+/)
-                  .slice(0, 2)
-                  .map((part) => part[0])
-                  .join('')
-                  .toUpperCase();
                 return (
                   <article
                     className="cursor-pointer rounded-2xl border border-black/[.07] bg-white p-5 shadow-sm transition hover:shadow-md"
@@ -1137,9 +1190,7 @@ export function MenuManagement() {
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedItem(item); } }}
                     aria-label={tr('menu.editItemAria', { name: item.name })}
                   >
-                    <div className="mb-5 grid h-24 place-items-center rounded-xl bg-gradient-to-br from-brand to-dark text-2xl font-black text-white">
-                      {initials}
-                    </div>
+                    <MenuItemPhoto image={item.image} name={item.name} className="mb-5 h-28 rounded-xl" />
                     <div className="flex items-start justify-between">
                       <h2 className="text-lg font-black">{item.name}</h2>
                       <AvailabilityToggle
@@ -1176,10 +1227,10 @@ export function MenuManagement() {
           tenantId={tenantId}
           branchId={branchId}
           onClose={() => setShowCreate(false)}
-          onCreated={async (name) => {
+          onCreated={async (name, photoFailed) => {
             setShowCreate(false);
             await items.refetch();
-            setNotice(tr('menu.addedNotice', { name }));
+            setNotice(photoFailed ? tr('menu.photoUploadFailedSaved') : tr('menu.addedNotice', { name }));
           }}
         />
       )}

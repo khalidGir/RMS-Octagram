@@ -29,5 +29,17 @@ services:
       timeout: 5s
       retries: 5
 
+  # Local SQS emulator for the menu image pipeline.
+  # Start with: docker compose --profile sqs up -d
+  elasticmq:
+    image: softwaremill/elasticmq-native:latest
+    container_name: rms-elasticmq
+    restart: unless-stopped
+    ports:
+      - "9324:9324"
+    volumes:
+      - ./deploy/local/elasticmq.conf:/opt/elasticmq.conf:ro
+    profiles: [sqs]
+
 volumes:
   postgres_data:
