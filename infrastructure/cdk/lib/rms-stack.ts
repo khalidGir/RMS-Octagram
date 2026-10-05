@@ -8,6 +8,8 @@ import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Construct } from 'constructs';
 
 interface RmsStackProps extends cdk.StackProps {
@@ -85,6 +87,30 @@ export class RmsStack extends cdk.Stack {
       removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
 
+    // Browser origins allowed to POST uploads to the media bucket. Override at
+    // synth time with -c mediaUploadOrigins='["https://app.example.com"]'.
+    const mediaUploadOrigins = (this.node.tryGetContext('mediaUploadOrigins') as string[] | undefined) ?? [
+      'http://localhost:3000',
+      'https://rms-staging-chi.vercel.app',
+    ];
+    const mediaBucket = new s3.Bucket(this, 'MediaBucket', {
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      cors: [{ allowedMethods: [s3.HttpMethods.POST], allowedOrigins: mediaUploadOrigins, allowedHeaders: ['*'], maxAge: 300 }],
+      lifecycleRules: [{ prefix: 'tenant/', abortIncompleteMultipartUploadAfter: cdk.Duration.days(1) }],
+      removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+    });
+    const mediaDistribution = new cloudfront.Distribution(this, 'MediaDistribution', {
+      defaultBehavior: {
+        origin: new origins.S3Origin(mediaBucket, { originPath: '/public' }),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+        compress: true,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+      },
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
+    });
+
     // ── SQS Queues ───────────────────────────
     const deadLetterQueue = new sqs.Queue(this, 'DeadLetterQueue', {
       retentionPeriod: cdk.Duration.days(14),
@@ -128,6 +154,9 @@ export class RmsStack extends cdk.Stack {
 
     // Grant task roles access to resources
     proofBucket.grantReadWrite(apiTaskDef.taskRole);
+    mediaBucket.grantReadWrite(apiTaskDef.taskRole);
+    mediaBucket.grantReadWrite(workerTaskDef.taskRole);
+    mainQueue.grantSendMessages(apiTaskDef.taskRole);
     mainQueue.grantConsumeMessages(workerTaskDef.taskRole);
 
     // ── API Container ────────────────────────
@@ -146,6 +175,10 @@ export class RmsStack extends cdk.Stack {
         API_HOST: '0.0.0.0',
         DEFAULT_TIMEZONE: 'Africa/Addis_Ababa',
         DEFAULT_CURRENCY: 'ETB',
+        S3_PROOF_BUCKET: proofBucket.bucketName,
+        S3_MEDIA_BUCKET: mediaBucket.bucketName,
+        MEDIA_CDN_URL: `https://${mediaDistribution.distributionDomainName}`,
+        SQS_QUEUE_URL: mainQueue.queueUrl,
       },
       secrets: {
         DATABASE_URL: ecs.Secret.fromSecretsManager(database.secret!, 'password'),
@@ -185,6 +218,8 @@ export class RmsStack extends cdk.Stack {
         NODE_ENV: 'production',
         DEFAULT_TIMEZONE: 'Africa/Addis_Ababa',
         DEFAULT_CURRENCY: 'ETB',
+        S3_MEDIA_BUCKET: mediaBucket.bucketName,
+        SQS_QUEUE_URL: mainQueue.queueUrl,
       },
       secrets: {
         DATABASE_URL: ecs.Secret.fromSecretsManager(database.secret!, 'password'),
@@ -279,6 +314,8 @@ export class RmsStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'ProofBucketName', {
       value: proofBucket.bucketName,
     });
+    new cdk.CfnOutput(this, 'MediaBucketName', { value: mediaBucket.bucketName });
+    new cdk.CfnOutput(this, 'MediaCdnUrl', { value: `https://${mediaDistribution.distributionDomainName}` });
 
     new cdk.CfnOutput(this, 'ClusterName', {
       value: cluster.clusterName,

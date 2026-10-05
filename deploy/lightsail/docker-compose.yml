@@ -63,8 +63,12 @@ services:
       DEFAULT_CURRENCY: ETB
       S3_REGION: ${S3_REGION}
       S3_PROOF_BUCKET: ${S3_PROOF_BUCKET}
+      S3_MEDIA_BUCKET: ${S3_MEDIA_BUCKET}
+      MEDIA_CDN_URL: ${MEDIA_CDN_URL}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      SQS_QUEUE_URL: ${SQS_QUEUE_URL}
+      SQS_REGION: ${SQS_REGION:-us-east-1}
       LOG_LEVEL: info
     depends_on:
       postgres:
@@ -91,6 +95,32 @@ services:
       timeout: 5s
       retries: 5
       start_period: 45s
+    networks: [private, edge]
+
+  # Background jobs: payment proof OCR queue and the menu image pipeline
+  # (SQS consumer + cleanup sweep). Shares the server-side .env credential
+  # mechanism with the API service — no credentials are committed to the repo.
+  worker:
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    image: rms-worker:${IMAGE_TAG:-staging}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+      DEFAULT_TIMEZONE: Africa/Addis_Ababa
+      DEFAULT_CURRENCY: ETB
+      S3_REGION: ${S3_REGION}
+      S3_MEDIA_BUCKET: ${S3_MEDIA_BUCKET}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      SQS_QUEUE_URL: ${SQS_QUEUE_URL}
+      SQS_REGION: ${SQS_REGION:-us-east-1}
+      LOG_LEVEL: info
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks: [private, edge]
 
   caddy:
