@@ -2,6 +2,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { CatalogService } from './catalog.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { AuditService } from '../audit/audit.service';
+import type { MenuImageService } from './menu-image.service';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 
 const mockPrisma = {
@@ -16,6 +17,7 @@ const mockPrisma = {
 };
 
 const mockAudit = { log: vi.fn() };
+const mockMenuImages = { view: vi.fn(() => null) };
 
 const tenantId = 't1';
 const branchId = 'b1';
@@ -26,7 +28,7 @@ describe('CatalogService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new CatalogService(mockPrisma as unknown as PrismaService, mockAudit as unknown as AuditService);
+    service = new CatalogService(mockPrisma as unknown as PrismaService, mockAudit as unknown as AuditService, mockMenuImages as unknown as MenuImageService);
   });
 
   // ─── Categories ──────────────────────────────

@@ -18,6 +18,15 @@ const envSchema = z.object({
   S3_ENDPOINT: z.string().optional(),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  // Menu item media: dedicated bucket + CDN base are optional for backwards
+  // compatibility; production/staging deployments must set both.
+  S3_MEDIA_BUCKET: z.string().min(1).optional(),
+  MEDIA_CDN_URL: z.string().url().optional(),
+  // SQS job queue for the worker (outbox → SQS → worker). Optional in dev;
+  // when unset the outbox handler fails visibly instead of dropping jobs.
+  SQS_QUEUE_URL: z.string().url().optional(),
+  SQS_ENDPOINT: z.string().optional(),
+  SQS_REGION: z.string().default('us-east-1'),
   // Redis configuration for rate limiting and distributed state
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.coerce.number().default(6379),
@@ -33,6 +42,35 @@ const envSchema = z.object({
 });
 
 export type Env = z.infer<typeof envSchema>;
+
+// The worker only needs storage/queue/database settings; JWT and HTTP settings
+// belong to the API process. Validated at worker startup (AGENTS: validate
+// environment variables at process startup).
+const workerEnvSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_PROOF_BUCKET: z.string().min(1).optional(),
+  S3_MEDIA_BUCKET: z.string().min(1).optional(),
+  S3_ENDPOINT: z.string().optional(),
+  AWS_ACCESS_KEY_ID: z.string().optional(),
+  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  MEDIA_CDN_URL: z.string().url().optional(),
+  SQS_QUEUE_URL: z.string().url().optional(),
+  SQS_ENDPOINT: z.string().optional(),
+  SQS_REGION: z.string().default('us-east-1'),
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+});
+
+export type WorkerEnv = z.infer<typeof workerEnvSchema>;
+
+export function validateWorkerEnv(raw: Record<string, unknown>): WorkerEnv {
+  const result = workerEnvSchema.safeParse(raw);
+  if (!result.success) {
+    console.error('Invalid worker environment variables:', result.error.flatten().fieldErrors);
+    process.exit(1);
+  }
+  return result.data;
+}
 
 export function validateEnv(raw: Record<string, unknown>): Env {
   const result = envSchema.safeParse(raw);

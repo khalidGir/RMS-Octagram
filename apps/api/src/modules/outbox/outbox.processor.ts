@@ -3,6 +3,7 @@ import type { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { KitchenTicketsService } from '../kitchen/kitchen-tickets.service';
 import { FeatureResolver } from '../features/feature-resolver.service';
+import { SqsQueueService } from './sqs-queue.service';
 import { FeatureKey } from '@rms/contracts';
 import { ExecutionContext } from '../observability/execution-context';
 import { randomBytes } from 'crypto';
@@ -62,6 +63,7 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
 
   private handlers = new Map<string, EventHandler>([
     ['order.confirmed', this.handleOrderConfirmed.bind(this)],
+    ['menu.image.process_requested', this.handleMenuImageRequested.bind(this)],
     // Future handlers registered here as features are implemented
   ]);
 
@@ -72,6 +74,8 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
     private readonly kitchenTickets: KitchenTicketsService,
     @Inject(FeatureResolver)
     private readonly featureResolver: FeatureResolver,
+    @Inject(SqsQueueService)
+    private readonly sqs: SqsQueueService,
   ) {}
 
   onModuleInit() {
@@ -317,6 +321,19 @@ export class OutboxProcessor implements OnModuleInit, OnModuleDestroy {
       orderId: payload.orderId,
       actorUserId: undefined,
     });
+  }
+
+  /**
+   * Publishes a menu image processing job to SQS. The message body is only a
+   * pointer (mediaObjectId); the worker derives every tenant/item association
+   * from the database record it loads by that id.
+   */
+  private async handleMenuImageRequested(event: OutboxEventRecord) {
+    const payload = event.payload as { mediaObjectId?: string };
+    if (typeof payload?.mediaObjectId !== 'string' || !payload.mediaObjectId) {
+      throw new Error('menu.image.process_requested payload is missing mediaObjectId');
+    }
+    await this.sqs.send({ mediaObjectId: payload.mediaObjectId });
   }
 
   /**

@@ -29,21 +29,28 @@ function createMockFeatureResolver() {
   };
 }
 
+function createMockSqs() {
+  return { send: vi.fn().mockResolvedValue(undefined) };
+}
+
 describe('OutboxProcessor', () => {
   let processor: OutboxProcessor;
   let prisma: ReturnType<typeof createMockPrisma>;
   let kitchenTickets: ReturnType<typeof createMockKitchenTickets>;
   let featureResolver: ReturnType<typeof createMockFeatureResolver>;
+  let sqs: ReturnType<typeof createMockSqs>;
 
   beforeEach(() => {
     vi.clearAllMocks();
     prisma = createMockPrisma();
     kitchenTickets = createMockKitchenTickets();
     featureResolver = createMockFeatureResolver();
+    sqs = createMockSqs();
     processor = new OutboxProcessor(
       prisma as unknown as ConstructorParameters<typeof OutboxProcessor>[0],
       kitchenTickets as unknown as ConstructorParameters<typeof OutboxProcessor>[1],
       featureResolver as unknown as ConstructorParameters<typeof OutboxProcessor>[2],
+      sqs as unknown as ConstructorParameters<typeof OutboxProcessor>[3],
     );
   });
 
@@ -311,6 +318,59 @@ describe('OutboxProcessor', () => {
           orderId: 'ord-kds-disabled',
         },
       },
+    });
+  });
+
+  describe('menu.image.process_requested', () => {
+    function menuImageEvent(payload: unknown) {
+      return {
+        id: 'evt-img', tenantId: 't1', branchId: null,
+        eventType: 'menu.image.process_requested', payload,
+        attemptCount: 0, publishedAt: null, lastError: null,
+        aggregateType: 'MediaObject', aggregateId: 'media-1', occurredAt: new Date(),
+      };
+    }
+
+    it('publishes a pointer-only message and marks the event published', async () => {
+      prisma.$queryRaw
+        .mockResolvedValueOnce([menuImageEvent({ mediaObjectId: 'media-1' })])
+        .mockResolvedValueOnce([]);
+
+      await processor.poll();
+
+      expect(sqs.send).toHaveBeenCalledTimes(1);
+      expect(sqs.send).toHaveBeenCalledWith({ mediaObjectId: 'media-1' });
+      expect(Object.keys(sqs.send.mock.calls[0][0])).toEqual(['mediaObjectId']);
+      const published = prisma.$executeRaw.mock.calls.some(([query]) => (query as TemplateStringsArray).join('?').includes("'PUBLISHED'"));
+      expect(published).toBe(true);
+    });
+
+    it('retries without sending when the payload lacks a mediaObjectId', async () => {
+      prisma.$queryRaw
+        .mockResolvedValueOnce([menuImageEvent({ tenantId: 't1' })])
+        .mockResolvedValueOnce([]);
+
+      await processor.poll();
+
+      expect(sqs.send).not.toHaveBeenCalled();
+      const published = prisma.$executeRaw.mock.calls.some(([query]) => (query as TemplateStringsArray).join('?').includes("'PUBLISHED'"));
+      expect(published).toBe(false);
+      const retried = prisma.$executeRaw.mock.calls.some(([query]) => (query as TemplateStringsArray).join('?').includes("'RETRY'"));
+      expect(retried).toBe(true);
+    });
+
+    it('retries when the queue send fails so the job is not lost', async () => {
+      sqs.send.mockRejectedValue(new Error('SQS unavailable'));
+      prisma.$queryRaw
+        .mockResolvedValueOnce([menuImageEvent({ mediaObjectId: 'media-1' })])
+        .mockResolvedValueOnce([]);
+
+      await processor.poll();
+
+      const published = prisma.$executeRaw.mock.calls.some(([query]) => (query as TemplateStringsArray).join('?').includes("'PUBLISHED'"));
+      expect(published).toBe(false);
+      const retried = prisma.$executeRaw.mock.calls.some(([query]) => (query as TemplateStringsArray).join('?').includes("'RETRY'"));
+      expect(retried).toBe(true);
     });
   });
 });

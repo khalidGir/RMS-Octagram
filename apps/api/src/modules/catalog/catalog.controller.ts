@@ -6,6 +6,8 @@ import type { Request } from 'express';
 import { TenantRole } from '@rms/contracts';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { CatalogService } from './catalog.service';
+import { MenuImageService } from './menu-image.service';
+import { Throttle } from '../rate-limit/throttle.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { BranchScopeGuard } from '../auth/branch-scope.guard';
@@ -22,6 +24,9 @@ import {
   CreateModifierOptionDto,
   SetBranchAvailabilityDto,
   LinkModifierGroupDto,
+  CreateMenuImageUploadDto,
+  FinalizeMenuImageDto,
+  RemoveMenuImageDto,
 } from './dto';
 
 @ApiTags('Catalog')
@@ -29,7 +34,10 @@ import {
 @UseGuards(JwtAuthGuard, RolesGuard, BranchScopeGuard)
 @ApiCookieAuth()
 export class CatalogController {
-  constructor(@Inject(CatalogService) private readonly catalog: CatalogService) {}
+  constructor(
+    @Inject(CatalogService) private readonly catalog: CatalogService,
+    @Inject(MenuImageService) private readonly menuImages: MenuImageService,
+  ) {}
 
   // ─── Categories ────────────────────────────
 
@@ -105,6 +113,36 @@ export class CatalogController {
     const ctx = req.tenantContext as TenantContext;
     await this.catalog.deleteItem(itemId, ctx.tenantId!, ctx.userId);
     return { data: { success: true } };
+  }
+
+  @Post('items/:itemId/image/upload-intent')
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER)
+  @Throttle({ ttl: 60_000, limit: 10, name: 'menu-image-upload' })
+  async createImageUpload(@Req() req: Request, @Param('itemId') itemId: string, @Body() body: CreateMenuImageUploadDto) {
+    const ctx = req.tenantContext as TenantContext;
+    return { data: await this.menuImages.createUploadIntent(ctx.tenantId!, itemId, ctx.userId, body) };
+  }
+
+  @Post('items/:itemId/image/finalize')
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER)
+  async finalizeImage(@Req() req: Request, @Param('itemId') itemId: string, @Body() body: FinalizeMenuImageDto) {
+    const ctx = req.tenantContext as TenantContext;
+    return { data: await this.menuImages.finalize(ctx.tenantId!, itemId, ctx.userId, body.mediaObjectId, body.expectedVersion) };
+  }
+
+  @Get('items/:itemId/image/status')
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER)
+  async imageStatus(@Req() req: Request, @Param('itemId') itemId: string) {
+    const ctx = req.tenantContext as TenantContext;
+    const mediaObjectId = (req.query.mediaObjectId as string) || undefined;
+    return { data: await this.menuImages.status(ctx.tenantId!, itemId, mediaObjectId) };
+  }
+
+  @Delete('items/:itemId/image')
+  @Roles(TenantRole.OWNER, TenantRole.MANAGER)
+  async removeImage(@Req() req: Request, @Param('itemId') itemId: string, @Body() body: RemoveMenuImageDto) {
+    const ctx = req.tenantContext as TenantContext;
+    return { data: await this.menuImages.remove(ctx.tenantId!, itemId, ctx.userId, body.expectedVersion) };
   }
 
   // ─── Variants ──────────────────────────────

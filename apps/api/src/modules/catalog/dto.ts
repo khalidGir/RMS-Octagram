@@ -1,5 +1,6 @@
-import { IsString, IsOptional, IsBoolean, IsInt, Min, MaxLength } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsInt, IsNumber, Min, Max, MaxLength, IsIn, IsDefined, Matches, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class CreateCategoryDto {
   @ApiProperty({ example: 'Beverages' })
@@ -211,4 +212,32 @@ export class LinkModifierGroupDto {
   @Min(0)
   @IsOptional()
   sortOrder?: number;
+}
+
+export class ImageCropDto {
+  @ApiProperty({ minimum: 0, maximum: 1 }) @IsNumber() @Min(0) @Max(1) x!: number;
+  @ApiProperty({ minimum: 0, maximum: 1 }) @IsNumber() @Min(0) @Max(1) y!: number;
+  @ApiProperty({ minimum: 0, maximum: 1 }) @IsNumber() @Min(0.01) @Max(1) width!: number;
+  @ApiProperty({ minimum: 0, maximum: 1 }) @IsNumber() @Min(0.01) @Max(1) height!: number;
+  @ApiPropertyOptional({ enum: [0, 90, 180, 270] }) @IsIn([0, 90, 180, 270]) @IsOptional() rotation?: number;
+}
+
+export class CreateMenuImageUploadDto {
+  @ApiProperty({ enum: ['image/jpeg', 'image/png', 'image/webp'] })
+  @IsIn(['image/jpeg', 'image/png', 'image/webp'])
+  contentType!: string;
+
+  @ApiProperty({ minimum: 1, maximum: 10485760 }) @IsInt() @Min(1) @Max(10 * 1024 * 1024) sizeBytes!: number;
+  @ApiProperty({ description: 'Lowercase SHA-256 hex digest' }) @Matches(/^[a-f0-9]{64}$/) sha256!: string;
+  @ApiProperty() @IsDefined() @ValidateNested() @Type(() => ImageCropDto) crop!: ImageCropDto;
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedVersion!: number;
+}
+
+export class FinalizeMenuImageDto {
+  @ApiProperty() @IsString() mediaObjectId!: string;
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedVersion!: number;
+}
+
+export class RemoveMenuImageDto {
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedVersion!: number;
 }

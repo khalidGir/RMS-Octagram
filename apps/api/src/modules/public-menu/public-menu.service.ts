@@ -3,6 +3,7 @@ import { Injectable, Inject, NotFoundException, ForbiddenException } from '@nest
 import { PrismaService } from '../prisma/prisma.service';
 import * as crypto from 'crypto';
 import { normalizeTimeValue, localTimeInTimezone, isWithinTimeWindow } from '../shared/time.utils';
+import { MenuImageService, type MenuItemImageView } from '../catalog/menu-image.service';
 
 /** Convert BigInt values to strings for JSON serialization */
 function serializePrice(value: bigint | number | null): string | null {
@@ -21,6 +22,7 @@ export interface PublicBranchMenu {
       name: string;
       description: string | null;
       sku: string | null;
+      image: MenuItemImageView | null;
       variants: Array<{
         id: string;
         name: string;
@@ -53,7 +55,10 @@ export interface PublicTableContext {
 
 @Injectable()
 export class PublicMenuService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(MenuImageService) private readonly menuImages: MenuImageService,
+  ) {}
 
   async getBranchMenu(branchId: string, tenantId: string): Promise<PublicBranchMenu> {
     const tenant = await this.prisma.tenant.findFirst({ where: { id: tenantId, status: 'ACTIVE' } });
@@ -70,6 +75,7 @@ export class PublicMenuService {
           include: {
             variants: { where: { isActive: true }, orderBy: { isDefault: 'desc' } },
             category: { select: { id: true, name: true, sortOrder: true, isActive: true } },
+            imageMedia: true,
             modifierGroups: {
               include: {
                 modifierGroup: {
@@ -136,6 +142,7 @@ export class PublicMenuService {
         name: item.name,
         description: item.description,
         sku: item.sku,
+        image: this.menuImages.view(item.imageMedia),
         variants: displayVariants,
         modifierGroups: item.modifierGroups.map(mg => ({
           id: mg.modifierGroup.id,

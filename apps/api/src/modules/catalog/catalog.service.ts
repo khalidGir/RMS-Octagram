@@ -3,12 +3,14 @@ import { Injectable, Inject, NotFoundException, ConflictException } from '@nestj
 import { PrismaService } from '../prisma/prisma.service';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { AuditService } from '../audit/audit.service';
+import { MenuImageService } from './menu-image.service';
 
 @Injectable()
 export class CatalogService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(MenuImageService) private readonly menuImages: MenuImageService,
   ) {}
 
   // ─── Categories ────────────────────────────
@@ -51,15 +53,17 @@ export class CatalogService {
   async listItems(tenantId: string, categoryId?: string) {
     const where: any = { tenantId };
     if (categoryId) where.categoryId = categoryId;
-    return this.prisma.menuItem.findMany({
+    const items = await this.prisma.menuItem.findMany({
       where,
       orderBy: { name: 'asc' },
       include: {
         category: { select: { id: true, name: true } },
         variants: { where: { isActive: true }, orderBy: { isDefault: 'desc' } },
         modifierGroups: { include: { modifierGroup: true } },
+        imageMedia: true,
       },
     });
+    return items.map((item) => ({ ...item, image: this.menuImages.view(item.imageMedia), imageMedia: undefined }));
   }
 
   async getItem(itemId: string, tenantId: string) {
@@ -69,10 +73,11 @@ export class CatalogService {
         category: { select: { id: true, name: true } },
         variants: { orderBy: { isDefault: 'desc' } },
         modifierGroups: { include: { modifierGroup: { include: { options: true } } } },
+        imageMedia: true,
       },
     });
     if (!item) throw new NotFoundException('Item not found');
-    return item;
+    return { ...item, image: this.menuImages.view(item.imageMedia), imageMedia: undefined };
   }
 
   async createItem(tenantId: string, data: { name: string; description?: string; categoryId?: string; sku?: string }, actorUserId?: string) {
@@ -95,7 +100,7 @@ export class CatalogService {
       if (!cat) throw new NotFoundException('Category not found in this tenant');
     }
     const before = { name: item.name, categoryId: item.categoryId };
-    const updated = await this.prisma.menuItem.update({ where: { id: itemId }, data });
+    const updated = await this.prisma.menuItem.update({ where: { id: itemId }, data: { ...data, version: { increment: 1 } } });
     await this.audit.log({ actorUserId: actorUserId ?? null as any, tenantId, action: 'ITEM_UPDATE', entityType: 'MenuItem', entityId: itemId, before, after: data });
     return updated;
   }
@@ -244,16 +249,18 @@ export class CatalogService {
     const branch = await this.prisma.branch.findFirst({ where: { id: branchId, tenantId } });
     if (!branch) throw new NotFoundException('Branch not found');
 
-    return this.prisma.branchMenuItem.findMany({
+    const rows = await this.prisma.branchMenuItem.findMany({
       where: { branchId, isAvailable: true },
       include: {
         menuItem: {
           include: {
             variants: { where: { isActive: true } },
             modifierGroups: { include: { modifierGroup: true } },
+            imageMedia: true,
           },
         },
       },
     });
+    return rows.map((row) => ({ ...row, menuItem: { ...row.menuItem, image: this.menuImages.view(row.menuItem.imageMedia), imageMedia: undefined } }));
   }
 }
