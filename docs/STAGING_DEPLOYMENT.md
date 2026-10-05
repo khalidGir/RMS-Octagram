@@ -40,6 +40,12 @@ This environment supports integration, demonstrations, and controlled pilot vali
 
 Keep the previous image tag until verification is complete. Roll back the API image if health checks fail. Restore the database only for an explicitly identified incompatible migration.
 
+### Deployment source and image pinning
+
+Deployments always come from a merged commit on `main`, never from a feature branch: record it with `git rev-parse --short HEAD` on the server after fetching `origin/main`. Pin the build by setting `IMAGE_TAG=<commit>` in `deploy/lightsail/.env` (back it up first: `cp -p .env .env.<previous-tag>`, mode `0600`) so restarts keep serving the reviewed build; roll back by restoring the previous tag and rerunning `docker compose up -d api`.
+
+The frontend deploys from `main` too: keep the Vercel project `rms-staging` connected to this repository with production branch `main` so merges trigger deployments — verify `vercel ls` shows a deployment newer than the merge. Until the Git integration is connected, deploy manually from a clean `main` checkout (`cd apps/web && vercel --prod`) and record the deployed commit.
+
 ## Backup and recovery
 
 - Run `backup-postgres.sh` nightly from root's crontab after loading `.env`.
@@ -156,12 +162,13 @@ Menu photos flow through finalize (outbox) → SQS → the `worker` service. Com
    }'
    ```
 
-3. Point `MEDIA_CDN_URL` at a CloudFront distribution (or equivalent) whose origin is the media bucket. Public keys have the shape `/menu-items/<itemId>/<randomToken>/<contentHash>` — the CDN serves them, the bucket stays private, and neither tenant nor media object IDs appear in URLs.
+3. Point `MEDIA_CDN_URL` at a CloudFront distribution (or equivalent) whose origin is the media bucket. The API exposes image URLs of the shape `<MEDIA_CDN_URL>/menu-items/<itemId>/<token>-<contentHash>/<width>x<height>.webp`, while the worker stores those objects under the bucket's `public/` prefix — the distribution must map that path onto `public/...` (for example with origin path `/public`). The CDN serves them, the bucket stays private, and neither tenant nor media object IDs appear in URLs.
 
 ### Server configuration
 
 - Populate `deploy/lightsail/.env` on the host only (mode `0600`, mechanism from step 8 of *First deployment*). It is never committed and never rendered into images; `deploy/lightsail/.env.example` carries placeholder names only.
 - Media/SQS variables: `S3_MEDIA_BUCKET`, `MEDIA_CDN_URL` (API and worker), `SQS_QUEUE_URL`, `SQS_REGION` (API outbox dispatcher and worker), plus `S3_ENDPOINT`/`SQS_ENDPOINT` for non-AWS local services (omit on real AWS). `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` in that `.env` must stay least-privilege (media bucket prefixes plus SQS send/receive on the two queues) — or be replaced by a secured host-level credential mechanism; neither option puts keys in version control.
+- Blank values are treated as unset (Docker Compose renders unset variables as empty strings), so these keys may be omitted entirely until the pipeline is provisioned: the API and worker boot cleanly, and upload intents return `503` until `S3_MEDIA_BUCKET` is configured. Menu images never fall back to the payment-proof bucket.
 
 ### Bring-up and update
 
