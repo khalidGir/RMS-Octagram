@@ -1,5 +1,17 @@
 import { z } from 'zod';
 
+// Docker Compose renders unset variables as empty strings instead of omitting
+// them, and zod's `.optional()` only accepts `undefined`. Optional fields are
+// therefore trimmed, and blank (or whitespace-only) values mean "not
+// configured"; every non-blank value must still satisfy its original schema
+// (typos and malformed URLs fail).
+const blankToUndefined = (value: unknown): unknown => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed === '' ? undefined : trimmed;
+};
+const optional = <T extends z.ZodTypeAny>(schema: T) => z.preprocess(blankToUndefined, schema.optional());
+
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   API_PORT: z.coerce.number().default(3001),
@@ -15,28 +27,29 @@ const envSchema = z.object({
   // S3 configuration for payment proof uploads
   S3_REGION: z.string().default('us-east-1'),
   S3_PROOF_BUCKET: z.string().min(1),
-  S3_ENDPOINT: z.string().optional(),
-  AWS_ACCESS_KEY_ID: z.string().optional(),
-  AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_ENDPOINT: optional(z.string()),
+  AWS_ACCESS_KEY_ID: optional(z.string()),
+  AWS_SECRET_ACCESS_KEY: optional(z.string()),
   // Menu item media: dedicated bucket + CDN base are optional for backwards
-  // compatibility; production/staging deployments must set both.
-  S3_MEDIA_BUCKET: z.string().min(1).optional(),
-  MEDIA_CDN_URL: z.string().url().optional(),
+  // compatibility; production/staging deployments must set both (blank counts
+  // as unset — see blankToUndefined above).
+  S3_MEDIA_BUCKET: optional(z.string().min(1)),
+  MEDIA_CDN_URL: optional(z.string().url()),
   // SQS job queue for the worker (outbox → SQS → worker). Optional in dev;
   // when unset the outbox handler fails visibly instead of dropping jobs.
-  SQS_QUEUE_URL: z.string().url().optional(),
-  SQS_ENDPOINT: z.string().optional(),
+  SQS_QUEUE_URL: optional(z.string().url()),
+  SQS_ENDPOINT: optional(z.string()),
   SQS_REGION: z.string().default('us-east-1'),
   // Redis configuration for rate limiting and distributed state
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.coerce.number().default(6379),
-  REDIS_PASSWORD: z.string().optional(),
+  REDIS_PASSWORD: optional(z.string()),
   // Trust proxy hops (1 for ALB, 0 for direct)
   TRUST_PROXY: z.coerce.number().default(1),
   // Cookie SameSite policy: 'lax' | 'strict' | 'none'
   COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).default('lax'),
   // Cookie domain (optional, defaults to request domain)
-  COOKIE_DOMAIN: z.string().optional(),
+  COOKIE_DOMAIN: optional(z.string()),
   // Log level
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });
@@ -49,14 +62,14 @@ export type Env = z.infer<typeof envSchema>;
 const workerEnvSchema = z.object({
   DATABASE_URL: z.string().url(),
   S3_REGION: z.string().default('us-east-1'),
-  S3_PROOF_BUCKET: z.string().min(1).optional(),
-  S3_MEDIA_BUCKET: z.string().min(1).optional(),
-  S3_ENDPOINT: z.string().optional(),
-  AWS_ACCESS_KEY_ID: z.string().optional(),
-  AWS_SECRET_ACCESS_KEY: z.string().optional(),
-  MEDIA_CDN_URL: z.string().url().optional(),
-  SQS_QUEUE_URL: z.string().url().optional(),
-  SQS_ENDPOINT: z.string().optional(),
+  S3_PROOF_BUCKET: optional(z.string().min(1)),
+  S3_MEDIA_BUCKET: optional(z.string().min(1)),
+  S3_ENDPOINT: optional(z.string()),
+  AWS_ACCESS_KEY_ID: optional(z.string()),
+  AWS_SECRET_ACCESS_KEY: optional(z.string()),
+  MEDIA_CDN_URL: optional(z.string().url()),
+  SQS_QUEUE_URL: optional(z.string().url()),
+  SQS_ENDPOINT: optional(z.string()),
   SQS_REGION: z.string().default('us-east-1'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
 });
@@ -81,4 +94,4 @@ export function validateEnv(raw: Record<string, unknown>): Env {
   return result.data;
 }
 
-export { envSchema };
+export { envSchema, workerEnvSchema };
