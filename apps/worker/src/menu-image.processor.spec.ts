@@ -262,6 +262,24 @@ describe('MenuImageProcessor', () => {
     expect(h.audits.map((entry) => entry.action)).toContain('MENU_IMAGE_PROCESS_COMPLETE');
   });
 
+  it('fails transiently and touches nothing when S3_MEDIA_BUCKET is not configured', async () => {
+    const bytes = await quadrantImage();
+    seedItem();
+    seedMedia(bytes);
+    const unconfigured = new MenuImageProcessor({
+      get: (key: string, fallback?: string) => (key === 'S3_REGION' ? 'us-east-1' : fallback),
+    } as never);
+
+    await expect(unconfigured.handleJob('media-1')).rejects.toThrow('S3_MEDIA_BUCKET is not configured');
+
+    expect(h.s3Send).not.toHaveBeenCalled();
+    expect(h.s3Puts).toHaveLength(0);
+    const media = h.mediaObjects.get('media-1')!;
+    expect(media.processingStatus).toBe('PENDING_PROCESSING');
+    expect(media.processingLeaseExpiresAt).toBeNull();
+    expect(h.menuItems.get('item-1')!.imageMediaId).toBeNull();
+  });
+
   it('crops the selected quadrant without rotation', async () => {
     const bytes = await quadrantImage();
     seedItem();

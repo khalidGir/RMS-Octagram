@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HeadObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
@@ -13,7 +13,9 @@ export class MenuImageStorageService {
   readonly bucket: string;
 
   constructor(@Inject(ConfigService) config: ConfigService) {
-    this.bucket = config.get<string>('S3_MEDIA_BUCKET') ?? config.get<string>('S3_PROOF_BUCKET') ?? 'rms-proof-bucket';
+    // No fallback to the payment-proof bucket: a misconfigured deploy must
+    // fail loudly (503 at use) instead of mixing menu photos into proof data.
+    this.bucket = config.get<string>('S3_MEDIA_BUCKET') ?? '';
     const endpoint = config.get<string>('S3_ENDPOINT');
     this.client = new S3Client({
       region: config.get<string>('S3_REGION', 'us-east-1'),
@@ -21,7 +23,13 @@ export class MenuImageStorageService {
     });
   }
 
+  private requireBucket(): string {
+    if (!this.bucket) throw new ServiceUnavailableException('Menu image storage is not configured');
+    return this.bucket;
+  }
+
   async createUpload(params: { tenantId: string; itemId: string; contentType: string; sizeBytes: number; sha256: string }) {
+    const bucket = this.requireBucket();
     if (!TYPES.has(params.contentType) || params.sizeBytes < 1 || params.sizeBytes > MAX_BYTES) {
       throw new BadRequestException('Unsupported menu image');
     }
@@ -29,7 +37,7 @@ export class MenuImageStorageService {
     const objectKey = `tenant/${params.tenantId}/menu-items/${params.itemId}/original/${randomUUID()}.${extension}`;
     const checksum = Buffer.from(params.sha256, 'hex').toString('base64');
     const { url, fields } = await createPresignedPost(this.client, {
-      Bucket: this.bucket,
+      Bucket: bucket,
       Key: objectKey,
       Expires: 300,
       Conditions: [
@@ -51,8 +59,9 @@ export class MenuImageStorageService {
   }
 
   async verifyObject(params: { objectKey: string; sizeBytes: number; contentType: string; sha256: string }) {
+    const bucket = this.requireBucket();
     try {
-      const head = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: params.objectKey }));
+      const head = await this.client.send(new HeadObjectCommand({ Bucket: bucket, Key: params.objectKey }));
       const checksum = head.ChecksumSHA256 ? Buffer.from(head.ChecksumSHA256, 'base64').toString('hex') : null;
       if (head.ContentLength !== params.sizeBytes || head.ContentType !== params.contentType || checksum !== params.sha256) {
         throw new BadRequestException('Uploaded image does not match its upload intent');

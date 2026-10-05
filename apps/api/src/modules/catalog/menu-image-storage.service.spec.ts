@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 
 const h = vi.hoisted(() => {
   class HeadObjectCommand {
@@ -81,6 +81,30 @@ describe('MenuImageStorageService', () => {
     ])('rejects %s', async (_label, params) => {
       await expect(service.createUpload({ tenantId: 't', itemId: 'i', sha256: sha, ...params })).rejects.toThrow(BadRequestException);
       expect(h.presign).not.toHaveBeenCalled();
+    });
+
+    it('fails with 503 when S3_MEDIA_BUCKET is not configured', async () => {
+      const unconfigured = new MenuImageStorageService({
+        get: (key: string, fallback?: string) => (key === 'S3_REGION' ? 'us-east-1' : fallback),
+      } as never);
+      await expect(unconfigured.createUpload({ tenantId: 't', itemId: 'i', contentType: 'image/jpeg', sizeBytes: 100, sha256: sha })).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(h.presign).not.toHaveBeenCalled();
+    });
+
+    it('never falls back to the payment-proof bucket', async () => {
+      const proofAware = new MenuImageStorageService({
+        get: (key: string, fallback?: string) => {
+          if (key === 'S3_PROOF_BUCKET') return 'rms-proof-bucket';
+          if (key === 'S3_REGION') return 'us-east-1';
+          return fallback;
+        },
+      } as never);
+      expect(proofAware.bucket).toBe('');
+      await expect(proofAware.createUpload({ tenantId: 't', itemId: 'i', contentType: 'image/jpeg', sizeBytes: 100, sha256: sha })).rejects.toThrow(
+        ServiceUnavailableException,
+      );
     });
   });
 

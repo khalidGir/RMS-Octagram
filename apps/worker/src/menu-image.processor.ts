@@ -32,7 +32,9 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
 
   constructor(config: ConfigService) {
     const endpoint = config.get<string>('S3_ENDPOINT');
-    this.bucket = config.get<string>('S3_MEDIA_BUCKET') ?? config.get<string>('S3_PROOF_BUCKET') ?? 'rms-proof-bucket';
+    // No fallback to the payment-proof bucket: processing must fail visibly
+    // until S3_MEDIA_BUCKET is configured (transient — retried by SQS).
+    this.bucket = config.get<string>('S3_MEDIA_BUCKET') ?? '';
     this.s3 = new S3Client({ region: config.get<string>('S3_REGION', 'us-east-1'), ...(endpoint ? { endpoint, forcePathStyle: true } : {}) });
   }
 
@@ -102,6 +104,7 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
   }
 
   private async render(media: { id: string; tenantId: string; targetMenuItemId: string | null; objectKey: string; sha256: string | null; cropData: unknown; expectedItemVersion: number | null; uploadedByUserId: string | null }, uploadedKeys: string[]) {
+    if (!this.bucket) throw new Error('S3_MEDIA_BUCKET is not configured; menu image processing is disabled');
     if (!media.targetMenuItemId || !media.sha256) throw new PermanentImageError('Menu image record is incomplete');
     // S3 read: network/server failures stay transient (rethrown by handleJob).
     const object = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: media.objectKey }));
