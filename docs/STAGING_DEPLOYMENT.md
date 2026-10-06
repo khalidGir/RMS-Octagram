@@ -28,23 +28,29 @@ This environment supports integration, demonstrations, and controlled pilot vali
 12. Run `docker compose --env-file .env up -d postgres redis api caddy`.
 13. Point the API DNS record at the static IP and verify Caddy obtains a certificate.
 
-## Deployment update
+## Deployment update (automated)
 
-1. Take and upload a database backup.
-2. Fetch the approved commit.
-3. Build the API image with a unique commit tag.
-4. Run backward-compatible migrations.
-5. Replace the API container.
-6. Require `/api/v1/health/live` and `/api/v1/health/ready` to pass.
-7. Run the smoke-test checklist.
+Backend deployments run through `.github/workflows/deploy.yml` (ADR-028):
 
-Keep the previous image tag until verification is complete. Roll back the API image if health checks fail. Restore the database only for an explicitly identified incompatible migration.
+1. **Trigger:** a merge to `main` touching `apps/api`, `apps/worker`, `packages`, `deploy/`, a `Dockerfile`, or the workflow itself — or a manual _Run workflow_ (Actions → _Deploy staging_). Frontend-only merges do not redeploy the backend.
+2. **Runner:** the self-hosted runner `rms-staging-1` on this host (`/opt/actions-runner`, systemd unit `actions.runner.khalidGir-RMS-Octagram.rms-staging-1.service`, enabled at boot, labels `self-hosted,staging`). The host has no public SSH endpoint, so jobs execute on the host itself — which is why the workflow uses no `actions/checkout` and works against the long-lived `/opt/rms` tree (it holds the server-only `.env`).
+3. **Sequence:** record the running image tags → `git fetch --prune` + `checkout --detach` of the target SHA in `/opt/rms` (aborts if the tree is not clean) → `backup-postgres.sh` (pg_dump → S3) → `docker compose build api worker` tagged with the short SHA → `prisma migrate deploy` → `up -d api worker` → health gate: container health + `/health/ready` inside the container + worker running without the `SQS_QUEUE_URL is not set` idle warning + an edge request through Caddy.
+4. **Automatic rollback:** any failure at or after rollout re-ups the previous image tags and re-runs the health gate. Migrations are expand-only, so the database is never rolled back automatically; restore the database only for an explicitly identified incompatible migration.
+5. **Manual deploy/rollback:** _Run workflow_ with `mode=deploy` (builds and rolls out the selected ref) or `mode=rollback` + `tag=<short-sha>` (switches to an image that still exists on the host — no rebuild, no migrations). Every run writes a job summary with mode, target, previous images, and both gate outcomes.
+6. **Branch protection:** `main` requires a pull request and a green `build` check from `ci.yml`; force-pushes and deletions are blocked.
+
+Operational notes:
+
+- `/opt/rms` must stay clean — the job aborts on unexpected local changes. Server-side `.env` backups live outside the tree in `/var/backups/rms/env/` (mode `0600`), never next to repository files.
+- `core.filemode=false` is set for `/opt/rms`; script executability comes from the committed mode, not from local `chmod`.
+- Runner maintenance: `sudo systemctl restart actions.runner.khalidGir-RMS-Octagram.rms-staging-1.service`; the runner auto-updates between jobs, and a fresh registration token is needed after a host rebuild (Actions → Settings → Runners).
+- Run the smoke-test checklist after unusual changes (schema, auth, payments) even when the health gate is green.
 
 ### Deployment source and image pinning
 
-Deployments always come from a merged commit on `main`, never from a feature branch: record it with `git rev-parse --short HEAD` on the server after fetching `origin/main`. Pin the build by setting `IMAGE_TAG=<commit>` in `deploy/lightsail/.env` (back it up first: `cp -p .env .env.<previous-tag>`, mode `0600`) so restarts keep serving the reviewed build; roll back by restoring the previous tag and rerunning `docker compose up -d api`.
+Deployments always come from a merged commit on `main`, never from a feature branch: the workflow checks out the pushed SHA and tags images with its short SHA (verify with `git rev-parse --short HEAD` on the server). The workflow passes `IMAGE_TAG` per run and overrides any persisted value; for manual `docker compose up -d api` restarts, pin `IMAGE_TAG=<commit>` in `deploy/lightsail/.env` (back it up first: `cp -p .env .env.<previous-tag>`, mode `0600`) so restarts keep serving the reviewed build, and roll back by restoring the previous tag.
 
-The frontend deploys from `main` too: keep the Vercel project `rms-staging` connected to this repository with production branch `main` so merges trigger deployments — verify `vercel ls` shows a deployment newer than the merge. Until the Git integration is connected, deploy manually from a clean `main` checkout (`cd apps/web && vercel --prod`) and record the deployed commit.
+The frontend deploys from `main` too: the Vercel project `rms-staging` is connected to this repository with production branch `main`, so merges trigger deployments — verify `vercel ls` shows a deployment newer than the merge.
 
 ## Backup and recovery
 
@@ -105,14 +111,14 @@ GROUP BY u."email", m."role";                                  -- unchanged from
 
 ### Staging QA accounts
 
-| Role | Phone | Password |
-|---|---|---|
-| Super Admin | `+251900000001` | `admin123` |
-| Owner | `+251900000002` | `owner123` |
-| Manager | `+251900000003` | `manager123` |
-| Cashier | `+251900000004` | `cashier123` |
+| Role          | Phone           | Password     |
+| ------------- | --------------- | ------------ |
+| Super Admin   | `+251900000001` | `admin123`   |
+| Owner         | `+251900000002` | `owner123`   |
+| Manager       | `+251900000003` | `manager123` |
+| Cashier       | `+251900000004` | `cashier123` |
 | Kitchen Staff | `+251900000005` | `kitchen123` |
-| Waiter | `+251900000006` | `waiter123` |
+| Waiter        | `+251900000006` | `waiter123`  |
 
 These credentials are for staging only and **must be rotated before any external pilot**.
 
@@ -127,8 +133,6 @@ These credentials are for staging only and **must be rotated before any external
 - Customer ordering links were unresolvable on staging: seed branches had `publicSlug = NULL` and `PublicContextService.ensurePublicSlug` has no callers. `main-branch` was assigned to Main Branch so `/r/main-branch` and `/order/main-branch` resolve. Follow-up: wire slug generation into the share-link flow or seed slugs.
 - Anonymous boot-time `POST /auth/refresh` (no refresh cookie yet) returns HTTP 400 and is caught client-side — harmless log noise. Follow-up: answer a missing session with 204/401 instead of 400.
 - Live verification on 2026-10-01 (frontend `https://rms-staging-chi.vercel.app`, API image `rms-api:e03c49b`): all six staging phone accounts log in and land on their role pages with reload persistence; cashier POS renders prices (6 on load and after reload, no page errors); customer and pickup menus render prices and add-to-cart subtotals; Kitchen Display, Expo, and Waiter pages render; WebSocket connects (`engine.io` handshake → `kds` namespace → `branch:` room join); login throttle returned 401 ×10 then 429 on attempt 11.
-
-
 
 ## Menu item photo pipeline (ADR-027)
 
@@ -166,7 +170,7 @@ Menu photos flow through finalize (outbox) → SQS → the `worker` service. Com
 
 ### Server configuration
 
-- Populate `deploy/lightsail/.env` on the host only (mode `0600`, mechanism from step 8 of *First deployment*). It is never committed and never rendered into images; `deploy/lightsail/.env.example` carries placeholder names only.
+- Populate `deploy/lightsail/.env` on the host only (mode `0600`, mechanism from step 8 of _First deployment_). It is never committed and never rendered into images; `deploy/lightsail/.env.example` carries placeholder names only.
 - Media/SQS variables: `S3_MEDIA_BUCKET`, `MEDIA_CDN_URL` (API and worker), `SQS_QUEUE_URL`, `SQS_REGION` (API outbox dispatcher and worker), plus `S3_ENDPOINT`/`SQS_ENDPOINT` for non-AWS local services (omit on real AWS). `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` in that `.env` must stay least-privilege (media bucket prefixes plus SQS send/receive on the two queues) — or be replaced by a secured host-level credential mechanism; neither option puts keys in version control.
 - Blank values are treated as unset (Docker Compose renders unset variables as empty strings), so these keys may be omitted entirely until the pipeline is provisioned: the API and worker boot cleanly, and upload intents return `503` until `S3_MEDIA_BUCKET` is configured. Menu images never fall back to the payment-proof bucket.
 
