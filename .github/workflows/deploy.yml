@@ -1,0 +1,202 @@
+# Staging backend/worker deployment.
+#
+# Runs on the self-hosted runner that lives ON the staging host (labels
+# self-hosted, staging). The host has no public SSH/IPv4 endpoint, so jobs
+# execute locally instead of SSH-ing in. Deliberately uses NO actions/checkout:
+# every step operates on the long-lived checkout at /opt/rms, which also holds
+# the uncommitted server-side .env (never in git).
+#
+# Failure policy: any failure after the rollout step automatically re-ups the
+# previously running image tags (migrations are expand-only, so the database
+# is never rolled back). See docs/STAGING_DEPLOYMENT.md and ADR-028.
+
+name: Deploy staging
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "apps/worker/**"
+      - "packages/**"
+      - "deploy/**"
+      - "**/Dockerfile"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "turbo.json"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "deploy = build and roll out the selected ref; rollback = switch to an existing image tag (no build, no migrate)"
+        type: choice
+        options:
+          - deploy
+          - rollback
+        default: deploy
+      tag:
+        description: "Rollback target: short-SHA image tag that still exists on the host (rollback mode only)"
+        required: false
+        default: ""
+
+# Never run two deploys at once, and never cancel one mid-flight.
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: github.repository == 'khalidGir/RMS-Octagram'
+    runs-on: [self-hosted, staging]
+    timeout-minutes: 45
+    env:
+      COMPOSE_DIR: /opt/rms/deploy/lightsail
+    steps:
+      - name: Record running image tags
+        id: prev
+        run: |
+          api="$(docker inspect --format '{{.Config.Image}}' rms-staging-api-1 2>/dev/null || true)"
+          worker="$(docker inspect --format '{{.Config.Image}}' rms-staging-worker-1 2>/dev/null || true)"
+          echo "api=${api:-rms-api:staging}" >> "$GITHUB_OUTPUT"
+          echo "worker=${worker:-rms-worker:staging}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch and check out target
+        id: target
+        env:
+          MODE: ${{ inputs.mode }}
+          ROLLBACK_TAG: ${{ inputs.tag }}
+        run: |
+          git -C /opt/rms fetch --prune origin
+          if [ "$MODE" = "rollback" ]; then
+            case "$ROLLBACK_TAG" in
+              "" | *[!A-Za-z0-9._-]*) echo "::error::rollback requires a plain short-SHA tag input"; exit 1 ;;
+            esac
+            docker image inspect "rms-api:$ROLLBACK_TAG" >/dev/null 2>&1 || { echo "::error::image rms-api:$ROLLBACK_TAG not found on host"; exit 1; }
+            docker image inspect "rms-worker:$ROLLBACK_TAG" >/dev/null 2>&1 || { echo "::error::image rms-worker:$ROLLBACK_TAG not found on host"; exit 1; }
+            sha="$(git -C /opt/rms rev-parse "$ROLLBACK_TAG^{commit}")" || exit 1
+            tag="$ROLLBACK_TAG"
+          else
+            sha="$GITHUB_SHA"
+            tag="$(git -C /opt/rms rev-parse --short "$sha")" || exit 1
+          fi
+          git -C /opt/rms checkout --detach "$sha" || exit 1
+          dirty="$(git -C /opt/rms status --porcelain)"
+          if [ -n "$dirty" ]; then
+            echo "::error::/opt/rms has unexpected local changes; refusing to deploy"
+            echo "$dirty"
+            exit 1
+          fi
+          echo "mode=${MODE:-deploy}" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git -C /opt/rms rev-parse "$sha")" >> "$GITHUB_OUTPUT"
+
+      - name: Back up PostgreSQL
+        if: steps.target.outputs.mode != 'rollback'
+        run: |
+          cd "$COMPOSE_DIR"
+          ./backup-postgres.sh
+
+      - name: Build api and worker images
+        if: steps.target.outputs.mode != 'rollback'
+        env:
+          TARGET_TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          cd "$COMPOSE_DIR"
+          IMAGE_TAG="$TARGET_TAG" docker compose --env-file .env build api worker
+
+      - name: Run migrations
+        if: steps.target.outputs.mode != 'rollback'
+        env:
+          TARGET_TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          cd "$COMPOSE_DIR"
+          IMAGE_TAG="$TARGET_TAG" docker compose --env-file .env --profile tools run --rm migrate
+
+      - name: Roll out api and worker
+        id: rollout
+        env:
+          TARGET_TAG: ${{ steps.target.outputs.tag }}
+        run: |
+          cd "$COMPOSE_DIR"
+          IMAGE_TAG="$TARGET_TAG" docker compose --env-file .env up -d api worker
+
+      - name: Health gate
+        id: health
+        run: |
+          h=starting
+          for _ in $(seq 1 30); do
+            h="$(docker inspect --format '{{.State.Health.Status}}' rms-staging-api-1 2>/dev/null || echo missing)"
+            [ "$h" = "healthy" ] && break
+            sleep 5
+          done
+          if [ "$h" != "healthy" ]; then
+            echo "::error::api container health is '$h' after wait"
+            docker logs --tail 60 rms-staging-api-1 || true
+            exit 1
+          fi
+          docker exec rms-staging-api-1 wget -qO- http://127.0.0.1:3001/api/v1/health/ready \
+            | grep -q '"status":"ok"' || { echo "::error::/health/ready not ok"; exit 1; }
+          wstatus="$(docker inspect --format '{{.State.Status}}' rms-staging-worker-1 2>/dev/null || echo missing)"
+          if [ "$wstatus" != "running" ]; then
+            echo "::error::worker container is '$wstatus'"
+            docker logs --tail 60 rms-staging-worker-1 || true
+            exit 1
+          fi
+          if docker logs rms-staging-worker-1 2>&1 | grep -q "SQS_QUEUE_URL is not set"; then
+            echo "::error::worker started without an SQS consumer"
+            exit 1
+          fi
+          curl -sf --resolve 100.57.8.66.nip.io:443:127.0.0.1 \
+            https://100.57.8.66.nip.io/api/v1/health/ready \
+            | grep -q '"status":"ok"' || { echo "::error::edge health via Caddy failed"; exit 1; }
+          echo "health gate passed"
+
+      - name: Roll back to previous images on failure
+        id: rollback
+        if: failure()
+        env:
+          PREV_API: ${{ steps.prev.outputs.api }}
+          PREV_WORKER: ${{ steps.prev.outputs.worker }}
+        run: |
+          prev_tag="${PREV_API##*:}"
+          echo "rolling back to api/worker tag '$prev_tag' (previous: api=$PREV_API worker=$PREV_WORKER)"
+          cd "$COMPOSE_DIR"
+          IMAGE_TAG="$prev_tag" docker compose --env-file .env up -d api worker
+          h=starting
+          for _ in $(seq 1 18); do
+            h="$(docker inspect --format '{{.State.Health.Status}}' rms-staging-api-1 2>/dev/null || echo missing)"
+            [ "$h" = "healthy" ] && break
+            sleep 5
+          done
+          if [ "$h" != "healthy" ]; then
+            echo "::error::rollback did not reach healthy state (='$h'); manual intervention required"
+            docker logs --tail 60 rms-staging-api-1 || true
+            exit 1
+          fi
+          echo "rollback healthy"
+
+      - name: Write run summary
+        if: always()
+        env:
+          MODE: ${{ steps.target.outputs.mode }}
+          TARGET_TAG: ${{ steps.target.outputs.tag }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+          PREV_API: ${{ steps.prev.outputs.api }}
+          PREV_WORKER: ${{ steps.prev.outputs.worker }}
+          HEALTH_OUTCOME: ${{ steps.health.outcome }}
+          ROLLBACK_OUTCOME: ${{ steps.rollback.outcome }}
+        run: |
+          {
+            echo "### Staging deploy"
+            echo ""
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| mode | \`${MODE:-unknown}\` |"
+            echo "| target | \`${TARGET_SHA:-unknown}\` (\`${TARGET_TAG:-unknown}\`) |"
+            echo "| previous images | api \`${PREV_API}\`, worker \`${PREV_WORKER}\` |"
+            echo "| health gate | ${HEALTH_OUTCOME:-skipped} |"
+            echo "| rollback | ${ROLLBACK_OUTCOME:-skipped} |"
+          } >> "$GITHUB_STEP_SUMMARY"
