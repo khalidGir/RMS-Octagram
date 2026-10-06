@@ -41,6 +41,8 @@ Backend deployments run through `.github/workflows/deploy.yml` (ADR-028):
 
 Operational notes:
 
+- The checkout step runs `git fetch --prune origin`, so `remote.origin.fetch` in `/opt/rms` must be the default `+refs/heads/*:refs/remotes/origin/*` refspec. A narrowed refspec (e.g. tracking a single old branch) silently never updates `main` and the deploy fails with `reference is not a tree`. Check with `git -C /opt/rms config --get-all remote.origin.fetch`.
+- The runner user must own the backup directory: `chown ubuntu:ubuntu /var/backups/rms && chmod 700 /var/backups/rms` (`backup-postgres.sh` writes there from the job; root's cron keeps working because it bypasses permissions).
 - `/opt/rms` must stay clean — the job aborts on unexpected local changes. Server-side `.env` backups live outside the tree in `/var/backups/rms/env/` (mode `0600`), never next to repository files.
 - `core.filemode=false` is set for `/opt/rms`; script executability comes from the committed mode, not from local `chmod`.
 - Runner maintenance: `sudo systemctl restart actions.runner.khalidGir-RMS-Octagram.rms-staging-1.service`; the runner auto-updates between jobs, and a fresh registration token is needed after a host rebuild (Actions → Settings → Runners).
