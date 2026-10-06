@@ -64,9 +64,11 @@ describe('MenuImageStorageService', () => {
       const params = h.presign.mock.calls[0][1] as { Conditions: unknown[]; Fields: Record<string, string> };
       expect(params.Conditions).toContainEqual({ 'x-amz-meta-tenant-id': 'tenant-a' });
       expect(params.Conditions).toContainEqual({ 'x-amz-meta-menu-item-id': 'item-1' });
+      expect(params.Conditions).toContainEqual({ 'x-amz-meta-sha256': sha });
       expect(params.Conditions).toContainEqual(['content-length-range', 1, 10 * 1024 * 1024]);
       expect(params.Fields['Content-Type']).toBe('image/jpeg');
       expect(params.Fields['x-amz-checksum-sha256']).toBe(Buffer.from(sha, 'hex').toString('base64'));
+      expect(params.Fields['x-amz-meta-sha256']).toBe(sha);
     });
 
     it('maps png and webp content types to their extensions', async () => {
@@ -115,6 +117,12 @@ describe('MenuImageStorageService', () => {
       await expect(pending).resolves.toBeUndefined();
     });
 
+    it('accepts an object whose signed metadata checksum matches when S3 does not expose a checksum header', async () => {
+      const pending = service.verifyObject({ objectKey: 'k', sizeBytes: 42, contentType: 'image/jpeg', sha256: sha });
+      h.headResult[0].resolve({ ContentLength: 42, ContentType: 'image/jpeg', Metadata: { sha256: sha.toUpperCase() } });
+      await expect(pending).resolves.toBeUndefined();
+    });
+
     it('rejects a size mismatch', async () => {
       const pending = service.verifyObject({ objectKey: 'k', sizeBytes: 42, contentType: 'image/jpeg', sha256: sha });
       h.headResult[0].resolve({ ContentLength: 41, ContentType: 'image/jpeg', ChecksumSHA256: Buffer.from(sha, 'hex').toString('base64') });
@@ -124,6 +132,12 @@ describe('MenuImageStorageService', () => {
     it('rejects a checksum mismatch', async () => {
       const pending = service.verifyObject({ objectKey: 'k', sizeBytes: 42, contentType: 'image/jpeg', sha256: sha });
       h.headResult[0].resolve({ ContentLength: 42, ContentType: 'image/jpeg', ChecksumSHA256: Buffer.from('b'.repeat(64), 'hex').toString('base64') });
+      await expect(pending).rejects.toThrow('does not match its upload intent');
+    });
+
+    it('rejects a metadata checksum mismatch when no S3 checksum header is available', async () => {
+      const pending = service.verifyObject({ objectKey: 'k', sizeBytes: 42, contentType: 'image/jpeg', sha256: sha });
+      h.headResult[0].resolve({ ContentLength: 42, ContentType: 'image/jpeg', Metadata: { sha256: 'b'.repeat(64) } });
       await expect(pending).rejects.toThrow('does not match its upload intent');
     });
 
