@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
+    "icons": "node scripts/generate-pwa-icons.mjs",
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
@@ -57,6 +58,7 @@
     "pg": "^8.23.0",
     "postcss": "^8.4.49",
     "prisma": "^6.1.0",
+    "sharp": "^0.34.4",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",

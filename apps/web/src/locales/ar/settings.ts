@@ -29,4 +29,15 @@ export const settings = {
   toggleDisable: 'تعطيل',
   toggleEnable: 'تفعيل',
   toggleAria: '{action} {feature}',
+  logoTitle: 'شعار المطعم',
+  logoHint:
+    'يظهر في قائمة عملائك وفي التطبيق القابل للتثبيت. صورة مربّعة بصيغة JPEG أو PNG أو WebP، 256×256 بكسل على الأقل، وبحجم أقصى 10 ميغابايت.',
+  logoUpload: 'رفع الشعار',
+  logoReplace: 'استبدال الشعار',
+  logoRemove: 'إزالة الشعار',
+  logoProcessing: 'جارٍ معالجة شعارك…',
+  logoRejected: 'فشلت معالجة الشعار: {reason}',
+  logoInvalidType: 'اختر صورة JPEG أو PNG أو WebP.',
+  logoTooLarge: 'يجب ألا يتجاوز حجم الصورة 10 ميغابايت.',
+  logoUploadError: 'فشل رفع الشعار. يُرجى المحاولة مرة أخرى.',
 } as const;

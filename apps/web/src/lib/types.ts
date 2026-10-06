@@ -1,15 +1,78 @@
-export type OrderStatus = 'DRAFT' | 'PENDING_PAYMENT' | 'PENDING_CONFIRMATION' | 'CONFIRMED' | 'IN_PROGRESS' | 'READY' | 'COMPLETED' | 'CANCELLED' | 'VOIDED';
+export type OrderStatus =
+  | 'DRAFT'
+  | 'PENDING_PAYMENT'
+  | 'PENDING_CONFIRMATION'
+  | 'CONFIRMED'
+  | 'IN_PROGRESS'
+  | 'READY'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'VOIDED';
 
-export interface BranchSummary { id: string; name: string; location: string; }
-export interface DashboardMetric { label: string; value: string; detail: string; direction: 'up' | 'neutral' | 'attention'; }
-export interface RecentOrder { id: string; number: string; customer: string; type: 'Dine-in' | 'Pickup' | 'POS'; amountMinor: number; itemCount: number; status: OrderStatus; time: string; }
-export interface PopularItem { id: string; name: string; category: string; sold: number; revenueMinor: number; color: string; }
-export interface DashboardData { restaurantName: string; branches: BranchSummary[]; activeBranchId: string; metrics: DashboardMetric[]; recentOrders: RecentOrder[]; popularItems: PopularItem[]; }
+export interface BranchSummary {
+  id: string;
+  name: string;
+  location: string;
+}
+export interface DashboardMetric {
+  label: string;
+  value: string;
+  detail: string;
+  direction: 'up' | 'neutral' | 'attention';
+}
+export interface RecentOrder {
+  id: string;
+  number: string;
+  customer: string;
+  type: 'Dine-in' | 'Pickup' | 'POS';
+  amountMinor: number;
+  itemCount: number;
+  status: OrderStatus;
+  time: string;
+}
+export interface PopularItem {
+  id: string;
+  name: string;
+  category: string;
+  sold: number;
+  revenueMinor: number;
+  color: string;
+}
+export interface DashboardData {
+  restaurantName: string;
+  branches: BranchSummary[];
+  activeBranchId: string;
+  metrics: DashboardMetric[];
+  recentOrders: RecentOrder[];
+  popularItems: PopularItem[];
+}
 
-export interface MenuCategory { id: string; name: string; description?: string; sortOrder: number; isActive: boolean; }
-export interface MenuItem { id: string; name: string; description: string; categoryId: string; isActive: boolean; badge?: string; initials: string; tone: string; }
-export interface CartLine { item: MenuItem; quantity: number; note?: string; }
-export interface MenuData { categories: MenuCategory[]; items: MenuItem[]; }
+export interface MenuCategory {
+  id: string;
+  name: string;
+  description?: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+export interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  categoryId: string;
+  isActive: boolean;
+  badge?: string;
+  initials: string;
+  tone: string;
+}
+export interface CartLine {
+  item: MenuItem;
+  quantity: number;
+  note?: string;
+}
+export interface MenuData {
+  categories: MenuCategory[];
+  items: MenuItem[];
+}
 
 export interface TenantTheme {
   logoUrl?: string;
@@ -22,7 +85,16 @@ export interface TenantTheme {
   coverImageUrl?: string;
 }
 
-export type FeatureKey = 'TABLE_QR_ORDERING' | 'PICKUP_ORDERING' | 'MANUAL_TRANSFER_PAYMENTS' | 'PAYMENT_GATEWAY' | 'KDS' | 'INVENTORY' | 'BATCH_INVENTORY' | 'ANALYTICS' | 'MULTI_BRANCH';
+export type FeatureKey =
+  | 'TABLE_QR_ORDERING'
+  | 'PICKUP_ORDERING'
+  | 'MANUAL_TRANSFER_PAYMENTS'
+  | 'PAYMENT_GATEWAY'
+  | 'KDS'
+  | 'INVENTORY'
+  | 'BATCH_INVENTORY'
+  | 'ANALYTICS'
+  | 'MULTI_BRANCH';
 export type EntitlementState = 'ENABLED' | 'DISABLED' | 'TRIAL' | 'SUSPENDED';
 export type BranchOverride = 'INHERIT' | 'ENABLED' | 'DISABLED';
 
@@ -43,4 +115,34 @@ export interface TenantFeatureControl {
   trialEndsAt?: string;
   updatedAt: string;
   updatedBy: string;
+}
+
+/** Tenant (restaurant) logo derivative URLs; null-safe via the API's view. */
+export interface TenantLogoView {
+  icon192: string;
+  icon512: string;
+  maskable512: string;
+  apple180: string;
+  thumbnail: string;
+}
+
+/** Public pickup context (`GET /public/restaurants/:slug` and its menu). */
+export interface PublicRestaurantContext {
+  tenant: { id: string; name: string };
+  branch: { id: string; name: string; publicSlug: string };
+  logo: TenantLogoView | null;
+  pickupEnabled: boolean;
+  tableQrEnabled: boolean;
+  availablePaymentMethods: string[];
+}
+
+/** Public table context (`POST /public/table-context/resolve`). */
+export interface PublicTableContext {
+  tenant: { id: string; name: string };
+  branch: { id: string; name: string; publicSlug: string | null };
+  logo: TenantLogoView | null;
+  table: { id: string; label: string; capacity: number };
+  diningArea: { id: string; name: string } | null;
+  availableOrderTypes: string[];
+  availablePaymentMethods: string[];
 }

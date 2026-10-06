@@ -189,7 +189,7 @@ Exit: accessibility, role, responsive, localization and pilot task tests pass.
 
 ### Deliverables
 
-- Manifest, icons, install UX, service worker, cached shell, and safe read caching.
+- Staff manifest plus per-restaurant customer manifests (ADR-029): owner logo upload (`/tenants/current/logo/*`), branded icons, install UX, service worker (`rms-shell-v3`), cached shell, and read-only menu caching — no offline order/payment mutations.
 - Clear offline/reconnect UI; unsafe mutations disabled offline.
 - Tablet accessibility and usability pass for POS/KDS.
 - Rate limiting, CSRF, upload validation, security headers, and audit coverage.
@@ -268,6 +268,7 @@ Exit: accessibility, role, responsive, localization and pilot task tests pass.
 11. Multi-shift close and owner business-day close/exception/reopen.
 12. Super-admin menu support allowlist and escape attempts.
 13. English, Amharic and Arabic critical paths including RTL and reconnecting state.
+14. Customer menu exposes the per-restaurant manifest, offline banner, and logo-gated install affordance (ADR-029).
 
 ## 13. Data and Security Review Gates
 
@@ -307,4 +308,3 @@ Before production:
 - Do not resume final frontend/API integration until Product v0.2 contracts are frozen in OpenAPI.
 - Do not activate loyalty-phone collection without a later accepted privacy decision.
 - Do not allow Manager/Cashier/Super Admin transfer verification in the pilot.
-

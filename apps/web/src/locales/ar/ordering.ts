@@ -154,4 +154,7 @@ export const ordering = {
   serviceError: 'تعذّر إرسال طلبك. حاول مرة أخرى.',
   assistanceGroup: 'مساعدة الطاولة',
   viewReceipt: 'عرض الإيصال',
+  installApp: 'إضافة إلى الشاشة الرئيسية',
+  installIosHint: 'اضغط على زر المشاركة ثم اختر "إضافة إلى الشاشة الرئيسية".',
+  offlineBanner: 'أنت غير متصل — يتم عرض آخر قائمة تم تحميلها.',
 } as const;

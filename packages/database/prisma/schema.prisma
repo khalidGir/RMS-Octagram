@@ -62,6 +62,8 @@ model Tenant {
   defaultCurrency String   @default("ETB") @db.VarChar(3)
   defaultTimezone String   @default("Africa/Addis_Ababa")
   defaultLocale   String   @default("en") // en, am, ar
+  logoMediaId     String?
+  version         Int      @default(1)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -74,6 +76,7 @@ model Tenant {
   modifierGroups    ModifierGroup[]
   taxConfigurations TenantTaxConfiguration[]
   menuTranslations  MenuItemTranslation[]
+  logoMedia         MediaObject? @relation("TenantLogo", fields: [logoMediaId], references: [id], onDelete: SetNull)
 }
 
 model TenantMembership {
@@ -677,6 +680,7 @@ model MediaObject {
   payment       Payment?       @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   paymentProofs PaymentProof[]
   menuItems     MenuItem[]     @relation("MenuItemImage")
+  tenants       Tenant[]       @relation("TenantLogo")
 
   @@index([tenantId, branchId])
   @@index([tenantId, branchId, paymentId])

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
+import type { TenantLogoView } from '@/lib/types';
 import { useAuth } from './auth-provider';
 import { useLocale } from '@/components/locale-provider';
 
@@ -24,6 +25,16 @@ interface FeatureStatus {
   tenantEnabled: boolean;
   effective: boolean;
 }
+interface LogoStatus {
+  processingStatus: string;
+  rejectionReason: string | null;
+  logo: TenantLogoView | null;
+  tenantVersion: number;
+}
+
+const LOGO_PROCESSING_STATUSES = new Set(['PENDING_UPLOAD', 'PENDING_PROCESSING', 'PROCESSING']);
+const LOGO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const LOGO_MAX_BYTES = 10 * 1024 * 1024;
 
 function featureLabel(key: string): string {
   return key
@@ -54,7 +65,12 @@ export function SettingsManagement() {
     queryKey: ['tenant-features', tenantId],
     enabled: Boolean(accessToken && tenantId),
     queryFn: async () =>
-      (await apiRequest<ApiEnvelope<FeatureStatus[]>>('/tenants/features', { accessToken, tenantId })).data,
+      (
+        await apiRequest<ApiEnvelope<FeatureStatus[]>>('/tenants/features', {
+          accessToken,
+          tenantId,
+        })
+      ).data,
   });
 
   if (!membership || !['OWNER', 'MANAGER'].includes(membership.role)) {
@@ -63,9 +79,7 @@ export function SettingsManagement() {
         <div>
           <h1 className="text-2xl font-black">{tr('settings.permissionDenied')}</h1>
           <p className="mt-2 max-w-md text-sm text-ink-muted">
-            {membership
-              ? tr('settings.ownerOnlyHint')
-              : tr('settings.noRestaurantHint')}
+            {membership ? tr('settings.ownerOnlyHint') : tr('settings.noRestaurantHint')}
           </p>
         </div>
       </section>
@@ -78,26 +92,36 @@ export function SettingsManagement() {
     <>
       <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">{tr('settings.eyebrow')}</p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">{tr('settings.pageTitle')}</h1>
-          <p className="mt-2 text-sm text-ink-muted">
-            {tr('settings.pageDescription')}
+          <p className="text-xs font-black uppercase tracking-[.18em] text-brand">
+            {tr('settings.eyebrow')}
           </p>
+          <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
+            {tr('settings.pageTitle')}
+          </h1>
+          <p className="mt-2 text-sm text-ink-muted">{tr('settings.pageDescription')}</p>
         </div>
       </div>
 
       {notice && (
-        <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-900">
+        <div
+          role="status"
+          className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-bold text-emerald-900"
+        >
           {notice}
         </div>
       )}
 
       {tenant.isLoading && (
-        <p className="py-16 text-center text-sm font-bold text-ink-muted">{tr('settings.loading')}</p>
+        <p className="py-16 text-center text-sm font-bold text-ink-muted">
+          {tr('settings.loading')}
+        </p>
       )}
 
       {tenant.isError && (
-        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800">
+        <div
+          role="alert"
+          className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-800"
+        >
           {tr('settings.loadError')}
         </div>
       )}
@@ -206,11 +230,17 @@ function TenantIdentityCard({
           />
         </label>
       </div>
-      <div className="mt-5 rounded-xl border-2 border-dashed border-line p-6 text-center text-sm font-bold text-ink-muted">
-        {tr('settings.logoSoon')}
-      </div>
+      <TenantLogoCard
+        isOwner={isOwner}
+        accessToken={accessToken}
+        csrfToken={csrfToken}
+        tenantId={tenantId}
+      />
       {error && (
-        <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800">
+        <div
+          role="alert"
+          className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800"
+        >
           {error}
         </div>
       )}
@@ -228,9 +258,203 @@ function TenantIdentityCard({
 
       <div className="mt-6 rounded-xl p-5 text-white" style={{ background: colour }}>
         <p className="text-xs font-bold text-white/70">{tr('settings.livePreview')}</p>
-        <h2 className="mt-2 text-2xl font-black">{name || tr('settings.restaurantNameFallback')}</h2>
+        <h2 className="mt-2 text-2xl font-black">
+          {name || tr('settings.restaurantNameFallback')}
+        </h2>
         <p className="mt-1 text-sm text-white/80">{tr('settings.tagline')}</p>
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                            TenantLogoCard                                  */
+/* -------------------------------------------------------------------------- */
+
+function TenantLogoCard({
+  isOwner,
+  accessToken,
+  csrfToken,
+  tenantId,
+}: {
+  isOwner: boolean;
+  accessToken: string;
+  csrfToken: string | null;
+  tenantId: string;
+}) {
+  const { tr } = useLocale();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState<'upload' | 'remove' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const status = useQuery({
+    queryKey: ['tenant-logo-status', tenantId],
+    enabled: Boolean(accessToken && tenantId && isOwner),
+    queryFn: async () =>
+      (
+        await apiRequest<ApiEnvelope<LogoStatus>>('/tenants/current/logo/status', {
+          accessToken,
+          tenantId,
+        })
+      ).data,
+    refetchInterval: (query) =>
+      query.state.data && LOGO_PROCESSING_STATUSES.has(query.state.data.processingStatus)
+        ? 2000
+        : false,
+  });
+
+  if (!isOwner) {
+    return (
+      <div className="mt-5 rounded-xl border-2 border-dashed border-line p-6 text-center text-sm font-bold text-ink-muted">
+        {tr('settings.logoSoon')}
+      </div>
+    );
+  }
+
+  const logoStatus = status.data;
+  const processing = logoStatus ? LOGO_PROCESSING_STATUSES.has(logoStatus.processingStatus) : false;
+  const ready = logoStatus?.processingStatus === 'READY';
+  const rejected = logoStatus?.processingStatus === 'REJECTED';
+
+  async function pickFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || busy) return;
+    if (!LOGO_ALLOWED_TYPES.includes(file.type)) return setError(tr('settings.logoInvalidType'));
+    if (file.size > LOGO_MAX_BYTES) return setError(tr('settings.logoTooLarge'));
+    if (!logoStatus) return;
+    setBusy('upload');
+    setError(null);
+    try {
+      const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+      const sha256 = Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, '0'))
+        .join('');
+      const intent = await apiRequest<
+        ApiEnvelope<{
+          mediaObjectId: string;
+          uploadUrl: string;
+          fields: Record<string, string>;
+          tenantVersion: number;
+        }>
+      >('/tenants/current/logo/upload-intent', {
+        method: 'POST',
+        accessToken,
+        csrfToken,
+        tenantId,
+        body: {
+          contentType: file.type,
+          sizeBytes: file.size,
+          sha256,
+          crop: { x: 0, y: 0, width: 1, height: 1 },
+          expectedVersion: logoStatus.tenantVersion,
+        },
+      });
+      const form = new FormData();
+      Object.entries(intent.data.fields).forEach(([key, value]) => form.append(key, value));
+      form.append('file', file);
+      const uploaded = await fetch(intent.data.uploadUrl, { method: 'POST', body: form });
+      if (!uploaded.ok) throw new Error('logo upload transport failed');
+      await apiRequest('/tenants/current/logo/finalize', {
+        method: 'POST',
+        accessToken,
+        csrfToken,
+        tenantId,
+        body: {
+          mediaObjectId: intent.data.mediaObjectId,
+          expectedVersion: intent.data.tenantVersion,
+        },
+      });
+      await status.refetch();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : tr('settings.logoUploadError'));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeLogo() {
+    if (!logoStatus || busy) return;
+    setBusy('remove');
+    setError(null);
+    try {
+      await apiRequest('/tenants/current/logo', {
+        method: 'DELETE',
+        accessToken,
+        csrfToken,
+        tenantId,
+        body: { expectedVersion: logoStatus.tenantVersion },
+      });
+      await status.refetch();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : tr('settings.logoUploadError'));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mt-5 rounded-xl border border-black/[.07] p-5">
+      <input
+        ref={fileRef}
+        type="file"
+        accept={LOGO_ALLOWED_TYPES.join(',')}
+        className="hidden"
+        onChange={pickFile}
+      />
+      <div className="flex flex-wrap items-center gap-4">
+        {logoStatus?.logo ? (
+          <img
+            src={logoStatus.logo.thumbnail}
+            alt={tr('settings.logoTitle')}
+            className="size-20 rounded-xl border border-line bg-white object-cover"
+          />
+        ) : (
+          <div className="grid size-20 place-items-center rounded-xl border-2 border-dashed border-line text-xs font-black text-ink-muted">
+            256×256
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black">{tr('settings.logoTitle')}</p>
+          <p className="mt-1 text-xs font-bold text-ink-muted">{tr('settings.logoHint')}</p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={busy !== null || processing || !logoStatus}
+            className="min-h-11 rounded-xl bg-dark px-5 text-sm font-bold text-white disabled:opacity-50"
+          >
+            {ready ? tr('settings.logoReplace') : tr('settings.logoUpload')}
+          </button>
+          {logoStatus?.logo && (
+            <button
+              onClick={removeLogo}
+              disabled={busy !== null || processing}
+              className="min-h-11 rounded-xl border border-line px-5 text-sm font-bold disabled:opacity-50"
+            >
+              {tr('settings.logoRemove')}
+            </button>
+          )}
+        </div>
+      </div>
+      {processing && (
+        <p role="status" className="mt-3 text-sm font-bold text-brand">
+          {tr('settings.logoProcessing')}
+        </p>
+      )}
+      {rejected && (
+        <p className="mt-3 text-sm font-bold text-red-700">
+          {tr('settings.logoRejected', { reason: logoStatus?.rejectionReason ?? 'UNKNOWN' })}
+        </p>
+      )}
+      {error && (
+        <div
+          role="alert"
+          className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-800"
+        >
+          {error}
+        </div>
+      )}
     </div>
   );
 }
@@ -284,7 +508,9 @@ function FeaturesCard({
       <p className="mt-1 text-sm text-ink-muted">{tr('settings.featuresHint')}</p>
 
       {isLoading && (
-        <p className="py-8 text-center text-sm font-bold text-ink-muted">{tr('settings.featuresLoading')}</p>
+        <p className="py-8 text-center text-sm font-bold text-ink-muted">
+          {tr('settings.featuresLoading')}
+        </p>
       )}
 
       {!isLoading && features.length === 0 && (
@@ -309,7 +535,12 @@ function FeaturesCard({
               disabled={!isOwner || toggling === f.featureKey}
               role="switch"
               aria-checked={f.effective}
-              aria-label={tr('settings.toggleAria', { action: f.tenantEnabled ? tr('settings.toggleDisable') : tr('settings.toggleEnable'), feature: featureLabel(f.featureKey) })}
+              aria-label={tr('settings.toggleAria', {
+                action: f.tenantEnabled
+                  ? tr('settings.toggleDisable')
+                  : tr('settings.toggleEnable'),
+                feature: featureLabel(f.featureKey),
+              })}
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
                 f.effective ? 'bg-brand' : 'bg-slate-300'
               } disabled:cursor-not-allowed disabled:opacity-50`}

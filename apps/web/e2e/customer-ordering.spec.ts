@@ -23,7 +23,9 @@ test.describe('Customer ordering journey', () => {
 
   test('add item to cart and proceed to checkout', async ({ page, seed }) => {
     await page.goto(`/r/${seed.publicSlug}`);
-    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible({
+      timeout: 15_000,
+    });
 
     // Navigate to Drinks (Water has no required modifiers)
     await page.locator('nav[aria-label="Menu categories"] button', { hasText: 'Drinks' }).click();
@@ -37,7 +39,10 @@ test.describe('Customer ordering journey', () => {
     await expect(page.locator('button', { hasText: /Review order/ }).first()).toBeVisible();
 
     // Click review order
-    await page.locator('button', { hasText: /Review order/ }).first().click({ force: true });
+    await page
+      .locator('button', { hasText: /Review order/ })
+      .first()
+      .click({ force: true });
 
     // Should navigate to checkout
     await page.waitForURL(`**/r/${seed.publicSlug}/checkout`, { timeout: 10_000 });
@@ -57,12 +62,18 @@ test.describe('Customer ordering journey', () => {
               pickupEnabled: true,
               availablePaymentMethods: ['BANK_TRANSFER', 'TELEBIRR'],
             },
-            lines: [{ variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 2 }],
+            lines: [
+              { variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 2 },
+            ],
             quotedSubtotal: '10000',
           }),
         );
       },
-      { publicSlug: seed.publicSlug, branchId: seed.branchId, simpleVariantId: seed.simpleVariantId },
+      {
+        publicSlug: seed.publicSlug,
+        branchId: seed.branchId,
+        simpleVariantId: seed.simpleVariantId,
+      },
     );
 
     await page.goto(`/r/${seed.publicSlug}/checkout`);
@@ -85,12 +96,18 @@ test.describe('Customer ordering journey', () => {
               pickupEnabled: true,
               availablePaymentMethods: ['BANK_TRANSFER', 'TELEBIRR'],
             },
-            lines: [{ variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 1 }],
+            lines: [
+              { variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 1 },
+            ],
             quotedSubtotal: '5000',
           }),
         );
       },
-      { publicSlug: seed.publicSlug, branchId: seed.branchId, simpleVariantId: seed.simpleVariantId },
+      {
+        publicSlug: seed.publicSlug,
+        branchId: seed.branchId,
+        simpleVariantId: seed.simpleVariantId,
+      },
     );
 
     await page.goto(`/r/${seed.publicSlug}/checkout`);
@@ -114,12 +131,18 @@ test.describe('Customer ordering journey', () => {
               pickupEnabled: true,
               availablePaymentMethods: ['BANK_TRANSFER', 'TELEBIRR'],
             },
-            lines: [{ variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 1 }],
+            lines: [
+              { variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 1 },
+            ],
             quotedSubtotal: '5000',
           }),
         );
       },
-      { publicSlug: seed.publicSlug, branchId: seed.branchId, simpleVariantId: seed.simpleVariantId },
+      {
+        publicSlug: seed.publicSlug,
+        branchId: seed.branchId,
+        simpleVariantId: seed.simpleVariantId,
+      },
     );
 
     await page.goto(`/r/${seed.publicSlug}/checkout`);
@@ -134,11 +157,14 @@ test.describe('Customer ordering journey', () => {
     await page.locator('button:has-text("Place order")').click();
 
     // Either redirects to pay page or shows an error alert
-    await page.waitForFunction(() => {
-      const btn = document.querySelector('button[disabled]');
-      const alert = document.querySelector('[role="alert"]');
-      return btn || alert || window.location.pathname.includes('/pay/');
-    }, { timeout: 20_000 });
+    await page.waitForFunction(
+      () => {
+        const btn = document.querySelector('button[disabled]');
+        const alert = document.querySelector('[role="alert"]');
+        return btn || alert || window.location.pathname.includes('/pay/');
+      },
+      { timeout: 20_000 },
+    );
   });
 
   test('submit pickup order with Telebirr', async ({ page, seed }) => {
@@ -154,12 +180,18 @@ test.describe('Customer ordering journey', () => {
               pickupEnabled: true,
               availablePaymentMethods: ['BANK_TRANSFER', 'TELEBIRR'],
             },
-            lines: [{ variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 1 }],
+            lines: [
+              { variantId: simpleVariantId, name: 'Water', basePriceMinor: '5000', quantity: 1 },
+            ],
             quotedSubtotal: '5000',
           }),
         );
       },
-      { publicSlug: seed.publicSlug, branchId: seed.branchId, simpleVariantId: seed.simpleVariantId },
+      {
+        publicSlug: seed.publicSlug,
+        branchId: seed.branchId,
+        simpleVariantId: seed.simpleVariantId,
+      },
     );
 
     await page.goto(`/r/${seed.publicSlug}/checkout`);
@@ -174,11 +206,14 @@ test.describe('Customer ordering journey', () => {
     await page.locator('button:has-text("Place order")').click();
 
     // Wait for either redirect, error, or button to become disabled (submitting state)
-    await page.waitForFunction(() => {
-      const btn = document.querySelector('button[disabled]');
-      const alert = document.querySelector('[role="alert"]');
-      return btn || alert || window.location.pathname.includes('/pay/');
-    }, { timeout: 20_000 });
+    await page.waitForFunction(
+      () => {
+        const btn = document.querySelector('button[disabled]');
+        const alert = document.querySelector('[role="alert"]');
+        return btn || alert || window.location.pathname.includes('/pay/');
+      },
+      { timeout: 20_000 },
+    );
   });
 
   test('order tracking page renders', async ({ page, seed }) => {
@@ -223,5 +258,50 @@ test.describe('Customer ordering journey', () => {
     // Add another
     await waterCard.getByRole('button', { name: 'Add' }).click();
     await expect(page.locator('text=Review order · 2 items')).toBeVisible();
+  });
+});
+
+test.describe('Customer PWA branding', () => {
+  test('pickup page links a per-restaurant install manifest', async ({ page, request, seed }) => {
+    await page.goto(`/r/${seed.publicSlug}`);
+    await expect(page.locator('h1')).toContainText('Choose your meal');
+
+    const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
+    expect(manifestHref).toBe(`/r/${seed.publicSlug}/manifest.webmanifest`);
+
+    const response = await request.get(manifestHref!);
+    expect(response.ok()).toBeTruthy();
+    expect(response.headers()['content-type']).toContain('application/manifest+json');
+    expect(response.headers()['cache-control']).toContain('max-age=300');
+
+    const manifest = await response.json();
+    expect(manifest.name).toBeTruthy();
+    expect(manifest.start_url).toBe(`/r/${seed.publicSlug}`);
+    expect(manifest.id).toBe(`/r/${seed.publicSlug}`);
+    expect(manifest.scope).toBe(`/r/${seed.publicSlug}/`);
+    expect(manifest.display).toBe('standalone');
+    expect(Array.isArray(manifest.icons)).toBe(true);
+    expect(manifest.icons.length).toBeGreaterThan(0);
+    expect(manifest.icons[0]).toHaveProperty('purpose');
+  });
+
+  test('offline banner appears while the connection is down', async ({ page, context, seed }) => {
+    await page.goto(`/r/${seed.publicSlug}`);
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
+
+    const banner = page.getByRole('status').filter({ hasText: 'offline' });
+    await expect(banner).toHaveCount(0);
+
+    await context.setOffline(true);
+    await expect(banner).toBeVisible({ timeout: 10_000 });
+
+    await context.setOffline(false);
+    await expect(banner).toHaveCount(0, { timeout: 10_000 });
+  });
+
+  test('install button stays hidden until a restaurant logo exists', async ({ page, seed }) => {
+    await page.goto(`/r/${seed.publicSlug}`);
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add to home screen' })).toHaveCount(0);
   });
 });

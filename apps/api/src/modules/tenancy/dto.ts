@@ -1,5 +1,20 @@
-import { IsString, IsNotEmpty, IsOptional, MinLength, MaxLength, Matches } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  MinLength,
+  MaxLength,
+  Matches,
+  IsInt,
+  IsNumber,
+  Min,
+  Max,
+  IsIn,
+  IsDefined,
+  ValidateNested,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@example.com' })
@@ -94,7 +109,11 @@ export class InviteMemberDto {
 }
 
 export class UpdateMembershipDto {
-  @ApiProperty({ example: 'MANAGER', enum: ['OWNER', 'MANAGER', 'CASHIER', 'KITCHEN_STAFF'], required: false })
+  @ApiProperty({
+    example: 'MANAGER',
+    enum: ['OWNER', 'MANAGER', 'CASHIER', 'KITCHEN_STAFF'],
+    required: false,
+  })
   @IsString()
   role?: string;
 
@@ -111,4 +130,41 @@ export class ReplaceBranchAssignmentsDto {
 export class SetFeatureDto {
   @ApiProperty({ example: true })
   enabled!: boolean;
+}
+
+export class LogoCropDto {
+  @ApiProperty({ minimum: 0, maximum: 1 }) @IsNumber() @Min(0) @Max(1) x!: number;
+  @ApiProperty({ minimum: 0, maximum: 1 }) @IsNumber() @Min(0) @Max(1) y!: number;
+  @ApiProperty({ minimum: 0, maximum: 1 }) @IsNumber() @Min(0.01) @Max(1) width!: number;
+  @ApiProperty({ minimum: 0, maximum: 1 }) @IsNumber() @Min(0.01) @Max(1) height!: number;
+  @ApiPropertyOptional({ enum: [0, 90, 180, 270] })
+  @IsIn([0, 90, 180, 270])
+  @IsOptional()
+  rotation?: number;
+}
+
+export class CreateLogoUploadDto {
+  @ApiProperty({ enum: ['image/jpeg', 'image/png', 'image/webp'] })
+  @IsIn(['image/jpeg', 'image/png', 'image/webp'])
+  contentType!: string;
+
+  @ApiProperty({ minimum: 1, maximum: 10485760 })
+  @IsInt()
+  @Min(1)
+  @Max(10 * 1024 * 1024)
+  sizeBytes!: number;
+  @ApiProperty({ description: 'Lowercase SHA-256 hex digest' })
+  @Matches(/^[a-f0-9]{64}$/)
+  sha256!: string;
+  @ApiProperty() @IsDefined() @ValidateNested() @Type(() => LogoCropDto) crop!: LogoCropDto;
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedVersion!: number;
+}
+
+export class FinalizeLogoDto {
+  @ApiProperty() @IsString() mediaObjectId!: string;
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedVersion!: number;
+}
+
+export class RemoveLogoDto {
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) expectedVersion!: number;
 }
