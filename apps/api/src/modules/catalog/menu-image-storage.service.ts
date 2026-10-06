@@ -45,12 +45,14 @@ export class MenuImageStorageService {
         { 'Content-Type': params.contentType },
         ['content-length-range', 1, MAX_BYTES],
         { 'x-amz-checksum-sha256': checksum },
+        { 'x-amz-meta-sha256': params.sha256 },
         { 'x-amz-meta-tenant-id': params.tenantId },
         { 'x-amz-meta-menu-item-id': params.itemId },
       ],
       Fields: {
         'Content-Type': params.contentType,
         'x-amz-checksum-sha256': checksum,
+        'x-amz-meta-sha256': params.sha256,
         'x-amz-meta-tenant-id': params.tenantId,
         'x-amz-meta-menu-item-id': params.itemId,
       },
@@ -63,7 +65,9 @@ export class MenuImageStorageService {
     try {
       const head = await this.client.send(new HeadObjectCommand({ Bucket: bucket, Key: params.objectKey }));
       const checksum = head.ChecksumSHA256 ? Buffer.from(head.ChecksumSHA256, 'base64').toString('hex') : null;
-      if (head.ContentLength !== params.sizeBytes || head.ContentType !== params.contentType || checksum !== params.sha256) {
+      const metadataChecksum = head.Metadata?.sha256?.toLowerCase() ?? null;
+      const observedChecksum = checksum ?? metadataChecksum;
+      if (head.ContentLength !== params.sizeBytes || head.ContentType !== params.contentType || observedChecksum !== params.sha256) {
         throw new BadRequestException('Uploaded image does not match its upload intent');
       }
     } catch (error) {
