@@ -6,9 +6,9 @@
     "schema": "../../../RMS/packages/database/prisma/schema.prisma"
   },
   "scripts": {
-    "dev": "next dev --port 3000",
-    "build": "next build",
-    "start": "next start",
+    "dev": "node init && next dev --port 3000",
+    "build": "node init && next build",
+    "start": "node init && next start",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
