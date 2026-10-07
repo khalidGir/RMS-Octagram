@@ -6,9 +6,9 @@
     "schema": "../../../RMS/packages/database/prisma/schema.prisma"
   },
   "scripts": {
-    "dev": "next dev --port 3000",
+    "dev": "node api.js && next dev --port 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "node api.js && next start",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit",
     "icons": "node scripts/generate-pwa-icons.mjs",
