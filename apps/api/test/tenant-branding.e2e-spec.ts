@@ -609,6 +609,28 @@ describe('Tenant Branding Logo (e2e)', () => {
       expect(third.body.message).toContain('Too many active logo uploads');
     });
 
+    it('holds the cap under genuinely concurrent intents (count+create race)', async () => {
+      await expirePendingIntents();
+      const tenantRow = (await prisma.tenant.findUnique({ where: { id: tenantId } }))!;
+      const results = await Promise.all(
+        Array.from({ length: 4 }, () => uploadIntent(ownerToken, tenantRow.version)),
+      );
+      const statuses = results.map((r) => r.status).sort((a, b) => a - b);
+      expect(statuses).toEqual([201, 201, 409, 409]);
+      for (const conflict of results.filter((r) => r.status === 409)) {
+        expect(conflict.body.message).toContain('Too many active logo uploads');
+      }
+      const active = await prisma.mediaObject.count({
+        where: {
+          tenantId,
+          purpose: 'TENANT_LOGO',
+          processingStatus: { in: ['PENDING_UPLOAD', 'PENDING_PROCESSING', 'PROCESSING'] },
+          uploadExpiresAt: { gt: new Date() },
+        },
+      });
+      expect(active).toBe(2);
+    });
+
     it('rejects a stale expectedVersion on upload-intent without creating rows', async () => {
       await expirePendingIntents();
       const before = await prisma.mediaObject.count({

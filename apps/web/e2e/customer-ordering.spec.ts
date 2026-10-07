@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 
 test.describe('Customer ordering journey', () => {
@@ -278,11 +279,49 @@ test.describe('Customer PWA branding', () => {
     expect(manifest.name).toBeTruthy();
     expect(manifest.start_url).toBe(`/r/${seed.publicSlug}`);
     expect(manifest.id).toBe(`/r/${seed.publicSlug}`);
-    expect(manifest.scope).toBe(`/r/${seed.publicSlug}/`);
+    // Scope must contain start_url (W3C prefix match); a trailing slash would
+    // exclude the canonical no-slash URL and fall back to scope `/r/`.
+    expect(manifest.scope).toBe(`/r/${seed.publicSlug}`);
+    expect(manifest.start_url.startsWith(manifest.scope)).toBe(true);
     expect(manifest.display).toBe('standalone');
     expect(Array.isArray(manifest.icons)).toBe(true);
     expect(manifest.icons.length).toBeGreaterThan(0);
     expect(manifest.icons[0]).toHaveProperty('purpose');
+  });
+
+  test('QR table link serves the same aligned install manifest as the restaurant link', async ({
+    page,
+    request,
+    seed,
+    ownerToken,
+  }) => {
+    const rotate = await request.post(
+      `${seed.api}/branches/${seed.branchId}/tables/${seed.tableId}/qr-token/rotate`,
+      {
+        headers: {
+          Authorization: `Bearer ${ownerToken.accessToken}`,
+          'x-tenant-id': seed.tenantId,
+          'x-csrf-token': ownerToken.csrfToken,
+          'Content-Type': 'application/json',
+        },
+        data: { reason: 'e2e manifest check' },
+      },
+    );
+    expect(rotate.ok()).toBeTruthy();
+    const raw = (await rotate.json()).data.raw as string;
+    expect(raw).toBeTruthy();
+
+    await page.goto(`/o/${raw}`);
+    const href = await page.locator('link[rel="manifest"]').getAttribute('href');
+    expect(href).toBe(`/r/${seed.publicSlug}/manifest.webmanifest`);
+
+    const manifestResponse = await request.get(href!);
+    expect(manifestResponse.ok()).toBeTruthy();
+    const manifest = await manifestResponse.json();
+    expect(manifest.start_url).toBe(`/r/${seed.publicSlug}`);
+    expect(manifest.scope).toBe(`/r/${seed.publicSlug}`);
+    expect(manifest.id).toBe(`/r/${seed.publicSlug}`);
+    expect(JSON.stringify(manifest)).not.toContain(raw);
   });
 
   test('offline banner appears while the connection is down', async ({ page, context, seed }) => {
@@ -303,5 +342,190 @@ test.describe('Customer PWA branding', () => {
     await page.goto(`/r/${seed.publicSlug}`);
     await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Add to home screen' })).toHaveCount(0);
+  });
+});
+
+test.describe('Real service worker behavior', () => {
+  // Auto-registration is production-only (service-worker-registration.tsx),
+  // so dev tests register the real /sw.js explicitly and then assert on what
+  // the browser's Cache Storage actually contains.
+  async function registerRealServiceWorker(page: Page) {
+    await page.evaluate(() => navigator.serviceWorker.register('/sw.js'));
+    await expect
+      .poll(
+        async () =>
+          page.evaluate(async () => {
+            const registration = await navigator.serviceWorker.getRegistration();
+            return Boolean(registration?.active);
+          }),
+        { timeout: 30_000 },
+      )
+      .toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null), {
+        timeout: 30_000,
+      })
+      .toBe(true);
+  }
+
+  async function cacheUrls(page: Page): Promise<string[]> {
+    return page.evaluate(async () => {
+      const names = await caches.keys();
+      const urls: string[] = [];
+      for (const name of names) {
+        const cache = await caches.open(name);
+        for (const request of await cache.keys()) urls.push(request.url);
+      }
+      return urls;
+    });
+  }
+
+  test('caches the menu but never stores order, receipt, or signed-image responses', async ({
+    page,
+    seed,
+  }) => {
+    await page.goto(`/r/${seed.publicSlug}`);
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
+    await registerRealServiceWorker(page);
+
+    // Re-load under SW control so the customer navigation itself is cached.
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
+
+    // Warm the SW caches: menu API (allowed), public order + receipt
+    // (must stay network-only), and signed URLs (must stay network-only).
+    // The app calls the API cross-origin (NEXT_PUBLIC_API_URL); same-origin
+    // paths would hit the Next server and 404. The SW matches on pathname, so
+    // these requests still route through its cache policy.
+    const apiBase = process.env.API_URL ?? 'http://localhost:3001';
+    const menuStatus = await page.evaluate(
+      ({ apiBase, slug }) =>
+        fetch(`${apiBase}/api/v1/public/restaurants/${slug}/menu`, { credentials: 'include' }).then(
+          (response) => response.status,
+        ),
+      { apiBase, slug: seed.publicSlug },
+    );
+    expect(menuStatus).toBe(200);
+
+    await page.evaluate(
+      ({ apiBase, token }) =>
+        Promise.all([
+          fetch(`${apiBase}/api/v1/public/orders/${token}`, { credentials: 'include' }).then(
+            (response) => response.status,
+          ),
+          fetch(`${apiBase}/api/v1/public/orders/${token}/receipt`, {
+            credentials: 'include',
+          }).then((response) => response.status),
+        ]),
+      { apiBase, token: seed.trackingToken },
+    );
+
+    await page.evaluate(() =>
+      Promise.all([
+        fetch('/media/proof.png?X-Amz-Signature=deadbeef').catch(() => null),
+        new Promise((resolve) => {
+          const image = new Image();
+          image.onload = image.onerror = () => resolve(null);
+          image.src = 'https://cdn.example.test/logos/token/proof.png?X-Amz-Signature=deadbeef';
+        }),
+      ]),
+    );
+
+    const urls = await cacheUrls(page);
+    expect(
+      urls.some((url) => url.includes('/api/v1/public/restaurants/') && url.includes('/menu')),
+    ).toBe(true);
+    expect(urls.some((url) => url.includes('/r/') && url.includes(seed.publicSlug))).toBe(true);
+    expect(urls.some((url) => url.includes('/api/v1/public/orders/'))).toBe(false);
+    expect(urls.some((url) => url.includes('X-Amz-'))).toBe(false);
+  });
+
+  test('reopens the menu offline from the SW cache', async ({ page, context, seed }) => {
+    await page.goto(`/r/${seed.publicSlug}`);
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
+    await registerRealServiceWorker(page);
+
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
+    // Warm the exact request shape the app uses (cross-origin, credentialed)
+    // so the offline cache lookup matches the client's fetch.
+    const warmStatus = await page.evaluate(
+      ({ apiBase, slug }) =>
+        fetch(`${apiBase}/api/v1/public/restaurants/${slug}/menu`, { credentials: 'include' }).then(
+          (response) => response.status,
+        ),
+      { apiBase: process.env.API_URL ?? 'http://localhost:3001', slug: seed.publicSlug },
+    );
+    expect(warmStatus).toBe(200);
+    // Fail fast if the SW did not store the menu response before going offline.
+    expect(
+      await page.evaluate(async (slug) => {
+        const cache = await caches.open('rms-shell-v4');
+        const keys = await cache.keys();
+        return keys.some(
+          (request) =>
+            request.url.includes('/api/v1/public/restaurants/') && request.url.includes(slug),
+        );
+      }, seed.publicSlug),
+    ).toBe(true);
+
+    await context.setOffline(true);
+    try {
+      await page.goto(`/r/${seed.publicSlug}`, { timeout: 20_000 });
+      await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible({
+        timeout: 15_000,
+      });
+      // SW-served documents carry no network transfer.
+      const transferSize = await page.evaluate(
+        () => performance.getEntriesByType('navigation')[0]?.transferSize ?? -1,
+      );
+      expect(transferSize).toBe(0);
+    } finally {
+      await context.setOffline(false);
+    }
+  });
+
+  test('install entry criteria hold from both the restaurant link and the QR table link', async ({
+    page,
+    request,
+    seed,
+    ownerToken,
+  }) => {
+    await page.goto(`/r/${seed.publicSlug}`);
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
+    await registerRealServiceWorker(page);
+
+    const restaurantManifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
+    expect(restaurantManifestHref).toBe(`/r/${seed.publicSlug}/manifest.webmanifest`);
+    const restaurantManifest = await (await request.get(restaurantManifestHref!)).json();
+    expect(restaurantManifest.start_url).toBe(restaurantManifest.scope);
+    const startUrl = await request.get(restaurantManifest.start_url);
+    expect(startUrl.ok()).toBeTruthy();
+
+    // Same install criteria through the QR table entry point.
+    const rotate = await request.post(
+      `${seed.api}/branches/${seed.branchId}/tables/${seed.tableId}/qr-token/rotate`,
+      {
+        headers: {
+          Authorization: `Bearer ${ownerToken.accessToken}`,
+          'x-tenant-id': seed.tenantId,
+          'x-csrf-token': ownerToken.csrfToken,
+          'Content-Type': 'application/json',
+        },
+        data: { reason: 'e2e install criteria' },
+      },
+    );
+    expect(rotate.ok(), JSON.stringify(await rotate.json())).toBeTruthy();
+    const raw = (await rotate.json()).data.raw as string;
+
+    await page.goto(`/o/${raw}`);
+    const qrManifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
+    expect(qrManifestHref).toBe(`/r/${seed.publicSlug}/manifest.webmanifest`);
+    // The SW registered at / controls /o/ too, so both entry points can install.
+    await expect
+      .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null), {
+        timeout: 15_000,
+      })
+      .toBe(true);
   });
 });

@@ -45,35 +45,43 @@ export class BrandingService {
     const tenant = await this.loadTenant(tenantId);
     if (tenant.version !== body.expectedVersion)
       throw new ConflictException('Restaurant branding changed; refresh and retry');
-    const activeIntents = await this.prisma.mediaObject.count({
-      where: {
-        tenantId,
-        purpose: 'TENANT_LOGO',
-        processingStatus: { in: ['PENDING_UPLOAD', 'PENDING_PROCESSING', 'PROCESSING'] },
-        uploadExpiresAt: { gt: new Date() },
-      },
-    });
-    if (activeIntents >= 2) throw new ConflictException('Too many active logo uploads');
 
     const expiresAt = new Date(Date.now() + 5 * 60_000);
-    const media = await this.prisma.mediaObject.create({
-      data: {
-        tenantId,
-        branchId: null,
-        paymentId: null,
-        targetMenuItemId: null,
-        purpose: 'TENANT_LOGO',
-        bucket: this.storage.bucket,
-        objectKey: '',
-        contentType: body.contentType,
-        sizeBytes: BigInt(body.sizeBytes),
-        sha256: body.sha256,
-        scanStatus: 'PENDING_UPLOAD',
-        processingStatus: 'PENDING_UPLOAD',
-        cropData: body.crop as unknown as Prisma.InputJsonValue,
-        uploadExpiresAt: expiresAt,
-        uploadedByUserId: actorUserId,
-      },
+    // Count and insert run in one transaction behind a per-tenant advisory
+    // lock: without it, two concurrent requests can both observe a count
+    // below the cap and both insert, exceeding the limit.
+    const media = await this.prisma.$transaction(async (tx) => {
+      // `IS NOT NULL` yields a boolean Prisma can deserialize (the lock call
+      // itself returns void).
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`logo-intent:${tenantId}`})::bigint) IS NOT NULL`;
+      const activeIntents = await tx.mediaObject.count({
+        where: {
+          tenantId,
+          purpose: 'TENANT_LOGO',
+          processingStatus: { in: ['PENDING_UPLOAD', 'PENDING_PROCESSING', 'PROCESSING'] },
+          uploadExpiresAt: { gt: new Date() },
+        },
+      });
+      if (activeIntents >= 2) throw new ConflictException('Too many active logo uploads');
+      return tx.mediaObject.create({
+        data: {
+          tenantId,
+          branchId: null,
+          paymentId: null,
+          targetMenuItemId: null,
+          purpose: 'TENANT_LOGO',
+          bucket: this.storage.bucket,
+          objectKey: '',
+          contentType: body.contentType,
+          sizeBytes: BigInt(body.sizeBytes),
+          sha256: body.sha256,
+          scanStatus: 'PENDING_UPLOAD',
+          processingStatus: 'PENDING_UPLOAD',
+          cropData: body.crop as unknown as Prisma.InputJsonValue,
+          uploadExpiresAt: expiresAt,
+          uploadedByUserId: actorUserId,
+        },
+      });
     });
     // If the storage layer rejects the request (type/size), the already-created
     // intent row must not linger: delete it before propagating so rejected
@@ -198,6 +206,7 @@ export class BrandingService {
       mediaObjectId: media?.id ?? null,
       processingStatus: media?.processingStatus ?? 'NONE',
       rejectionReason: media?.rejectionReason ?? null,
+      uploadExpiresAt: media?.uploadExpiresAt ?? null,
       logo: this.view(media),
       tenantVersion: tenant.version,
     };

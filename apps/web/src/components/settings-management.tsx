@@ -26,8 +26,10 @@ interface FeatureStatus {
   effective: boolean;
 }
 interface LogoStatus {
+  mediaObjectId: string | null;
   processingStatus: string;
   rejectionReason: string | null;
+  uploadExpiresAt: string | null;
   logo: TenantLogoView | null;
   tenantVersion: number;
 }
@@ -35,20 +37,26 @@ interface LogoStatus {
 const LOGO_PROCESSING_STATUSES = new Set(['PENDING_UPLOAD', 'PENDING_PROCESSING', 'PROCESSING']);
 const LOGO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const LOGO_MAX_BYTES = 10 * 1024 * 1024;
-const ACTIVE_MEDIA_STORAGE_KEY = 'rms:logo-active-media';
 
-function readStoredActiveMediaId(): string | null {
+function activeMediaStorageKey(tenantId: string): string {
+  return `rms:logo-active-media:${tenantId}`;
+}
+
+function readStoredActiveMediaId(tenantId: string): string | null {
   try {
-    return sessionStorage.getItem(ACTIVE_MEDIA_STORAGE_KEY);
+    return sessionStorage.getItem(activeMediaStorageKey(tenantId));
   } catch {
     return null;
   }
 }
 
-function storeActiveMediaId(id: string | null): void {
+function storeActiveMediaId(tenantId: string, id: string | null): void {
   try {
-    if (id) sessionStorage.setItem(ACTIVE_MEDIA_STORAGE_KEY, id);
-    else sessionStorage.removeItem(ACTIVE_MEDIA_STORAGE_KEY);
+    const key = activeMediaStorageKey(tenantId);
+    // Drop the pre-tenant-scoped key so a stale id cannot resurrect.
+    sessionStorage.removeItem('rms:logo-active-media');
+    if (id) sessionStorage.setItem(key, id);
+    else sessionStorage.removeItem(key);
   } catch {
     /* Storage unavailable: polling still works for the current visit. */
   }
@@ -289,7 +297,7 @@ function TenantIdentityCard({
 /*                            TenantLogoCard                                  */
 /* -------------------------------------------------------------------------- */
 
-function TenantLogoCard({
+export function TenantLogoCard({
   isOwner,
   accessToken,
   csrfToken,
@@ -304,29 +312,42 @@ function TenantLogoCard({
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<'upload' | 'remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // While an upload is in flight, status must be polled for THAT media object:
-  // the attached logo still points at the old image (or none) until the worker
-  // swaps it in, so querying without an id would miss the processing state.
+  // In-memory id of the upload started this visit; persisted to sessionStorage
+  // only after finalize so a crash mid-upload cannot leave a stuck key.
   const [activeMediaId, setActiveMediaId] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = readStoredActiveMediaId();
+    const stored = readStoredActiveMediaId(tenantId);
     if (stored) setActiveMediaId(stored);
-  }, []);
+  }, [tenantId]);
 
-  const status = useQuery({
-    queryKey: ['tenant-logo-status', tenantId, activeMediaId ?? 'attached'],
+  // Two queries: the attached logo (thumbnail, remove button, CAS version)
+  // stays visible while a replacement is in flight; the active upload's
+  // query drives the processing/rejected messaging.
+  const attachedStatus = useQuery({
+    queryKey: ['tenant-logo-status', tenantId, 'attached'],
     enabled: Boolean(accessToken && tenantId && isOwner),
     queryFn: async () =>
       (
+        await apiRequest<ApiEnvelope<LogoStatus>>('/tenants/current/logo/status', {
+          accessToken,
+          tenantId,
+        })
+      ).data,
+    refetchInterval: (query) =>
+      query.state.data && LOGO_PROCESSING_STATUSES.has(query.state.data.processingStatus)
+        ? 2000
+        : false,
+  });
+
+  const activeStatus = useQuery({
+    queryKey: ['tenant-logo-status', tenantId, activeMediaId],
+    enabled: Boolean(accessToken && tenantId && isOwner && activeMediaId),
+    queryFn: async () =>
+      (
         await apiRequest<ApiEnvelope<LogoStatus>>(
-          `/tenants/current/logo/status${
-            activeMediaId ? `?mediaObjectId=${encodeURIComponent(activeMediaId)}` : ''
-          }`,
-          {
-            accessToken,
-            tenantId,
-          },
+          `/tenants/current/logo/status?mediaObjectId=${encodeURIComponent(activeMediaId!)}`,
+          { accessToken, tenantId },
         )
       ).data,
     refetchInterval: (query) =>
@@ -335,14 +356,37 @@ function TenantLogoCard({
         : false,
   });
 
-  // The in-flight upload finished processing: drop it so the query returns to
-  // the attached-logo view (which now points at this media object).
+  function clearActiveUpload() {
+    setActiveMediaId(null);
+    storeActiveMediaId(tenantId, null);
+  }
+
+  const activeData = activeMediaId ? activeStatus.data : undefined;
+
+  // Recovery: once processing ends (READY), fall back to the attached view
+  // (refetched so the new derivatives show); a stored id that no longer
+  // resolves, or whose PENDING_UPLOAD window has expired, is dropped so the
+  // controls cannot get stuck.
   useEffect(() => {
-    if (activeMediaId && status.data?.processingStatus === 'READY') {
-      setActiveMediaId(null);
-      storeActiveMediaId(null);
+    if (!activeData) return;
+    if (activeData.processingStatus === 'READY') {
+      clearActiveUpload();
+      attachedStatus.refetch();
+      return;
     }
-  }, [activeMediaId, status.data?.processingStatus]);
+    if (activeData.processingStatus === 'NONE') {
+      clearActiveUpload();
+      return;
+    }
+    if (
+      activeData.processingStatus === 'PENDING_UPLOAD' &&
+      activeData.uploadExpiresAt &&
+      Date.parse(activeData.uploadExpiresAt) < Date.now()
+    ) {
+      clearActiveUpload();
+      setError(tr('settings.logoUploadError'));
+    }
+  }, [activeData, tenantId]);
 
   if (!isOwner) {
     return (
@@ -352,15 +396,15 @@ function TenantLogoCard({
     );
   }
 
-  const logoStatus = status.data;
-  const processing = logoStatus ? LOGO_PROCESSING_STATUSES.has(logoStatus.processingStatus) : false;
-  const ready = logoStatus?.processingStatus === 'READY';
-  const rejected = logoStatus?.processingStatus === 'REJECTED';
-
-  function setActiveUpload(id: string | null) {
-    setActiveMediaId(id);
-    storeActiveMediaId(id);
-  }
+  const logoStatus = attachedStatus.data;
+  const activeProcessing = activeData
+    ? LOGO_PROCESSING_STATUSES.has(activeData.processingStatus)
+    : false;
+  const processing =
+    activeProcessing ||
+    (logoStatus ? LOGO_PROCESSING_STATUSES.has(logoStatus.processingStatus) : false);
+  const rejected = activeData?.processingStatus === 'REJECTED';
+  const hasLogo = Boolean(logoStatus?.logo);
 
   async function pickFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -396,9 +440,9 @@ function TenantLogoCard({
           expectedVersion: logoStatus.tenantVersion,
         },
       });
-      // Follow this upload's media object from here on (query key changes,
-      // which fetches its status immediately).
-      setActiveUpload(intent.data.mediaObjectId);
+      // Follow this upload's media object for polling (in-memory only until
+      // finalize succeeds — a failed upload must not persist a stuck key).
+      setActiveMediaId(intent.data.mediaObjectId);
       const form = new FormData();
       Object.entries(intent.data.fields).forEach(([key, value]) => form.append(key, value));
       form.append('file', file);
@@ -414,9 +458,11 @@ function TenantLogoCard({
           expectedVersion: intent.data.tenantVersion,
         },
       });
+      // Finalized: persist so a refresh resumes tracking this upload.
+      storeActiveMediaId(tenantId, intent.data.mediaObjectId);
     } catch (err) {
       // The intent is unusable now; fall back to the attached-logo view.
-      setActiveUpload(null);
+      clearActiveUpload();
       setError(err instanceof ApiError ? err.message : tr('settings.logoUploadError'));
     } finally {
       setBusy(null);
@@ -435,8 +481,8 @@ function TenantLogoCard({
         tenantId,
         body: { expectedVersion: logoStatus.tenantVersion },
       });
-      setActiveUpload(null);
-      await status.refetch();
+      clearActiveUpload();
+      await attachedStatus.refetch();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : tr('settings.logoUploadError'));
     } finally {
@@ -475,7 +521,7 @@ function TenantLogoCard({
             disabled={busy !== null || processing || !logoStatus}
             className="min-h-11 rounded-xl bg-dark px-5 text-sm font-bold text-white disabled:opacity-50"
           >
-            {ready ? tr('settings.logoReplace') : tr('settings.logoUpload')}
+            {hasLogo ? tr('settings.logoReplace') : tr('settings.logoUpload')}
           </button>
           {logoStatus?.logo && (
             <button
@@ -495,7 +541,7 @@ function TenantLogoCard({
       )}
       {rejected && (
         <p className="mt-3 text-sm font-bold text-red-700">
-          {tr('settings.logoRejected', { reason: logoStatus?.rejectionReason ?? 'UNKNOWN' })}
+          {tr('settings.logoRejected', { reason: activeData?.rejectionReason ?? 'UNKNOWN' })}
         </p>
       )}
       {error && (

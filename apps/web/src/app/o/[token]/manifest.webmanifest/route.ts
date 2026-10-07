@@ -4,6 +4,8 @@ import {
   buildTenantManifest,
   MANIFEST_CACHE_CONTROL,
   MANIFEST_CONTENT_TYPE,
+  restaurantManifestTargets,
+  ROOT_MANIFEST_TARGETS,
 } from '@/lib/tenant-manifest';
 import type { PublicTableContext } from '@/lib/types';
 
@@ -41,9 +43,7 @@ export async function GET(
   return manifestResponse(
     buildTenantManifest(
       { name: context.tenant.name, logo: context.logo },
-      slug
-        ? { startUrl: `/r/${slug}`, id: `/r/${slug}`, scope: `/r/${slug}/` }
-        : { startUrl: '/', id: '/', scope: '/' },
+      slug ? restaurantManifestTargets(slug) : ROOT_MANIFEST_TARGETS,
     ),
   );
 }

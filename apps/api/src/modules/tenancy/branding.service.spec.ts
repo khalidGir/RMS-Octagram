@@ -35,6 +35,19 @@ describe('BrandingService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default interactive-transaction runner: the upload-intent path takes a
+    // per-tenant advisory lock, then counts and creates inside the callback.
+    prisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        $queryRaw: vi.fn().mockResolvedValue([{ locked: true }]),
+        mediaObject: {
+          count: prisma.mediaObject.count,
+          create: prisma.mediaObject.create,
+          updateMany: prisma.mediaObject.updateMany,
+        },
+        outboxEvent: { create: prisma.outboxEvent.create },
+      }),
+    );
     service = new BrandingService(
       prisma as never,
       audit as never,
@@ -297,6 +310,7 @@ describe('BrandingService', () => {
         mediaObjectId: null,
         processingStatus: 'NONE',
         rejectionReason: null,
+        uploadExpiresAt: null,
         logo: null,
         tenantVersion: 1,
       });

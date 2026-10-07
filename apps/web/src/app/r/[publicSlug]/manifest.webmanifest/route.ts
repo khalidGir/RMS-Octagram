@@ -4,6 +4,7 @@ import {
   buildTenantManifest,
   MANIFEST_CACHE_CONTROL,
   MANIFEST_CONTENT_TYPE,
+  restaurantManifestTargets,
 } from '@/lib/tenant-manifest';
 import type { PublicRestaurantContext } from '@/lib/types';
 
@@ -36,7 +37,7 @@ export async function GET(
   return manifestResponse(
     buildTenantManifest(
       { name: context.tenant.name, logo: context.logo },
-      { startUrl: `/r/${publicSlug}`, id: `/r/${publicSlug}`, scope: `/r/${publicSlug}/` },
+      restaurantManifestTargets(publicSlug),
     ),
   );
 }

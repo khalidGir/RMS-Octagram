@@ -75,120 +75,256 @@ export default async function globalSetup(): Promise<void> {
   try {
     // Tenant
     const tenantId = uuid();
-    await client.query(`INSERT INTO "Tenant" ("id","name","slug","status","createdAt","updatedAt") VALUES ($1,$2,$3,'ACTIVE',now(),now())`, [tenantId, `PW Test Tenant ${ts}`, tenantSlug]);
+    await client.query(
+      `INSERT INTO "Tenant" ("id","name","slug","status","createdAt","updatedAt") VALUES ($1,$2,$3,'ACTIVE',now(),now())`,
+      [tenantId, `PW Test Tenant ${ts}`, tenantSlug],
+    );
 
     // Entitlements
-    const ALL_FEATURE_KEYS = ['TABLE_QR_ORDERING','PICKUP_ORDERING','MANUAL_TRANSFER_PAYMENTS','PAYMENT_GATEWAY','KDS','INVENTORY','BATCH_INVENTORY','ANALYTICS','MULTI_BRANCH'];
-    const ENABLED = ['TABLE_QR_ORDERING','PICKUP_ORDERING','MANUAL_TRANSFER_PAYMENTS','KDS','INVENTORY','MULTI_BRANCH'];
+    const ALL_FEATURE_KEYS = [
+      'TABLE_QR_ORDERING',
+      'PICKUP_ORDERING',
+      'MANUAL_TRANSFER_PAYMENTS',
+      'PAYMENT_GATEWAY',
+      'KDS',
+      'INVENTORY',
+      'BATCH_INVENTORY',
+      'ANALYTICS',
+      'MULTI_BRANCH',
+    ];
+    const ENABLED = [
+      'TABLE_QR_ORDERING',
+      'PICKUP_ORDERING',
+      'MANUAL_TRANSFER_PAYMENTS',
+      'KDS',
+      'INVENTORY',
+      'MULTI_BRANCH',
+    ];
     for (const key of ALL_FEATURE_KEYS) {
-      await client.query(`INSERT INTO "TenantEntitlement" ("id","tenantId","featureKey","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,now(),now())`, [uuid(), tenantId, key, ENABLED.includes(key) ? 'ENABLED' : 'DISABLED']);
+      await client.query(
+        `INSERT INTO "TenantEntitlement" ("id","tenantId","featureKey","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,now(),now())`,
+        [uuid(), tenantId, key, ENABLED.includes(key) ? 'ENABLED' : 'DISABLED'],
+      );
     }
 
     // Branch
     const branchId = uuid();
     const publicSlug = `pw-pub-${ts}`;
-    await client.query(`INSERT INTO "Branch" ("id","tenantId","name","slug","publicSlug","isActive","createdAt","updatedAt") VALUES ($1,$2,'Main Branch',$3,$4,true,now(),now())`, [branchId, tenantId, branchSlug, publicSlug]);
+    await client.query(
+      `INSERT INTO "Branch" ("id","tenantId","name","slug","publicSlug","isActive","createdAt","updatedAt") VALUES ($1,$2,'Main Branch',$3,$4,true,now(),now())`,
+      [branchId, tenantId, branchSlug, publicSlug],
+    );
 
     // Owner user
     const ownerId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Owner','ACTIVE',now(),now())`, [ownerId, ownerEmail, ownerPhone, passwordHash]);
+    await client.query(
+      `INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Owner','ACTIVE',now(),now())`,
+      [ownerId, ownerEmail, ownerPhone, passwordHash],
+    );
     const ownerMembershipId = uuid();
-    await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'OWNER','ACTIVE',now(),now())`, [ownerMembershipId, tenantId, ownerId]);
-    await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, ownerMembershipId]);
+    await client.query(
+      `INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'OWNER','ACTIVE',now(),now())`,
+      [ownerMembershipId, tenantId, ownerId],
+    );
+    await client.query(
+      `INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`,
+      [tenantId, branchId, ownerMembershipId],
+    );
 
     // Manager user
     const managerId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Manager','ACTIVE',now(),now())`, [managerId, managerEmail, managerPhone, passwordHash]);
+    await client.query(
+      `INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Manager','ACTIVE',now(),now())`,
+      [managerId, managerEmail, managerPhone, passwordHash],
+    );
     const managerMembershipId = uuid();
-    await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'MANAGER','ACTIVE',now(),now())`, [managerMembershipId, tenantId, managerId]);
-    await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, managerMembershipId]);
+    await client.query(
+      `INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'MANAGER','ACTIVE',now(),now())`,
+      [managerMembershipId, tenantId, managerId],
+    );
+    await client.query(
+      `INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`,
+      [tenantId, branchId, managerMembershipId],
+    );
 
     // Cashier user
     const cashierId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Cashier','ACTIVE',now(),now())`, [cashierId, cashierEmail, cashierPhone, passwordHash]);
+    await client.query(
+      `INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Cashier','ACTIVE',now(),now())`,
+      [cashierId, cashierEmail, cashierPhone, passwordHash],
+    );
     const cashierMembershipId = uuid();
-    await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'CASHIER','ACTIVE',now(),now())`, [cashierMembershipId, tenantId, cashierId]);
-    await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, cashierMembershipId]);
+    await client.query(
+      `INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'CASHIER','ACTIVE',now(),now())`,
+      [cashierMembershipId, tenantId, cashierId],
+    );
+    await client.query(
+      `INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`,
+      [tenantId, branchId, cashierMembershipId],
+    );
 
     // Kitchen Staff user
     const kitchenStaffId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Kitchen Staff','ACTIVE',now(),now())`, [kitchenStaffId, kitchenStaffEmail, kitchenStaffPhone, passwordHash]);
+    await client.query(
+      `INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Kitchen Staff','ACTIVE',now(),now())`,
+      [kitchenStaffId, kitchenStaffEmail, kitchenStaffPhone, passwordHash],
+    );
     const kitchenStaffMembershipId = uuid();
-    await client.query(`INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'KITCHEN_STAFF','ACTIVE',now(),now())`, [kitchenStaffMembershipId, tenantId, kitchenStaffId]);
-    await client.query(`INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`, [tenantId, branchId, kitchenStaffMembershipId]);
+    await client.query(
+      `INSERT INTO "TenantMembership" ("id","tenantId","userId","role","status","createdAt","updatedAt") VALUES ($1,$2,$3,'KITCHEN_STAFF','ACTIVE',now(),now())`,
+      [kitchenStaffMembershipId, tenantId, kitchenStaffId],
+    );
+    await client.query(
+      `INSERT INTO "BranchAssignment" ("tenantId","branchId","membershipId","createdAt") VALUES ($1,$2,$3,now())`,
+      [tenantId, branchId, kitchenStaffMembershipId],
+    );
 
     // Super Admin user (platform-level, no tenant membership needed)
     const superAdminId = uuid();
-    await client.query(`INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","platformRole","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Super Admin','SUPER_ADMIN','ACTIVE',now(),now())`, [superAdminId, superAdminEmail, superAdminPhone, passwordHash]);
+    await client.query(
+      `INSERT INTO "User" ("id","email","phoneE164","passwordHash","displayName","platformRole","status","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'PW Super Admin','SUPER_ADMIN','ACTIVE',now(),now())`,
+      [superAdminId, superAdminEmail, superAdminPhone, passwordHash],
+    );
 
     // Menu category
     const categoryId = uuid();
-    await client.query(`INSERT INTO "MenuCategory" ("id","tenantId","name","sortOrder","isActive","createdAt","updatedAt") VALUES ($1,$2,'Food',0,true,now(),now())`, [categoryId, tenantId]);
+    await client.query(
+      `INSERT INTO "MenuCategory" ("id","tenantId","name","sortOrder","isActive","createdAt","updatedAt") VALUES ($1,$2,'Food',0,true,now(),now())`,
+      [categoryId, tenantId],
+    );
 
     // Menu item
     const menuItemId = uuid();
-    await client.query(`INSERT INTO "MenuItem" ("id","tenantId","categoryId","name","description","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Test Burger','A test burger',true,now(),now())`, [menuItemId, tenantId, categoryId]);
+    await client.query(
+      `INSERT INTO "MenuItem" ("id","tenantId","categoryId","name","description","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Test Burger','A test burger',true,now(),now())`,
+      [menuItemId, tenantId, categoryId],
+    );
 
     // Default variant
     const variantId = uuid();
-    await client.query(`INSERT INTO "MenuItemVariant" ("id","tenantId","menuItemId","name","sku","basePriceMinor","isDefault","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Regular','BURG-001',25000,true,true,now(),now())`, [variantId, tenantId, menuItemId]);
+    await client.query(
+      `INSERT INTO "MenuItemVariant" ("id","tenantId","menuItemId","name","sku","basePriceMinor","isDefault","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Regular','BURG-001',25000,true,true,now(),now())`,
+      [variantId, tenantId, menuItemId],
+    );
 
     // Second variant (Large)
-    await client.query(`INSERT INTO "MenuItemVariant" ("id","tenantId","menuItemId","name","sku","basePriceMinor","isDefault","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Large','BURG-002',35000,false,true,now(),now())`, [uuid(), tenantId, menuItemId]);
+    await client.query(
+      `INSERT INTO "MenuItemVariant" ("id","tenantId","menuItemId","name","sku","basePriceMinor","isDefault","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Large','BURG-002',35000,false,true,now(),now())`,
+      [uuid(), tenantId, menuItemId],
+    );
 
     // Required modifier group: Toppings
     const modifierGroupId = uuid();
-    await client.query(`INSERT INTO "ModifierGroup" ("id","tenantId","name","minSelections","maxSelections","isRequired","createdAt","updatedAt") VALUES ($1,$2,'Toppings',1,3,true,now(),now())`, [modifierGroupId, tenantId]);
+    await client.query(
+      `INSERT INTO "ModifierGroup" ("id","tenantId","name","minSelections","maxSelections","isRequired","createdAt","updatedAt") VALUES ($1,$2,'Toppings',1,3,true,now(),now())`,
+      [modifierGroupId, tenantId],
+    );
 
     // Modifier options
-    const opt1 = uuid(); const opt2 = uuid(); const opt3 = uuid();
-    await client.query(`INSERT INTO "ModifierOption" ("id","tenantId","modifierGroupId","name","priceDeltaMinor","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Lettuce',0,true,now(),now())`, [opt1, tenantId, modifierGroupId]);
-    await client.query(`INSERT INTO "ModifierOption" ("id","tenantId","modifierGroupId","name","priceDeltaMinor","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Tomato',500,true,now(),now())`, [opt2, tenantId, modifierGroupId]);
-    await client.query(`INSERT INTO "ModifierOption" ("id","tenantId","modifierGroupId","name","priceDeltaMinor","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Cheese',1500,true,now(),now())`, [opt3, tenantId, modifierGroupId]);
+    const opt1 = uuid();
+    const opt2 = uuid();
+    const opt3 = uuid();
+    await client.query(
+      `INSERT INTO "ModifierOption" ("id","tenantId","modifierGroupId","name","priceDeltaMinor","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Lettuce',0,true,now(),now())`,
+      [opt1, tenantId, modifierGroupId],
+    );
+    await client.query(
+      `INSERT INTO "ModifierOption" ("id","tenantId","modifierGroupId","name","priceDeltaMinor","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Tomato',500,true,now(),now())`,
+      [opt2, tenantId, modifierGroupId],
+    );
+    await client.query(
+      `INSERT INTO "ModifierOption" ("id","tenantId","modifierGroupId","name","priceDeltaMinor","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Cheese',1500,true,now(),now())`,
+      [opt3, tenantId, modifierGroupId],
+    );
 
     // Link modifier group to item
-    await client.query(`INSERT INTO "MenuItemModifierGroup" ("tenantId","menuItemId","modifierGroupId","sortOrder") VALUES ($1,$2,$3,0)`, [tenantId, menuItemId, modifierGroupId]);
+    await client.query(
+      `INSERT INTO "MenuItemModifierGroup" ("tenantId","menuItemId","modifierGroupId","sortOrder") VALUES ($1,$2,$3,0)`,
+      [tenantId, menuItemId, modifierGroupId],
+    );
 
     // Link menu item to branch (required for branch-scoped menu endpoint)
-    await client.query(`INSERT INTO "BranchMenuItem" ("tenantId","branchId","menuItemId","isAvailable","updatedAt") VALUES ($1,$2,$3,true,now())`, [tenantId, branchId, menuItemId]);
+    await client.query(
+      `INSERT INTO "BranchMenuItem" ("tenantId","branchId","menuItemId","isAvailable","updatedAt") VALUES ($1,$2,$3,true,now())`,
+      [tenantId, branchId, menuItemId],
+    );
 
     // Simple menu item without required modifiers (for easy add-to-cart testing)
     const simpleCategoryId = uuid();
-    await client.query(`INSERT INTO "MenuCategory" ("id","tenantId","name","sortOrder","isActive","createdAt","updatedAt") VALUES ($1,$2,'Drinks',1,true,now(),now())`, [simpleCategoryId, tenantId]);
+    await client.query(
+      `INSERT INTO "MenuCategory" ("id","tenantId","name","sortOrder","isActive","createdAt","updatedAt") VALUES ($1,$2,'Drinks',1,true,now(),now())`,
+      [simpleCategoryId, tenantId],
+    );
     const simpleItemId = uuid();
-    await client.query(`INSERT INTO "MenuItem" ("id","tenantId","categoryId","name","description","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Water','Bottled water',true,now(),now())`, [simpleItemId, tenantId, simpleCategoryId]);
+    await client.query(
+      `INSERT INTO "MenuItem" ("id","tenantId","categoryId","name","description","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Water','Bottled water',true,now(),now())`,
+      [simpleItemId, tenantId, simpleCategoryId],
+    );
     const simpleVariantId = uuid();
-    await client.query(`INSERT INTO "MenuItemVariant" ("id","tenantId","menuItemId","name","sku","basePriceMinor","isDefault","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'500ml','WAT-001',5000,true,true,now(),now())`, [simpleVariantId, tenantId, simpleItemId]);
-    await client.query(`INSERT INTO "BranchMenuItem" ("tenantId","branchId","menuItemId","isAvailable","updatedAt") VALUES ($1,$2,$3,true,now())`, [tenantId, branchId, simpleItemId]);
+    await client.query(
+      `INSERT INTO "MenuItemVariant" ("id","tenantId","menuItemId","name","sku","basePriceMinor","isDefault","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'500ml','WAT-001',5000,true,true,now(),now())`,
+      [simpleVariantId, tenantId, simpleItemId],
+    );
+    await client.query(
+      `INSERT INTO "BranchMenuItem" ("tenantId","branchId","menuItemId","isAvailable","updatedAt") VALUES ($1,$2,$3,true,now())`,
+      [tenantId, branchId, simpleItemId],
+    );
 
     // Optional modifier group: Extras
     const optModGroupId = uuid();
-    await client.query(`INSERT INTO "ModifierGroup" ("id","tenantId","name","minSelections","maxSelections","isRequired","createdAt","updatedAt") VALUES ($1,$2,'Extras',0,2,false,now(),now())`, [optModGroupId, tenantId]);
+    await client.query(
+      `INSERT INTO "ModifierGroup" ("id","tenantId","name","minSelections","maxSelections","isRequired","createdAt","updatedAt") VALUES ($1,$2,'Extras',0,2,false,now(),now())`,
+      [optModGroupId, tenantId],
+    );
     const extra1 = uuid();
-    await client.query(`INSERT INTO "ModifierOption" ("id","tenantId","modifierGroupId","name","priceDeltaMinor","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Bacon',3000,true,now(),now())`, [extra1, tenantId, optModGroupId]);
-    await client.query(`INSERT INTO "MenuItemModifierGroup" ("tenantId","menuItemId","modifierGroupId","sortOrder") VALUES ($1,$2,$3,1)`, [tenantId, menuItemId, optModGroupId]);
+    await client.query(
+      `INSERT INTO "ModifierOption" ("id","tenantId","modifierGroupId","name","priceDeltaMinor","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Bacon',3000,true,now(),now())`,
+      [extra1, tenantId, optModGroupId],
+    );
+    await client.query(
+      `INSERT INTO "MenuItemModifierGroup" ("tenantId","menuItemId","modifierGroupId","sortOrder") VALUES ($1,$2,$3,1)`,
+      [tenantId, menuItemId, optModGroupId],
+    );
 
     // Table
     const tableId = uuid();
-    await client.query(`INSERT INTO "RestaurantTable" ("id","tenantId","branchId","label","capacity","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'T1',4,true,now(),now())`, [tableId, tenantId, branchId]);
+    await client.query(
+      `INSERT INTO "RestaurantTable" ("id","tenantId","branchId","label","capacity","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'T1',4,true,now(),now())`,
+      [tableId, tenantId, branchId],
+    );
 
     // Kitchen Station
     const kitchenStationId = uuid();
-    await client.query(`INSERT INTO "KitchenStation" ("id","tenantId","branchId","name","displayOrder","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Grill',0,true,now(),now())`, [kitchenStationId, tenantId, branchId]);
+    await client.query(
+      `INSERT INTO "KitchenStation" ("id","tenantId","branchId","name","displayOrder","isActive","createdAt","updatedAt") VALUES ($1,$2,$3,'Grill',0,true,now(),now())`,
+      [kitchenStationId, tenantId, branchId],
+    );
 
     // Assign Test Burger to Grill station
-    await client.query(`INSERT INTO "MenuItemStation" ("tenantId","branchId","menuItemId","stationId") VALUES ($1,$2,$3,$4)`, [tenantId, branchId, menuItemId, kitchenStationId]);
+    await client.query(
+      `INSERT INTO "MenuItemStation" ("tenantId","branchId","menuItemId","stationId") VALUES ($1,$2,$3,$4)`,
+      [tenantId, branchId, menuItemId, kitchenStationId],
+    );
 
     // Branch order counter — start at 1 because global-setup pre-creates order #1
-    await client.query(`INSERT INTO "BranchOrderCounter" ("branchId","lastNumber","createdAt","updatedAt") VALUES ($1,1,now(),now()) ON CONFLICT ("branchId") DO NOTHING`, [branchId]);
+    await client.query(
+      `INSERT INTO "BranchOrderCounter" ("branchId","lastNumber","createdAt","updatedAt") VALUES ($1,1,now(),now()) ON CONFLICT ("branchId") DO NOTHING`,
+      [branchId],
+    );
 
     // Payment instruction
     const paymentInstructionId = uuid();
-    await client.query(`INSERT INTO "PaymentInstruction" ("id","tenantId","branchId","method","label","accountHolder","accountIdentifier","instructions","createdAt","updatedAt") VALUES ($1,$2,$3,'CBE','CBE Birr','Test Restaurant','1234567890','Transfer the exact amount',now(),now())`, [paymentInstructionId, tenantId, branchId]);
+    await client.query(
+      `INSERT INTO "PaymentInstruction" ("id","tenantId","branchId","method","label","accountHolder","accountIdentifier","instructions","createdAt","updatedAt") VALUES ($1,$2,$3,'CBE','CBE Birr','Test Restaurant','1234567890','Transfer the exact amount',now(),now())`,
+      [paymentInstructionId, tenantId, branchId],
+    );
 
     // Feature settings for owner
     for (const key of ENABLED) {
-      await client.query(`INSERT INTO "FeatureSetting" ("id","tenantId","branchId","featureKey","enabled","updatedByUserId","createdAt","updatedAt") VALUES ($1,$2,NULL,$3,true,$4,now(),now()) ON CONFLICT DO NOTHING`, [uuid(), tenantId, key, ownerId]);
+      await client.query(
+        `INSERT INTO "FeatureSetting" ("id","tenantId","branchId","featureKey","enabled","updatedByUserId","createdAt","updatedAt") VALUES ($1,$2,NULL,$3,true,$4,now(),now()) ON CONFLICT DO NOTHING`,
+        [uuid(), tenantId, key, ownerId],
+      );
     }
 
     // Tracking token
@@ -197,18 +333,30 @@ export default async function globalSetup(): Promise<void> {
 
     // Order in PENDING_PAYMENT status for owner review tests
     const orderId = uuid();
-    await client.query(`INSERT INTO "Order" ("id","tenantId","branchId","orderNumber","orderType","status","tableId","currency","subtotalMinor","totalMinor","source","trackingTokenHash","version","createdAt","updatedAt") VALUES ($1,$2,$3,1,'DINE_IN','PENDING_PAYMENT',$4,'ETB',25000,25000,'CUSTOMER_WEB',$5,1,now(),now())`, [orderId, tenantId, branchId, tableId, trackingHash]);
+    await client.query(
+      `INSERT INTO "Order" ("id","tenantId","branchId","orderNumber","orderType","status","tableId","currency","subtotalMinor","totalMinor","source","trackingTokenHash","version","createdAt","updatedAt") VALUES ($1,$2,$3,1,'DINE_IN','PENDING_PAYMENT',$4,'ETB',25000,25000,'CUSTOMER_WEB',$5,1,now(),now())`,
+      [orderId, tenantId, branchId, tableId, trackingHash],
+    );
 
     // Order line
-    await client.query(`INSERT INTO "OrderLine" ("id","tenantId","branchId","orderId","menuItemId","variantId","itemNameSnapshot","variantNameSnapshot","skuSnapshot","unitPriceMinor","quantity","lineTotalMinor","createdAt") VALUES ($1,$2,$3,$4,$5,$6,'Test Burger','Regular','BURG-001',25000,1,25000,now())`, [uuid(), tenantId, branchId, orderId, menuItemId, variantId]);
+    await client.query(
+      `INSERT INTO "OrderLine" ("id","tenantId","branchId","orderId","menuItemId","variantId","itemNameSnapshot","variantNameSnapshot","skuSnapshot","unitPriceMinor","quantity","lineTotalMinor","createdAt") VALUES ($1,$2,$3,$4,$5,$6,'Test Burger','Regular','BURG-001',25000,1,25000,now())`,
+      [uuid(), tenantId, branchId, orderId, menuItemId, variantId],
+    );
 
     // Payment for the order
     const paymentId = uuid();
-    await client.query(`INSERT INTO "Payment" ("id","tenantId","branchId","orderId","method","amountMinor","currency","status","customerReference","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'BANK_TRANSFER',25000,'ETB','PENDING_VERIFICATION','REF-TEST-001',now(),now())`, [paymentId, tenantId, branchId, orderId]);
+    await client.query(
+      `INSERT INTO "Payment" ("id","tenantId","branchId","orderId","method","amountMinor","currency","status","customerReference","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'BANK_TRANSFER',25000,'ETB','PENDING_VERIFICATION','REF-TEST-001',now(),now())`,
+      [paymentId, tenantId, branchId, orderId],
+    );
 
     // Open shift for cashier
     const shiftId = uuid();
-    await client.query(`INSERT INTO "CashShift" ("id","tenantId","branchId","cashierUserId","status","openingCashMinor","version","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'OPEN',50000,1,now(),now())`, [shiftId, tenantId, branchId, cashierId]);
+    await client.query(
+      `INSERT INTO "CashShift" ("id","tenantId","branchId","cashierUserId","status","openingCashMinor","version","createdAt","updatedAt") VALUES ($1,$2,$3,$4,'OPEN',50000,1,now(),now())`,
+      [shiftId, tenantId, branchId, cashierId],
+    );
 
     const seedData: SeedData = {
       api: API_URL + '/api/v1',
@@ -238,7 +386,33 @@ export default async function globalSetup(): Promise<void> {
     fs.writeFileSync(SEED_FILE, JSON.stringify(seedData, null, 2));
     console.log(`  Seed data written to ${SEED_FILE}`);
     console.log(`  Tenant: ${tenantSlug}, Branch: ${branchSlug}`);
-    console.log(`  Owner: ${ownerPhone}, Manager: ${managerPhone}, Cashier: ${cashierPhone}, Kitchen: ${kitchenStaffPhone}, SuperAdmin: ${superAdminPhone}`);
+    console.log(
+      `  Owner: ${ownerPhone}, Manager: ${managerPhone}, Cashier: ${cashierPhone}, Kitchen: ${kitchenStaffPhone}, SuperAdmin: ${superAdminPhone}`,
+    );
+
+    // Pre-compile the lazily built Next routes (manifest, offline shell,
+    // customer pages, service worker) so the first test is not charged the
+    // dev-server compile time — SW install precaches several of these and
+    // times out on a cold start.
+    const warmPaths = [
+      '/',
+      '/login',
+      '/offline',
+      '/sw.js',
+      '/manifest.webmanifest',
+      `/r/${publicSlug}`,
+      `/r/${publicSlug}/manifest.webmanifest`,
+    ];
+    await Promise.all(
+      warmPaths.map(async (path) => {
+        try {
+          await fetch(`${FRONTEND_URL}${path}`, { signal: AbortSignal.timeout(60_000) });
+        } catch {
+          /* warm-up is best effort; tests have their own timeouts */
+        }
+      }),
+    );
+    console.log('  Frontend routes pre-warmed');
   } finally {
     await client.end();
   }

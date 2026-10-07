@@ -26,6 +26,25 @@ const DEFAULT_ICONS: TenantManifestIcon[] = [
   { src: '/icons/icon-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
 ];
 
+/**
+ * Install targets for a restaurant route. start_url, id, and scope are the
+ * SAME no-trailing-slash path: the manifest processing algorithm discards a
+ * scope that does not contain start_url (prefix match, W3C appmanifest §1.6)
+ * and would fall back to the default scope `/r/` — every restaurant — if
+ * scope ended in a slash while Next.js canonicalizes `/r/{slug}` without one.
+ */
+export function restaurantManifestTargets(slug: string): TenantManifestTargets {
+  const path = `/r/${slug}`;
+  return { startUrl: path, id: path, scope: path };
+}
+
+/** Token-free fallback for branches without a public slug. */
+export const ROOT_MANIFEST_TARGETS: TenantManifestTargets = {
+  startUrl: '/',
+  id: '/',
+  scope: '/',
+};
+
 function logoIcons(logo: TenantLogoView): TenantManifestIcon[] {
   return [
     { src: logo.icon192, sizes: '192x192', type: 'image/png', purpose: 'any' },

@@ -3,6 +3,8 @@ import {
   buildTenantManifest,
   MANIFEST_CACHE_CONTROL,
   MANIFEST_CONTENT_TYPE,
+  restaurantManifestTargets,
+  ROOT_MANIFEST_TARGETS,
 } from './tenant-manifest';
 import type { TenantLogoView } from './types';
 
@@ -14,11 +16,15 @@ const logo: TenantLogoView = {
   thumbnail: 'https://cdn.example.com/logos/tok-abc/320x320.webp',
 };
 
-const targets = {
-  startUrl: '/r/habesha-house',
-  id: '/r/habesha-house',
-  scope: '/r/habesha-house/',
-};
+const targets = restaurantManifestTargets('habesha-house');
+
+/**
+ * W3C appmanifest §5: a target is within scope when its path string starts
+ * with the scope path (prefix match, same origin).
+ */
+function withinScope(target: string, scope: string): boolean {
+  return target.startsWith(scope);
+}
 
 describe('buildTenantManifest', () => {
   it('uses the restaurant logo derivatives as icons when a logo exists', () => {
@@ -43,8 +49,45 @@ describe('buildTenantManifest', () => {
     const manifest = buildTenantManifest({ name: 'Habesha House', logo: null }, targets);
     expect(manifest.start_url).toBe('/r/habesha-house');
     expect(manifest.id).toBe('/r/habesha-house');
-    expect(manifest.scope).toBe('/r/habesha-house/');
+    expect(manifest.scope).toBe('/r/habesha-house');
     expect(manifest.display).toBe('standalone');
+  });
+
+  it('keeps start_url inside the declared scope so the scope is not discarded (W3C §1.6)', () => {
+    // A trailing-slash scope would exclude the canonical no-slash start_url,
+    // making the browser fall back to the default scope `/r/` (all restaurants).
+    const manifest = buildTenantManifest({ name: 'Habesha House', logo: null }, targets);
+    expect(withinScope(manifest.start_url, manifest.scope)).toBe(true);
+    expect(manifest.scope.endsWith('/')).toBe(false);
+    expect(manifest.start_url).toBe(manifest.scope);
+  });
+
+  it('scopes two restaurants independently', () => {
+    const a = buildTenantManifest(
+      { name: 'Blue Nile', logo: null },
+      restaurantManifestTargets('blue-nile'),
+    );
+    const b = buildTenantManifest(
+      { name: 'Habesha House', logo: null },
+      restaurantManifestTargets('habesha-house'),
+    );
+    expect(withinScope(a.start_url, a.scope)).toBe(true);
+    expect(withinScope(b.start_url, b.scope)).toBe(true);
+    expect(withinScope(b.start_url, a.scope)).toBe(false);
+    expect(withinScope(a.start_url, b.scope)).toBe(false);
+    expect(a.id).not.toBe(b.id);
+    expect(withinScope('/r/blue-nile/checkout', a.scope)).toBe(true);
+    expect(withinScope('/r/habesha-house', a.scope)).toBe(false);
+  });
+
+  it('falls back to token-free root targets when no branch slug exists', () => {
+    const manifest = buildTenantManifest(
+      { name: 'Habesha House', logo: null },
+      ROOT_MANIFEST_TARGETS,
+    );
+    expect(manifest.start_url).toBe('/');
+    expect(manifest.scope).toBe('/');
+    expect(withinScope(manifest.start_url, manifest.scope)).toBe(true);
   });
 
   it('keeps short_name within 24 characters for long restaurant names', () => {
