@@ -28,13 +28,16 @@ const DEFAULT_ICONS: TenantManifestIcon[] = [
 
 /**
  * Install targets for a restaurant route. start_url, id, and scope are the
- * SAME no-trailing-slash path: the manifest processing algorithm discards a
- * scope that does not contain start_url (prefix match, W3C appmanifest §1.6)
- * and would fall back to the default scope `/r/` — every restaurant — if
- * scope ended in a slash while Next.js canonicalizes `/r/{slug}` without one.
+ * SAME slash-terminated path: W3C appmanifest §5 matches scope by string
+ * prefix, so `/r/{slug}` would also cover `/r/{slug}-annex` — a different
+ * restaurant's pages inside the wrong installed app. The slash keeps the
+ * prefix segment-boundary safe ("use a scope ending in a /"). §1.6 discards
+ * any scope that does not contain start_url, so start_url carries the slash
+ * too; src/middleware.ts makes `/r/{slug}/` the canonical, directly served
+ * form so the launched document never lands out of scope (ADR-030).
  */
 export function restaurantManifestTargets(slug: string): TenantManifestTargets {
-  const path = `/r/${slug}`;
+  const path = `/r/${slug}/`;
   return { startUrl: path, id: path, scope: path };
 }
 

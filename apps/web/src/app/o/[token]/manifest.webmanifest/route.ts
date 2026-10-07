@@ -22,7 +22,7 @@ function errorResponse(status: number): NextResponse {
 
 /**
  * Table-session manifest. The QR token resolves the restaurant server-side;
- * the manifest itself opens on the branch's pickup URL (`/r/{slug}`) so no
+ * the manifest itself opens on the branch's pickup URL (`/r/{slug}/`) so no
  * session token is ever baked into an installed app. Branches without a
  * public slug fall back to the site root.
  */

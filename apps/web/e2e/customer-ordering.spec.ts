@@ -1,5 +1,13 @@
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
+
+// 1x1 transparent PNG served by the in-test cross-origin image server.
+const PIXEL_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 test.describe('Customer ordering journey', () => {
   test('public menu loads and displays items from real API', async ({ page, seed }) => {
@@ -277,11 +285,12 @@ test.describe('Customer PWA branding', () => {
 
     const manifest = await response.json();
     expect(manifest.name).toBeTruthy();
-    expect(manifest.start_url).toBe(`/r/${seed.publicSlug}`);
-    expect(manifest.id).toBe(`/r/${seed.publicSlug}`);
-    // Scope must contain start_url (W3C prefix match); a trailing slash would
-    // exclude the canonical no-slash URL and fall back to scope `/r/`.
-    expect(manifest.scope).toBe(`/r/${seed.publicSlug}`);
+    expect(manifest.start_url).toBe(`/r/${seed.publicSlug}/`);
+    expect(manifest.id).toBe(`/r/${seed.publicSlug}/`);
+    // Slash-terminated scope (W3C §5 prefix matching): a bare /r/{slug} scope
+    // would also swallow /r/{slug}-annex, and §1.6 needs start_url inside the
+    // scope or the whole scope is discarded.
+    expect(manifest.scope).toBe(`/r/${seed.publicSlug}/`);
     expect(manifest.start_url.startsWith(manifest.scope)).toBe(true);
     expect(manifest.display).toBe('standalone');
     expect(Array.isArray(manifest.icons)).toBe(true);
@@ -318,9 +327,9 @@ test.describe('Customer PWA branding', () => {
     const manifestResponse = await request.get(href!);
     expect(manifestResponse.ok()).toBeTruthy();
     const manifest = await manifestResponse.json();
-    expect(manifest.start_url).toBe(`/r/${seed.publicSlug}`);
-    expect(manifest.scope).toBe(`/r/${seed.publicSlug}`);
-    expect(manifest.id).toBe(`/r/${seed.publicSlug}`);
+    expect(manifest.start_url).toBe(`/r/${seed.publicSlug}/`);
+    expect(manifest.scope).toBe(`/r/${seed.publicSlug}/`);
+    expect(manifest.id).toBe(`/r/${seed.publicSlug}/`);
     expect(JSON.stringify(manifest)).not.toContain(raw);
   });
 
@@ -420,24 +429,44 @@ test.describe('Real service worker behavior', () => {
       { apiBase, token: seed.trackingToken },
     );
 
-    await page.evaluate(() =>
-      Promise.all([
+    // A REAL signed cross-origin image: a failed request leaves nothing to
+    // cache, so treating onerror as success would let a regression that
+    // caches signed URLs pass unnoticed. Serve one from an in-test origin
+    // and require it to load before checking the caches.
+    const imageServer = createServer((_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'image/png' });
+      res.end(PIXEL_PNG);
+    });
+    await new Promise<void>((resolve) => imageServer.listen(0, '127.0.0.1', resolve));
+    const imagePort = (imageServer.address() as AddressInfo).port;
+    const signedImageUrl = `http://127.0.0.1:${imagePort}/logos/token/proof.png?X-Amz-Signature=deadbeef`;
+    try {
+      await page.evaluate(() =>
         fetch('/media/proof.png?X-Amz-Signature=deadbeef').catch(() => null),
-        new Promise((resolve) => {
-          const image = new Image();
-          image.onload = image.onerror = () => resolve(null);
-          image.src = 'https://cdn.example.test/logos/token/proof.png?X-Amz-Signature=deadbeef';
-        }),
-      ]),
-    );
+      );
+      const imageLoaded = await page.evaluate(
+        (src) =>
+          new Promise<boolean>((resolve) => {
+            const image = new Image();
+            image.onload = () => resolve(image.naturalWidth > 0);
+            image.onerror = () => resolve(false);
+            image.src = src;
+          }),
+        signedImageUrl,
+      );
+      expect(imageLoaded).toBe(true);
 
-    const urls = await cacheUrls(page);
-    expect(
-      urls.some((url) => url.includes('/api/v1/public/restaurants/') && url.includes('/menu')),
-    ).toBe(true);
-    expect(urls.some((url) => url.includes('/r/') && url.includes(seed.publicSlug))).toBe(true);
-    expect(urls.some((url) => url.includes('/api/v1/public/orders/'))).toBe(false);
-    expect(urls.some((url) => url.includes('X-Amz-'))).toBe(false);
+      const urls = await cacheUrls(page);
+      expect(
+        urls.some((url) => url.includes('/api/v1/public/restaurants/') && url.includes('/menu')),
+      ).toBe(true);
+      expect(urls.some((url) => url.includes('/r/') && url.includes(seed.publicSlug))).toBe(true);
+      expect(urls.some((url) => url.includes('/api/v1/public/orders/'))).toBe(false);
+      expect(urls.some((url) => url.includes('X-Amz-'))).toBe(false);
+      expect(urls.some((url) => url.includes(`127.0.0.1:${imagePort}`))).toBe(false);
+    } finally {
+      imageServer.close();
+    }
   });
 
   test('reopens the menu offline from the SW cache', async ({ page, context, seed }) => {
@@ -499,8 +528,19 @@ test.describe('Real service worker behavior', () => {
     expect(restaurantManifestHref).toBe(`/r/${seed.publicSlug}/manifest.webmanifest`);
     const restaurantManifest = await (await request.get(restaurantManifestHref!)).json();
     expect(restaurantManifest.start_url).toBe(restaurantManifest.scope);
+    expect(restaurantManifest.scope).toBe(`/r/${seed.publicSlug}/`);
     const startUrl = await request.get(restaurantManifest.start_url);
     expect(startUrl.ok()).toBeTruthy();
+
+    // The launch URL must actually open the menu AND stay inside the declared
+    // scope: a redirect to the bare (no-slash) form would be an out-of-scope
+    // document that drops the installed manifest on open.
+    await page.goto(restaurantManifest.start_url);
+    await expect(page).toHaveURL(new RegExp(`/r/${seed.publicSlug}/$`));
+    await expect(page.getByRole('heading', { name: 'Test Burger' })).toBeVisible();
+    // A bare restaurant root redirects INTO the scope, not out of it.
+    await page.goto(`/r/${seed.publicSlug}`);
+    await expect(page).toHaveURL(new RegExp(`/r/${seed.publicSlug}/$`));
 
     // Same install criteria through the QR table entry point.
     const rotate = await request.post(

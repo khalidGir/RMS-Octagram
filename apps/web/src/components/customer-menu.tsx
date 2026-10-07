@@ -9,12 +9,42 @@ import { normalizePublicMenu } from '@/lib/public-menu';
 import { LanguagePicker } from './language-picker';
 import { useLocale } from './locale-provider';
 
-interface ApiVariant { id: string; name: string; basePriceMinor: string; isDefault: boolean }
-interface ApiModifierOption { id: string; name: string; priceDeltaMinor: string }
-interface ApiModifierGroup { id: string; name: string; isRequired: boolean; minSelections: number; maxSelections: number | null; options: ApiModifierOption[] }
-interface ApiMenuItem { id: string; name: string; description: string | null; variants: ApiVariant[]; modifierGroups: ApiModifierGroup[] }
-interface ApiCategory { id: string; name: string; items: ApiMenuItem[] }
-interface ApiMenu { tenant: { id: string; name: string }; branch: { id: string; name: string }; categories: ApiCategory[] }
+interface ApiVariant {
+  id: string;
+  name: string;
+  basePriceMinor: string;
+  isDefault: boolean;
+}
+interface ApiModifierOption {
+  id: string;
+  name: string;
+  priceDeltaMinor: string;
+}
+interface ApiModifierGroup {
+  id: string;
+  name: string;
+  isRequired: boolean;
+  minSelections: number;
+  maxSelections: number | null;
+  options: ApiModifierOption[];
+}
+interface ApiMenuItem {
+  id: string;
+  name: string;
+  description: string | null;
+  variants: ApiVariant[];
+  modifierGroups: ApiModifierGroup[];
+}
+interface ApiCategory {
+  id: string;
+  name: string;
+  items: ApiMenuItem[];
+}
+interface ApiMenu {
+  tenant: { id: string; name: string };
+  branch: { id: string; name: string };
+  categories: ApiCategory[];
+}
 
 interface CartLine {
   itemId: string;
@@ -26,10 +56,24 @@ interface CartLine {
   notes?: string;
 }
 
-const tones = ['#B4532A','#D39A3E','#31584A','#8E4A38','#B77B3B','#49362D','#D16C3B','#A67C45'];
+const tones = [
+  '#B4532A',
+  '#D39A3E',
+  '#31584A',
+  '#8E4A38',
+  '#B77B3B',
+  '#49362D',
+  '#D16C3B',
+  '#A67C45',
+];
 
 function initialsFor(name: string): string {
-  return name.split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
 }
 
 function toneFor(index: number): string {
@@ -48,7 +92,9 @@ export function CustomerMenu() {
   const query = useQuery({
     queryKey: ['public-menu', branchSlug],
     queryFn: async () => {
-      const response = await apiRequest<ApiEnvelope<ApiMenu>>(`/public/restaurants/${encodeURIComponent(branchSlug!)}/menu`);
+      const response = await apiRequest<ApiEnvelope<ApiMenu>>(
+        `/public/restaurants/${encodeURIComponent(branchSlug!)}/menu`,
+      );
       normalizePublicMenu(response.data);
       return response;
     },
@@ -62,7 +108,7 @@ export function CustomerMenu() {
     if (!categoryId && menu?.categories[0]) setCategoryId(menu.categories[0].id);
   }, [categoryId, menu]);
 
-  const category = menu?.categories.find(c => c.id === categoryId) ?? menu?.categories[0];
+  const category = menu?.categories.find((c) => c.id === categoryId) ?? menu?.categories[0];
 
   const count = cart.reduce((sum, x) => sum + x.quantity, 0);
   const subtotal = useMemo(
@@ -71,18 +117,36 @@ export function CustomerMenu() {
   );
 
   function add(item: ApiMenuItem) {
-    const variant = item.variants.find(v => v.isDefault) ?? item.variants[0];
+    const variant = item.variants.find((v) => v.isDefault) ?? item.variants[0];
     if (!variant) return;
-    if (item.modifierGroups.some(g => g.isRequired || g.minSelections > 0)) return;
-    setCart(v => {
-      const existing = v.find(line => line.variantId === variant.id);
-      if (existing) return v.map(line => line.variantId === variant.id ? { ...line, quantity: line.quantity + 1 } : line);
-      return [...v, { itemId: item.id, variantId: variant.id, name: item.name, basePriceMinor: variant.basePriceMinor, quantity: 1 }];
+    if (item.modifierGroups.some((g) => g.isRequired || g.minSelections > 0)) return;
+    setCart((v) => {
+      const existing = v.find((line) => line.variantId === variant.id);
+      if (existing)
+        return v.map((line) =>
+          line.variantId === variant.id ? { ...line, quantity: line.quantity + 1 } : line,
+        );
+      return [
+        ...v,
+        {
+          itemId: item.id,
+          variantId: variant.id,
+          name: item.name,
+          basePriceMinor: variant.basePriceMinor,
+          quantity: 1,
+        },
+      ];
     });
   }
 
   function change(variantId: string, delta: number) {
-    setCart(v => v.map(line => line.variantId === variantId ? { ...line, quantity: line.quantity + delta } : line).filter(line => line.quantity > 0));
+    setCart((v) =>
+      v
+        .map((line) =>
+          line.variantId === variantId ? { ...line, quantity: line.quantity + delta } : line,
+        )
+        .filter((line) => line.quantity > 0),
+    );
   }
 
   function continueOrder() {
@@ -101,100 +165,289 @@ export function CustomerMenu() {
     router.push(`/r/${encodeURIComponent(branchSlug!)}/checkout` as Route);
   }
 
-  if (query.isLoading) return <StateScreen title={tr('ordering.loadingMenu')} detail={tr('ordering.loadingMenuDetail')} />;
-  if (query.isError || !menu) return <StateScreen title={tr('ordering.menuUnavailable')} detail={tr('ordering.linkHelp')} retry={() => void query.refetch()} />;
+  if (query.isLoading)
+    return (
+      <StateScreen title={tr('ordering.loadingMenu')} detail={tr('ordering.loadingMenuDetail')} />
+    );
+  if (query.isError || !menu)
+    return (
+      <StateScreen
+        title={tr('ordering.menuUnavailable')}
+        detail={tr('ordering.linkHelp')}
+        retry={() => void query.refetch()}
+      />
+    );
 
   return (
     <main className="min-h-screen bg-surface-warm pb-24 lg:pb-8">
       <header className="sticky top-0 z-30 border-b border-line bg-surface-warm/90 backdrop-blur-xl">
         <div className="mx-auto flex min-h-[72px] max-w-7xl items-center justify-between px-4 sm:px-7">
-          <Link href={`/r/${encodeURIComponent(branchSlug)}`} className="flex items-center gap-3" aria-label={menu.tenant.name}>
-            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand text-sm font-black text-white shadow-lg shadow-brand/20">{menu.tenant.name[0]}</span>
-            <span className="leading-none"><span className="block text-[15px] font-extrabold tracking-[-0.02em]">{menu.tenant.name}</span><span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted">{menu.branch.name}</span></span>
+          {/* Slash-terminated so client-side navigation stays inside the
+              installed-app scope (/r/{slug}/) without a server round trip. */}
+          <Link
+            href={`/r/${encodeURIComponent(branchSlug)}/` as Route}
+            className="flex items-center gap-3"
+            aria-label={menu.tenant.name}
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-brand text-sm font-black text-white shadow-lg shadow-brand/20">
+              {menu.tenant.name[0]}
+            </span>
+            <span className="leading-none">
+              <span className="block text-[15px] font-extrabold tracking-[-0.02em]">
+                {menu.tenant.name}
+              </span>
+              <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
+                {menu.branch.name}
+              </span>
+            </span>
           </Link>
-          <div className="flex items-center gap-2"><LanguagePicker compact />
-          <button onClick={() => setCartOpen(true)} aria-label={tr('ordering.openCartCount', { count })} className="relative grid size-11 place-items-center rounded-xl bg-dark text-white">
-            ▢{count > 0 && <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-brand text-[9px] font-black">{count}</span>}
-          </button></div>
+          <div className="flex items-center gap-2">
+            <LanguagePicker compact />
+            <button
+              onClick={() => setCartOpen(true)}
+              aria-label={tr('ordering.openCartCount', { count })}
+              className="relative grid size-11 place-items-center rounded-xl bg-dark text-white"
+            >
+              ▢
+              {count > 0 && (
+                <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-brand text-[9px] font-black">
+                  {count}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </header>
 
       <section className="bg-dark-muted px-4 py-10 text-white">
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-black uppercase tracking-[.18em] text-accent-gold">{tr('ordering.branchPickup', { branch: menu.branch.name })}</p>
-          <h1 className="mt-3 max-w-2xl text-4xl font-black tracking-[-.05em] sm:text-5xl">{tr('ordering.heroLine1')}<br />{tr('ordering.heroLine2')}</h1>
+          <p className="text-xs font-black uppercase tracking-[.18em] text-accent-gold">
+            {tr('ordering.branchPickup', { branch: menu.branch.name })}
+          </p>
+          <h1 className="mt-3 max-w-2xl text-4xl font-black tracking-[-.05em] sm:text-5xl">
+            {tr('ordering.heroLine1')}
+            <br />
+            {tr('ordering.heroLine2')}
+          </h1>
           <p className="mt-4 text-sm text-white/60">{tr('ordering.pickupTagline')}</p>
         </div>
       </section>
 
       <div className="mx-auto max-w-7xl px-4 sm:px-7">
         <div className="hide-scrollbar sticky top-[72px] z-20 -mx-4 flex gap-2 overflow-auto border-b border-line bg-surface-warm/95 px-4 py-4 sm:-mx-7 sm:px-7">
-          {menu.categories.map(c => <button key={c.id} onClick={() => setCategoryId(c.id)} className={`shrink-0 rounded-full px-4 py-2 text-xs font-black ${c.id === category?.id ? 'bg-brand text-white' : 'border border-line bg-white text-ink-muted'}`}>{c.name}</button>)}
+          {menu.categories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setCategoryId(c.id)}
+              className={`shrink-0 rounded-full px-4 py-2 text-xs font-black ${c.id === category?.id ? 'bg-brand text-white' : 'border border-line bg-white text-ink-muted'}`}
+            >
+              {c.name}
+            </button>
+          ))}
         </div>
         <div className="grid gap-6 py-7 lg:grid-cols-[1fr_360px]">
           <section>
-            <p className="text-xs font-black uppercase tracking-[.16em] text-brand">{tr('ordering.exploreMenu')}</p>
+            <p className="text-xs font-black uppercase tracking-[.16em] text-brand">
+              {tr('ordering.exploreMenu')}
+            </p>
             <h2 className="mt-2 text-2xl font-black">{category?.name}</h2>
-            {query.isLoading ? <div className="mt-5 grid gap-4 sm:grid-cols-2">{Array.from({ length: 6 }, (_, i) => <div className="h-40 animate-pulse rounded-xl bg-white" key={i} />)}</div>
-              : category?.items.length === 0 ? <p className="mt-5 rounded-xl border border-line bg-white p-6 text-center text-sm font-bold text-ink-muted">No items in this category yet.</p>
-              : <div className="mt-5 grid gap-4 sm:grid-cols-2">{category?.items.map((item, idx) => {
-                const variant = item.variants.find(v => v.isDefault) ?? item.variants[0];
-                const needsOptions = item.modifierGroups.some(g => g.isRequired || g.minSelections > 0);
-                return <article className={`flex min-h-40 overflow-hidden rounded-2xl border border-line bg-white shadow-card ${variant ? '' : 'opacity-50'}`} key={item.id}>
-                  <div className="relative grid w-2/5 place-items-center text-xl font-black text-white" style={{ background: `linear-gradient(145deg,${toneFor(idx)},#18201d)` }}>
-                    {initialsFor(item.name)}
-                  </div>
-                  <div className="flex flex-1 flex-col p-4">
-                    <h3 className="font-black">{item.name}</h3>
-                    <p className="mt-1 text-xs leading-5 text-ink-muted">{item.description}</p>
-                    <div className="mt-auto flex items-center justify-between">
-                      <b className="text-brand">{variant ? formatCurrency(variant.basePriceMinor) : tr('ordering.itemUnavailable')}</b>
-                      <button disabled={!variant || needsOptions} onClick={() => add(item)} aria-label={tr('ordering.addItem', { item: item.name })} className="grid size-10 place-items-center rounded-xl bg-muted text-xl font-black text-brand disabled:bg-stone-200 disabled:text-stone-400">{variant && !needsOptions ? '+' : '...'}</button>
-                    </div>
-                  </div>
-                </article>;
-              })}</div>}
+            {query.isLoading ? (
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                {Array.from({ length: 6 }, (_, i) => (
+                  <div className="h-40 animate-pulse rounded-xl bg-white" key={i} />
+                ))}
+              </div>
+            ) : category?.items.length === 0 ? (
+              <p className="mt-5 rounded-xl border border-line bg-white p-6 text-center text-sm font-bold text-ink-muted">
+                No items in this category yet.
+              </p>
+            ) : (
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                {category?.items.map((item, idx) => {
+                  const variant = item.variants.find((v) => v.isDefault) ?? item.variants[0];
+                  const needsOptions = item.modifierGroups.some(
+                    (g) => g.isRequired || g.minSelections > 0,
+                  );
+                  return (
+                    <article
+                      className={`flex min-h-40 overflow-hidden rounded-2xl border border-line bg-white shadow-card ${variant ? '' : 'opacity-50'}`}
+                      key={item.id}
+                    >
+                      <div
+                        className="relative grid w-2/5 place-items-center text-xl font-black text-white"
+                        style={{ background: `linear-gradient(145deg,${toneFor(idx)},#18201d)` }}
+                      >
+                        {initialsFor(item.name)}
+                      </div>
+                      <div className="flex flex-1 flex-col p-4">
+                        <h3 className="font-black">{item.name}</h3>
+                        <p className="mt-1 text-xs leading-5 text-ink-muted">{item.description}</p>
+                        <div className="mt-auto flex items-center justify-between">
+                          <b className="text-brand">
+                            {variant
+                              ? formatCurrency(variant.basePriceMinor)
+                              : tr('ordering.itemUnavailable')}
+                          </b>
+                          <button
+                            disabled={!variant || needsOptions}
+                            onClick={() => add(item)}
+                            aria-label={tr('ordering.addItem', { item: item.name })}
+                            className="grid size-10 place-items-center rounded-xl bg-muted text-xl font-black text-brand disabled:bg-stone-200 disabled:text-stone-400"
+                          >
+                            {variant && !needsOptions ? '+' : '...'}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </section>
-          <div className="hidden lg:block"><CartSidebar cart={cart} subtotal={subtotal} change={change} onContinue={continueOrder} /></div>
+          <div className="hidden lg:block">
+            <CartSidebar
+              cart={cart}
+              subtotal={subtotal}
+              change={change}
+              onContinue={continueOrder}
+            />
+          </div>
         </div>
       </div>
 
-      {count > 0 && <button onClick={() => setCartOpen(true)} className="fixed inset-x-4 bottom-4 z-30 flex min-h-14 items-center justify-between rounded-2xl bg-brand px-5 font-black text-white shadow-float lg:hidden">
-        <span>{tr('ordering.viewOrderCount', { count })}</span><span dir="ltr">{formatCurrency(subtotal)}</span>
-      </button>}
+      {count > 0 && (
+        <button
+          onClick={() => setCartOpen(true)}
+          className="fixed inset-x-4 bottom-4 z-30 flex min-h-14 items-center justify-between rounded-2xl bg-brand px-5 font-black text-white shadow-float lg:hidden"
+        >
+          <span>{tr('ordering.viewOrderCount', { count })}</span>
+          <span dir="ltr">{formatCurrency(subtotal)}</span>
+        </button>
+      )}
 
-      {cartOpen && <div className="fixed inset-0 z-50 flex items-end bg-black/45 lg:hidden" onClick={e => { if (e.currentTarget === e.target) setCartOpen(false); }}>
-        <div className="max-h-[88vh] w-full overflow-auto rounded-t-3xl bg-surface-warm p-4">
-          <div className="mb-3 flex justify-between"><h2 className="text-xl font-black">{tr('ordering.yourOrder')}</h2><button onClick={() => setCartOpen(false)} aria-label={tr('ordering.closeCart')}>×</button></div>
-          <CartSidebar cart={cart} subtotal={subtotal} change={change} onContinue={continueOrder} />
+      {cartOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end bg-black/45 lg:hidden"
+          onClick={(e) => {
+            if (e.currentTarget === e.target) setCartOpen(false);
+          }}
+        >
+          <div className="max-h-[88vh] w-full overflow-auto rounded-t-3xl bg-surface-warm p-4">
+            <div className="mb-3 flex justify-between">
+              <h2 className="text-xl font-black">{tr('ordering.yourOrder')}</h2>
+              <button onClick={() => setCartOpen(false)} aria-label={tr('ordering.closeCart')}>
+                ×
+              </button>
+            </div>
+            <CartSidebar
+              cart={cart}
+              subtotal={subtotal}
+              change={change}
+              onContinue={continueOrder}
+            />
+          </div>
         </div>
-      </div>}
+      )}
     </main>
   );
 }
 
-function CartSidebar({ cart, subtotal, change, onContinue }: { cart: CartLine[]; subtotal: bigint; change: (id: string, d: number) => void; onContinue: () => void }) {
+function CartSidebar({
+  cart,
+  subtotal,
+  change,
+  onContinue,
+}: {
+  cart: CartLine[];
+  subtotal: bigint;
+  change: (id: string, d: number) => void;
+  onContinue: () => void;
+}) {
   const { tr, formatCurrency } = useLocale();
-  return <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
-    <div className="border-b border-line p-5"><h2 className="text-xl font-black">{tr('ordering.yourOrder')}</h2></div>
-    <div className="p-5">{cart.length === 0 ? <p className="py-10 text-center text-sm font-bold text-ink-muted">{tr('ordering.addSomething')}</p>
-      : <div className="space-y-4">{cart.map(line => <div key={line.variantId}>
-        <div className="flex justify-between text-sm"><b>{line.name}</b><b dir="ltr">{formatCurrency(BigInt(line.basePriceMinor) * BigInt(line.quantity))}</b></div>
-        <div className="mt-2 flex justify-end"><div className="flex items-center rounded-lg border border-line">
-          <button onClick={() => change(line.variantId, -1)} className="grid size-8 place-items-center">−</button>
-          <span className="w-7 text-center text-xs font-black">{line.quantity}</span>
-          <button onClick={() => change(line.variantId, 1)} className="grid size-8 place-items-center">+</button>
-        </div></div>
-      </div>)}</div>}
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line bg-white shadow-card">
+      <div className="border-b border-line p-5">
+        <h2 className="text-xl font-black">{tr('ordering.yourOrder')}</h2>
+      </div>
+      <div className="p-5">
+        {cart.length === 0 ? (
+          <p className="py-10 text-center text-sm font-bold text-ink-muted">
+            {tr('ordering.addSomething')}
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {cart.map((line) => (
+              <div key={line.variantId}>
+                <div className="flex justify-between text-sm">
+                  <b>{line.name}</b>
+                  <b dir="ltr">
+                    {formatCurrency(BigInt(line.basePriceMinor) * BigInt(line.quantity))}
+                  </b>
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <div className="flex items-center rounded-lg border border-line">
+                    <button
+                      onClick={() => change(line.variantId, -1)}
+                      className="grid size-8 place-items-center"
+                    >
+                      −
+                    </button>
+                    <span className="w-7 text-center text-xs font-black">{line.quantity}</span>
+                    <button
+                      onClick={() => change(line.variantId, 1)}
+                      className="grid size-8 place-items-center"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {cart.length > 0 && (
+        <div className="border-t border-line bg-muted/50 p-5">
+          <div className="flex justify-between">
+            <span>{tr('ordering.subtotal')}</span>
+            <b dir="ltr">{formatCurrency(subtotal)}</b>
+          </div>
+          <button
+            onClick={onContinue}
+            className="mt-4 grid min-h-12 w-full place-items-center rounded-xl bg-brand text-sm font-black text-white"
+          >
+            {tr('ordering.reviewOrder')}
+          </button>
+        </div>
+      )}
     </div>
-    {cart.length > 0 && <div className="border-t border-line bg-muted/50 p-5">
-      <div className="flex justify-between"><span>{tr('ordering.subtotal')}</span><b dir="ltr">{formatCurrency(subtotal)}</b></div>
-      <button onClick={onContinue} className="mt-4 grid min-h-12 w-full place-items-center rounded-xl bg-brand text-sm font-black text-white">{tr('ordering.reviewOrder')}</button>
-    </div>}
-  </div>;
+  );
 }
 
-function StateScreen({ title, detail, retry }: { title: string; detail: string; retry?: () => void }) {
+function StateScreen({
+  title,
+  detail,
+  retry,
+}: {
+  title: string;
+  detail: string;
+  retry?: () => void;
+}) {
   const { tr } = useLocale();
-  return <main className="grid min-h-screen place-items-center bg-surface-warm p-6 text-center"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-2 max-w-md text-sm text-ink-muted">{detail}</p>{retry && <button onClick={retry} className="mt-5 min-h-11 rounded-xl bg-dark px-5 font-black text-white">{tr('common.tryAgain')}</button>}</div></main>;
+  return (
+    <main className="grid min-h-screen place-items-center bg-surface-warm p-6 text-center">
+      <div>
+        <h1 className="text-2xl font-black">{title}</h1>
+        <p className="mt-2 max-w-md text-sm text-ink-muted">{detail}</p>
+        {retry && (
+          <button
+            onClick={retry}
+            className="mt-5 min-h-11 rounded-xl bg-dark px-5 font-black text-white"
+          >
+            {tr('common.tryAgain')}
+          </button>
+        )}
+      </div>
+    </main>
+  );
 }
