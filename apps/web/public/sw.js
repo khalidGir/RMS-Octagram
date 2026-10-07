@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rms-shell-v3';
+const CACHE_NAME = 'rms-shell-v4';
 const SHELL = [
   '/',
   '/login',
@@ -10,7 +10,10 @@ const SHELL = [
   '/icons/icon-maskable.png',
 ];
 const CUSTOMER_PAGE_PREFIXES = ['/r/', '/o/'];
-const PUBLIC_API_PREFIX = '/api/v1/public/';
+// Only menu-serving public endpoints are cached. Order tracking, receipts, and
+// payment endpoints stay network-only: they carry financial/order state that
+// must not survive in a persistent shared cache.
+const PUBLIC_API_CACHE_PREFIXES = ['/api/v1/public/restaurants/', '/api/v1/public/tenants/'];
 const IMMUTABLE_PATH_PREFIXES = ['/_next/static/', '/icons/'];
 
 self.addEventListener('install', (event) => {
@@ -49,6 +52,7 @@ async function networkFirst(request) {
 
 /** Cache-first for immutable assets (hashed bundles, icons, CDN images). */
 async function cacheFirst(request) {
+  if (isSignedUrl(request.url)) return fetch(request);
   const cached = await caches.match(request);
   if (cached) return cached;
   try {
@@ -58,6 +62,15 @@ async function cacheFirst(request) {
   } catch {
     return Response.error();
   }
+}
+
+/**
+ * Presigned URLs (S3 X-Amz-* signatures) authorize one object for a limited
+ * time and are used for private data such as payment proofs — never store
+ * them in the shared cache.
+ */
+function isSignedUrl(href) {
+  return href.includes('X-Amz-');
 }
 
 function isCustomerPage(pathname) {
@@ -122,12 +135,14 @@ self.addEventListener('fetch', (event) => {
   }
   if (request.method !== 'GET') return;
 
-  if (url.pathname.startsWith(PUBLIC_API_PREFIX)) {
+  if (PUBLIC_API_CACHE_PREFIXES.some((prefix) => url.pathname.startsWith(prefix))) {
     event.respondWith(networkFirst(request));
     return;
   }
   if (url.origin !== self.location.origin) {
-    if (request.destination === 'image') event.respondWith(cacheFirst(request));
+    if (request.destination === 'image' && !isSignedUrl(request.url)) {
+      event.respondWith(cacheFirst(request));
+    }
     return;
   }
   if (request.mode === 'navigate') {

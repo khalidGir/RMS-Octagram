@@ -30,10 +30,9 @@ import type {
   UpdateMembershipDto,
   ReplaceBranchAssignmentsDto,
   SetFeatureDto,
-  CreateLogoUploadDto,
-  FinalizeLogoDto,
-  RemoveLogoDto,
 } from './dto';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- logo DTOs must be runtime values: Nest ValidationPipe reads design:paramtypes, and a type-only import compiles to Object, silently skipping validation
+import { CreateLogoUploadDto, FinalizeLogoDto, RemoveLogoDto } from './dto';
 
 @ApiTags('Tenancy')
 @Controller()

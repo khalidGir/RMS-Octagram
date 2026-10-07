@@ -189,7 +189,7 @@ Exit: accessibility, role, responsive, localization and pilot task tests pass.
 
 ### Deliverables
 
-- Staff manifest plus per-restaurant customer manifests (ADR-029): owner logo upload (`/tenants/current/logo/*`), branded icons, install UX, service worker (`rms-shell-v3`), cached shell, and read-only menu caching — no offline order/payment mutations.
+- Staff manifest plus per-restaurant customer manifests (ADR-029): owner logo upload (`/tenants/current/logo/*`), branded icons, install UX, service worker (`rms-shell-v4`), cached shell, and read-only menu caching — no offline order/payment mutations.
 - Clear offline/reconnect UI; unsafe mutations disabled offline.
 - Tablet accessibility and usability pass for POS/KDS.
 - Rate limiting, CSRF, upload validation, security headers, and audit coverage.

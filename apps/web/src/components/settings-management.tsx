@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiRequest, type ApiEnvelope } from '@/lib/api-client';
 import type { TenantLogoView } from '@/lib/types';
@@ -35,6 +35,24 @@ interface LogoStatus {
 const LOGO_PROCESSING_STATUSES = new Set(['PENDING_UPLOAD', 'PENDING_PROCESSING', 'PROCESSING']);
 const LOGO_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const LOGO_MAX_BYTES = 10 * 1024 * 1024;
+const ACTIVE_MEDIA_STORAGE_KEY = 'rms:logo-active-media';
+
+function readStoredActiveMediaId(): string | null {
+  try {
+    return sessionStorage.getItem(ACTIVE_MEDIA_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeActiveMediaId(id: string | null): void {
+  try {
+    if (id) sessionStorage.setItem(ACTIVE_MEDIA_STORAGE_KEY, id);
+    else sessionStorage.removeItem(ACTIVE_MEDIA_STORAGE_KEY);
+  } catch {
+    /* Storage unavailable: polling still works for the current visit. */
+  }
+}
 
 function featureLabel(key: string): string {
   return key
@@ -286,22 +304,45 @@ function TenantLogoCard({
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState<'upload' | 'remove' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // While an upload is in flight, status must be polled for THAT media object:
+  // the attached logo still points at the old image (or none) until the worker
+  // swaps it in, so querying without an id would miss the processing state.
+  const [activeMediaId, setActiveMediaId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const stored = readStoredActiveMediaId();
+    if (stored) setActiveMediaId(stored);
+  }, []);
 
   const status = useQuery({
-    queryKey: ['tenant-logo-status', tenantId],
+    queryKey: ['tenant-logo-status', tenantId, activeMediaId ?? 'attached'],
     enabled: Boolean(accessToken && tenantId && isOwner),
     queryFn: async () =>
       (
-        await apiRequest<ApiEnvelope<LogoStatus>>('/tenants/current/logo/status', {
-          accessToken,
-          tenantId,
-        })
+        await apiRequest<ApiEnvelope<LogoStatus>>(
+          `/tenants/current/logo/status${
+            activeMediaId ? `?mediaObjectId=${encodeURIComponent(activeMediaId)}` : ''
+          }`,
+          {
+            accessToken,
+            tenantId,
+          },
+        )
       ).data,
     refetchInterval: (query) =>
       query.state.data && LOGO_PROCESSING_STATUSES.has(query.state.data.processingStatus)
         ? 2000
         : false,
   });
+
+  // The in-flight upload finished processing: drop it so the query returns to
+  // the attached-logo view (which now points at this media object).
+  useEffect(() => {
+    if (activeMediaId && status.data?.processingStatus === 'READY') {
+      setActiveMediaId(null);
+      storeActiveMediaId(null);
+    }
+  }, [activeMediaId, status.data?.processingStatus]);
 
   if (!isOwner) {
     return (
@@ -315,6 +356,11 @@ function TenantLogoCard({
   const processing = logoStatus ? LOGO_PROCESSING_STATUSES.has(logoStatus.processingStatus) : false;
   const ready = logoStatus?.processingStatus === 'READY';
   const rejected = logoStatus?.processingStatus === 'REJECTED';
+
+  function setActiveUpload(id: string | null) {
+    setActiveMediaId(id);
+    storeActiveMediaId(id);
+  }
 
   async function pickFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -350,6 +396,9 @@ function TenantLogoCard({
           expectedVersion: logoStatus.tenantVersion,
         },
       });
+      // Follow this upload's media object from here on (query key changes,
+      // which fetches its status immediately).
+      setActiveUpload(intent.data.mediaObjectId);
       const form = new FormData();
       Object.entries(intent.data.fields).forEach(([key, value]) => form.append(key, value));
       form.append('file', file);
@@ -365,8 +414,9 @@ function TenantLogoCard({
           expectedVersion: intent.data.tenantVersion,
         },
       });
-      await status.refetch();
     } catch (err) {
+      // The intent is unusable now; fall back to the attached-logo view.
+      setActiveUpload(null);
       setError(err instanceof ApiError ? err.message : tr('settings.logoUploadError'));
     } finally {
       setBusy(null);
@@ -385,6 +435,7 @@ function TenantLogoCard({
         tenantId,
         body: { expectedVersion: logoStatus.tenantVersion },
       });
+      setActiveUpload(null);
       await status.refetch();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : tr('settings.logoUploadError'));
