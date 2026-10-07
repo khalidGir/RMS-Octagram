@@ -20,7 +20,9 @@ const targets = restaurantManifestTargets('habesha-house');
 
 /**
  * W3C appmanifest §5: a target is within scope when its path string starts
- * with the scope path (prefix match, same origin).
+ * with the scope path (prefix match, same origin) — deliberately
+ * string-based, so only a slash-terminated scope keeps /r/{slug}-annex out
+ * of /r/{slug}.
  */
 function withinScope(target: string, scope: string): boolean {
   return target.startsWith(scope);
@@ -47,34 +49,38 @@ describe('buildTenantManifest', () => {
 
   it('wires install targets straight through (caller supplies token-free URLs)', () => {
     const manifest = buildTenantManifest({ name: 'Habesha House', logo: null }, targets);
-    expect(manifest.start_url).toBe('/r/habesha-house');
-    expect(manifest.id).toBe('/r/habesha-house');
-    expect(manifest.scope).toBe('/r/habesha-house');
+    expect(manifest.start_url).toBe('/r/habesha-house/');
+    expect(manifest.id).toBe('/r/habesha-house/');
+    expect(manifest.scope).toBe('/r/habesha-house/');
     expect(manifest.display).toBe('standalone');
   });
 
   it('keeps start_url inside the declared scope so the scope is not discarded (W3C §1.6)', () => {
-    // A trailing-slash scope would exclude the canonical no-slash start_url,
-    // making the browser fall back to the default scope `/r/` (all restaurants).
+    // §1.6 discards a scope that does not contain start_url; §5 then matches
+    // by string prefix, so the scope must be slash-terminated or it would
+    // also swallow /r/{slug}-annex.
     const manifest = buildTenantManifest({ name: 'Habesha House', logo: null }, targets);
     expect(withinScope(manifest.start_url, manifest.scope)).toBe(true);
-    expect(manifest.scope.endsWith('/')).toBe(false);
+    expect(manifest.scope.endsWith('/')).toBe(true);
     expect(manifest.start_url).toBe(manifest.scope);
   });
 
-  it('scopes two restaurants independently', () => {
+  it('scopes two restaurants independently, including prefix-collision slugs', () => {
     const a = buildTenantManifest(
       { name: 'Blue Nile', logo: null },
       restaurantManifestTargets('blue-nile'),
     );
     const b = buildTenantManifest(
-      { name: 'Habesha House', logo: null },
-      restaurantManifestTargets('habesha-house'),
+      { name: 'Blue Nile Annex', logo: null },
+      restaurantManifestTargets('blue-nile-annex'),
     );
     expect(withinScope(a.start_url, a.scope)).toBe(true);
     expect(withinScope(b.start_url, b.scope)).toBe(true);
+    // The collision case: a bare-prefix scope /r/blue-nile would swallow the
+    // annex restaurant's start_url and every page under it.
     expect(withinScope(b.start_url, a.scope)).toBe(false);
     expect(withinScope(a.start_url, b.scope)).toBe(false);
+    expect(withinScope('/r/blue-nile-annex/checkout', a.scope)).toBe(false);
     expect(a.id).not.toBe(b.id);
     expect(withinScope('/r/blue-nile/checkout', a.scope)).toBe(true);
     expect(withinScope('/r/habesha-house', a.scope)).toBe(false);
