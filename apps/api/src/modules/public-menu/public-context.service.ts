@@ -1,10 +1,13 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { tenantLogoView, type TenantLogoView } from '../shared/logo-view';
 import { createHash, randomBytes } from 'crypto';
 
 export interface PublicRestaurantContext {
   tenant: { id: string; name: string };
   branch: { id: string; name: string; publicSlug: string };
+  logo: TenantLogoView | null;
   pickupEnabled: boolean;
   tableQrEnabled: boolean;
   availablePaymentMethods: string[];
@@ -13,6 +16,7 @@ export interface PublicRestaurantContext {
 export interface PublicTableContext {
   tenant: { id: string; name: string };
   branch: { id: string; name: string; publicSlug: string | null };
+  logo: TenantLogoView | null;
   table: { id: string; label: string; capacity: number };
   diningArea: { id: string; name: string } | null;
   availableOrderTypes: string[];
@@ -21,7 +25,24 @@ export interface PublicTableContext {
 
 @Injectable()
 export class PublicContextService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  private readonly cdnBase: string;
+
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ConfigService) config: ConfigService,
+  ) {
+    this.cdnBase = (config.get<string>('MEDIA_CDN_URL') ?? '').replace(/\/$/, '');
+  }
+
+  private logoOf(tenant: {
+    logoMedia?: { cdnKeyBase: string | null; processingStatus: string } | null;
+  }): TenantLogoView | null {
+    return tenantLogoView(
+      this.cdnBase,
+      tenant.logoMedia?.cdnKeyBase,
+      tenant.logoMedia?.processingStatus,
+    );
+  }
 
   /**
    * Resolve a public restaurant slug to safe context.
@@ -32,7 +53,13 @@ export class PublicContextService {
     const branch = await this.prisma.branch.findUnique({
       where: { publicSlug },
       include: {
-        tenant: { select: { id: true, name: true } },
+        tenant: {
+          select: {
+            id: true,
+            name: true,
+            logoMedia: { select: { cdnKeyBase: true, processingStatus: true } },
+          },
+        },
       },
     });
 
@@ -52,11 +79,10 @@ export class PublicContextService {
     return {
       tenant: { id: branch.tenant.id, name: branch.tenant.name },
       branch: { id: branch.id, name: branch.name, publicSlug: branch.publicSlug! },
+      logo: this.logoOf(branch.tenant),
       pickupEnabled: !!pickupFeature,
       tableQrEnabled: false, // public slug never enables table QR
-      availablePaymentMethods: pickupFeature
-        ? ['BANK_TRANSFER', 'TELEBIRR']
-        : [],
+      availablePaymentMethods: pickupFeature ? ['BANK_TRANSFER', 'TELEBIRR'] : [],
     };
   }
 
@@ -75,7 +101,13 @@ export class PublicContextService {
           include: {
             branch: {
               include: {
-                tenant: { select: { id: true, name: true } },
+                tenant: {
+                  select: {
+                    id: true,
+                    name: true,
+                    logoMedia: { select: { cdnKeyBase: true, processingStatus: true } },
+                  },
+                },
               },
             },
             diningArea: { select: { id: true, name: true } },
@@ -123,6 +155,7 @@ export class PublicContextService {
         name: branch.name,
         publicSlug: branch.publicSlug,
       },
+      logo: this.logoOf(branch.tenant),
       table: {
         id: token.table.id,
         label: token.table.label,

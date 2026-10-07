@@ -130,4 +130,7 @@ export const ordering = {
   serviceError: 'ጥያቄውን መላክ አልቻልንም። እባክዎ እንደገና ይሞክሩ።',
   assistanceGroup: 'የጠረጴዛ እርዳታ',
   viewReceipt: 'ደረሰኝ ይመልከቱ',
+  installApp: 'ወደ መነሻ ማያ ገጽ ያክሉ',
+  installIosHint: 'ከማጠራቀሚያ አቭን ገጹን ተጫክመው "ወደ መነሻ ማያ ገጽ ያክሉ" ይምረጡ።',
+  offlineBanner: 'አውታር የለም — የመጨረሻው የተጫነ ምናሌ ነው የሚታየው።',
 } as const;

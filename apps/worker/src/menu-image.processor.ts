@@ -1,13 +1,31 @@
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- Nest DI needs the runtime class metadata
 import { ConfigService } from '@nestjs/config';
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { PrismaClient } from '@prisma/client';
 import sharp from 'sharp';
 import { randomBytes } from 'crypto';
 
 type Crop = { x: number; y: number; width: number; height: number; rotation?: number };
-const OUTPUTS = [[320, 240], [640, 480], [1280, 960]] as const;
+const OUTPUTS = [
+  [320, 240],
+  [640, 480],
+  [1280, 960],
+] as const;
+// Public derivative files for purpose=TENANT_LOGO (must match tenantLogoView in the API).
+const LOGO_OUTPUTS = [
+  '192x192.png',
+  '512x512.png',
+  '512x512-maskable.png',
+  '180x180.png',
+  '320x320.webp',
+] as const;
+const PROCESSED_PURPOSES = ['MENU_ITEM_IMAGE', 'TENANT_LOGO'] as const;
 const LEASE_MS = 4 * 60_000; // < SQS visibility (300s) so a crashed job can be reclaimed on redelivery
 const CLEANUP_INTERVAL_MS = 60 * 60_000;
 const CLEANUP_GRACE_MS = 7 * 86_400_000;
@@ -35,7 +53,10 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
     // No fallback to the payment-proof bucket: processing must fail visibly
     // until S3_MEDIA_BUCKET is configured (transient — retried by SQS).
     this.bucket = config.get<string>('S3_MEDIA_BUCKET') ?? '';
-    this.s3 = new S3Client({ region: config.get<string>('S3_REGION', 'us-east-1'), ...(endpoint ? { endpoint, forcePathStyle: true } : {}) });
+    this.s3 = new S3Client({
+      region: config.get<string>('S3_REGION', 'us-east-1'),
+      ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
+    });
   }
 
   onModuleInit() {
@@ -56,39 +77,79 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
    */
   async handleJob(mediaObjectId: string): Promise<JobOutcome> {
     const media = await prisma.mediaObject.findUnique({ where: { id: mediaObjectId } });
-    if (!media || media.purpose !== 'MENU_ITEM_IMAGE' || media.deletedAt) return 'SKIPPED';
-    if (media.processingStatus === 'READY' || media.processingStatus === 'REJECTED' || media.processingStatus === 'PENDING_UPLOAD') return 'SKIPPED';
+    if (
+      !media ||
+      !PROCESSED_PURPOSES.includes(media.purpose as (typeof PROCESSED_PURPOSES)[number]) ||
+      media.deletedAt
+    )
+      return 'SKIPPED';
+    if (
+      media.processingStatus === 'READY' ||
+      media.processingStatus === 'REJECTED' ||
+      media.processingStatus === 'PENDING_UPLOAD'
+    )
+      return 'SKIPPED';
 
     const now = new Date();
     const leaseUntil = new Date(now.getTime() + LEASE_MS);
     let claimed = false;
     if (media.processingStatus === 'PENDING_PROCESSING') {
-      claimed = (await prisma.mediaObject.updateMany({
-        where: { id: media.id, processingStatus: 'PENDING_PROCESSING' },
-        data: { processingStatus: 'PROCESSING', processingStartedAt: now, processingLeaseExpiresAt: leaseUntil, processingAttempt: { increment: 1 } },
-      })).count === 1;
+      claimed =
+        (
+          await prisma.mediaObject.updateMany({
+            where: { id: media.id, processingStatus: 'PENDING_PROCESSING' },
+            data: {
+              processingStatus: 'PROCESSING',
+              processingStartedAt: now,
+              processingLeaseExpiresAt: leaseUntil,
+              processingAttempt: { increment: 1 },
+            },
+          })
+        ).count === 1;
     } else {
       // PROCESSING: reclaim only after the lease expired (worker crash).
       const leaseLive = media.processingLeaseExpiresAt && media.processingLeaseExpiresAt > now;
       if (leaseLive) return 'IN_FLIGHT';
-      claimed = (await prisma.mediaObject.updateMany({
-        where: { id: media.id, processingStatus: 'PROCESSING', OR: [{ processingLeaseExpiresAt: null }, { processingLeaseExpiresAt: { lt: now } }] },
-        data: { processingStartedAt: media.processingStartedAt ?? now, processingLeaseExpiresAt: leaseUntil, processingAttempt: { increment: 1 } },
-      })).count === 1;
+      claimed =
+        (
+          await prisma.mediaObject.updateMany({
+            where: {
+              id: media.id,
+              processingStatus: 'PROCESSING',
+              OR: [{ processingLeaseExpiresAt: null }, { processingLeaseExpiresAt: { lt: now } }],
+            },
+            data: {
+              processingStartedAt: media.processingStartedAt ?? now,
+              processingLeaseExpiresAt: leaseUntil,
+              processingAttempt: { increment: 1 },
+            },
+          })
+        ).count === 1;
     }
     if (!claimed) return 'IN_FLIGHT';
 
     const uploadedKeys: string[] = [];
     try {
-      await this.render(media, uploadedKeys);
+      if (media.purpose === 'TENANT_LOGO') await this.renderLogo(media, uploadedKeys);
+      else await this.render(media, uploadedKeys);
       return 'COMPLETED';
     } catch (error) {
-      for (const key of uploadedKeys) await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key })).catch(() => undefined);
-      const reason = error instanceof Error ? error.message.slice(0, 500) : 'Image processing failed';
+      for (const key of uploadedKeys)
+        await this.s3
+          .send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
+          .catch(() => undefined);
+      const reason =
+        error instanceof Error ? error.message.slice(0, 500) : 'Image processing failed';
       if (error instanceof PermanentImageError) {
         await prisma.mediaObject.updateMany({
           where: { id: media.id, processingStatus: 'PROCESSING' },
-          data: { processingStatus: 'REJECTED', scanStatus: 'REJECTED', rejectionReason: reason, processingLeaseExpiresAt: null, cleanupAfter: new Date(Date.now() + CLEANUP_GRACE_MS) },
+          data: {
+            processingStatus: 'REJECTED',
+            scanStatus: 'REJECTED',
+            rejectionReason: reason,
+            processingLeaseExpiresAt: null,
+            cleanupAfter: new Date(Date.now() + CLEANUP_GRACE_MS),
+          },
         });
         this.logger.warn(`Rejected menu image ${media.id}: ${reason}`);
         return 'REJECTED';
@@ -97,17 +158,60 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
       // the redelivered message can claim a clean PENDING_PROCESSING row.
       await prisma.mediaObject.updateMany({
         where: { id: media.id, processingStatus: 'PROCESSING' },
-        data: { processingStatus: 'PENDING_PROCESSING', processingStartedAt: null, processingLeaseExpiresAt: null },
+        data: {
+          processingStatus: 'PENDING_PROCESSING',
+          processingStartedAt: null,
+          processingLeaseExpiresAt: null,
+        },
       });
       throw error;
     }
   }
 
-  private async render(media: { id: string; tenantId: string; targetMenuItemId: string | null; objectKey: string; sha256: string | null; cropData: unknown; expectedItemVersion: number | null; uploadedByUserId: string | null }, uploadedKeys: string[]) {
-    if (!this.bucket) throw new Error('S3_MEDIA_BUCKET is not configured; menu image processing is disabled');
-    if (!media.targetMenuItemId || !media.sha256) throw new PermanentImageError('Menu image record is incomplete');
+  /**
+   * EXIF- and rotation-aware normalized crop → pixel rect over the
+   * post-transform image. Pipeline ops do not affect sharp().metadata(), so
+   * the post-EXIF, post-rotation dimensions are derived explicitly before
+   * computing the crop rect.
+   */
+  private cropRect(metadata: sharp.Metadata, crop: Crop | null) {
+    const rotation = crop?.rotation ?? 0;
+    let width = metadata.width!;
+    let height = metadata.height!;
+    if ([5, 6, 7, 8].includes(metadata.orientation ?? 1)) [width, height] = [height, width];
+    if (rotation === 90 || rotation === 270) [width, height] = [height, width];
+    const normalized = crop ?? { x: 0, y: 0, width: 1, height: 1 };
+    const left = Math.max(0, Math.min(width - 1, Math.round(normalized.x * width)));
+    const top = Math.max(0, Math.min(height - 1, Math.round(normalized.y * height)));
+    const extractWidth = Math.max(1, Math.min(width - left, Math.round(normalized.width * width)));
+    const extractHeight = Math.max(
+      1,
+      Math.min(height - top, Math.round(normalized.height * height)),
+    );
+    return { rotation, left, top, width: extractWidth, height: extractHeight };
+  }
+
+  private async render(
+    media: {
+      id: string;
+      tenantId: string;
+      targetMenuItemId: string | null;
+      objectKey: string;
+      sha256: string | null;
+      cropData: unknown;
+      expectedItemVersion: number | null;
+      uploadedByUserId: string | null;
+    },
+    uploadedKeys: string[],
+  ) {
+    if (!this.bucket)
+      throw new Error('S3_MEDIA_BUCKET is not configured; menu image processing is disabled');
+    if (!media.targetMenuItemId || !media.sha256)
+      throw new PermanentImageError('Menu image record is incomplete');
     // S3 read: network/server failures stay transient (rethrown by handleJob).
-    const object = await this.s3.send(new GetObjectCommand({ Bucket: this.bucket, Key: media.objectKey }));
+    const object = await this.s3.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: media.objectKey }),
+    );
     const bytes = Buffer.from(await object.Body!.transformToByteArray());
 
     // Decode and validation failures are permanent: the bytes matched the
@@ -118,23 +222,28 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
     } catch {
       throw new PermanentImageError('Uploaded file could not be decoded as an image');
     }
-    if (!metadata.width || !metadata.height || metadata.width < 800 || metadata.height < 600 || metadata.width > 12_000 || metadata.height > 12_000 || (metadata.pages ?? 1) > 1) {
-      throw new PermanentImageError('Image must be a non-animated photo between 800×600 and 12000×12000 pixels');
+    if (
+      !metadata.width ||
+      !metadata.height ||
+      metadata.width < 800 ||
+      metadata.height < 600 ||
+      metadata.width > 12_000 ||
+      metadata.height > 12_000 ||
+      (metadata.pages ?? 1) > 1
+    ) {
+      throw new PermanentImageError(
+        'Image must be a non-animated photo between 800×600 and 12000×12000 pixels',
+      );
     }
 
     const crop = (media.cropData ?? null) as Crop | null;
-    const rotation = crop?.rotation ?? 0;
-    // Pipeline ops do not affect sharp().metadata(), so derive the post-EXIF,
-    // post-rotation dimensions explicitly before computing the crop rect.
-    let width = metadata.width;
-    let height = metadata.height;
-    if ([5, 6, 7, 8].includes(metadata.orientation ?? 1)) [width, height] = [height, width];
-    if (rotation === 90 || rotation === 270) [width, height] = [height, width];
-    const normalized = crop ?? { x: 0, y: 0, width: 1, height: 1 };
-    const left = Math.max(0, Math.min(width - 1, Math.round(normalized.x * width)));
-    const top = Math.max(0, Math.min(height - 1, Math.round(normalized.y * height)));
-    const extractWidth = Math.max(1, Math.min(width - left, Math.round(normalized.width * width)));
-    const extractHeight = Math.max(1, Math.min(height - top, Math.round(normalized.height * height)));
+    const {
+      rotation,
+      left,
+      top,
+      width: extractWidth,
+      height: extractHeight,
+    } = this.cropRect(metadata, crop);
 
     // Content-versioned public key: item id is already public, the token is
     // random per processing run — no tenant id, no media id (audit rule).
@@ -147,27 +256,37 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
     for (const [outWidth, outHeight] of OUTPUTS) {
       try {
         const body = await sharp(bytes, { animated: false, limitInputPixels: 144_000_000 })
-          .rotate().rotate(rotation)
+          .rotate()
+          .rotate(rotation)
           .extract({ left, top, width: extractWidth, height: extractHeight })
           .resize(outWidth, outHeight, { fit: 'cover', position: 'centre' })
           .webp({ quality: 82, effort: 4 })
           .toBuffer();
         outputs.push({ key: `public/${base}/${outWidth}x${outHeight}.webp`, body });
       } catch (error) {
-        throw new PermanentImageError(error instanceof Error ? error.message.slice(0, 500) : 'Image processing failed');
+        throw new PermanentImageError(
+          error instanceof Error ? error.message.slice(0, 500) : 'Image processing failed',
+        );
       }
     }
     for (const output of outputs) {
-      await this.s3.send(new PutObjectCommand({
-        Bucket: this.bucket, Key: output.key, Body: output.body, ContentType: 'image/webp',
-        CacheControl: 'public,max-age=31536000,immutable',
-        Metadata: { menuItemId: media.targetMenuItemId },
-      }));
+      await this.s3.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: output.key,
+          Body: output.body,
+          ContentType: 'image/webp',
+          CacheControl: 'public,max-age=31536000,immutable',
+          Metadata: { menuItemId: media.targetMenuItemId },
+        }),
+      );
       uploadedKeys.push(output.key);
     }
 
     await prisma.$transaction(async (tx) => {
-      const item = await tx.menuItem.findFirst({ where: { id: media.targetMenuItemId!, tenantId: media.tenantId, deletedAt: null } });
+      const item = await tx.menuItem.findFirst({
+        where: { id: media.targetMenuItemId!, tenantId: media.tenantId, deletedAt: null },
+      });
       if (!item) throw new PermanentImageError('Target menu item no longer exists');
       // Version-protected attach: a remove/edit during processing wins and the
       // uploaded image is rejected instead of resurrecting stale state.
@@ -178,15 +297,23 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
         where: { id: item.id, tenantId: media.tenantId, version: media.expectedItemVersion },
         data: { imageMediaId: media.id, version: { increment: 1 } },
       });
-      if (attached.count !== 1) throw new PermanentImageError('Menu item changed during processing; upload again');
+      if (attached.count !== 1)
+        throw new PermanentImageError('Menu item changed during processing; upload again');
       await tx.mediaObject.update({
         where: { id: media.id },
         data: {
-          processingStatus: 'READY', scanStatus: 'CLEAN',
-          originalWidth: metadata.width, originalHeight: metadata.height,
-          outputWidth: 1280, outputHeight: 960, outputFormat: 'webp',
-          cdnKeyBase: base, processedAt: new Date(), rejectionReason: null,
-          processingLeaseExpiresAt: null, cleanupAfter: null,
+          processingStatus: 'READY',
+          scanStatus: 'CLEAN',
+          originalWidth: metadata.width,
+          originalHeight: metadata.height,
+          outputWidth: 1280,
+          outputHeight: 960,
+          outputFormat: 'webp',
+          cdnKeyBase: base,
+          processedAt: new Date(),
+          rejectionReason: null,
+          processingLeaseExpiresAt: null,
+          cleanupAfter: null,
         },
       });
       if (item.imageMediaId && item.imageMediaId !== media.id) {
@@ -197,9 +324,196 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
       }
       await tx.auditLog.create({
         data: {
-          actorUserId: media.uploadedByUserId ?? null, tenantId: media.tenantId,
-          action: 'MENU_IMAGE_PROCESS_COMPLETE', entityType: 'MediaObject', entityId: media.id,
+          actorUserId: media.uploadedByUserId ?? null,
+          tenantId: media.tenantId,
+          action: 'MENU_IMAGE_PROCESS_COMPLETE',
+          entityType: 'MediaObject',
+          entityId: media.id,
           afterJson: { menuItemId: item.id, cdnKeyBase: base },
+        },
+      });
+    });
+  }
+
+  /**
+   * Restaurant logo derivatives: square app icons (any + maskable), the iOS
+   * apple-touch icon, and a small webp preview for the settings UI. The
+   * attach is a version-CAS on `Tenant.version` — a concurrent remove or a
+   * second upload during processing wins and the derivatives are rejected.
+   */
+  private async renderLogo(
+    media: {
+      id: string;
+      tenantId: string;
+      objectKey: string;
+      sha256: string | null;
+      cropData: unknown;
+      expectedItemVersion: number | null;
+      uploadedByUserId: string | null;
+    },
+    uploadedKeys: string[],
+  ) {
+    if (!this.bucket)
+      throw new Error('S3_MEDIA_BUCKET is not configured; logo processing is disabled');
+    if (!media.sha256) throw new PermanentImageError('Logo record is incomplete');
+    const object = await this.s3.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: media.objectKey }),
+    );
+    const bytes = Buffer.from(await object.Body!.transformToByteArray());
+
+    let metadata: sharp.Metadata;
+    try {
+      metadata = await sharp(bytes, { animated: false, limitInputPixels: 144_000_000 }).metadata();
+    } catch {
+      throw new PermanentImageError('Uploaded file could not be decoded as an image');
+    }
+    if (
+      !metadata.width ||
+      !metadata.height ||
+      metadata.width < 256 ||
+      metadata.height < 256 ||
+      metadata.width > 12_000 ||
+      metadata.height > 12_000 ||
+      (metadata.pages ?? 1) > 1
+    ) {
+      throw new PermanentImageError(
+        'Logo must be a non-animated image between 256×256 and 12000×12000 pixels',
+      );
+    }
+
+    const crop = (media.cropData ?? null) as Crop | null;
+    const {
+      rotation,
+      left,
+      top,
+      width: extractWidth,
+      height: extractHeight,
+    } = this.cropRect(metadata, crop);
+    const cropped = () =>
+      sharp(bytes, { animated: false, limitInputPixels: 144_000_000 })
+        .rotate()
+        .rotate(rotation)
+        .extract({ left, top, width: extractWidth, height: extractHeight });
+
+    const publicToken = randomBytes(16).toString('base64url');
+    const base = `logos/${publicToken}-${media.sha256.slice(0, 12)}`;
+
+    const outputs: Array<{ key: string; body: Buffer; contentType: string }> = [];
+    const square = async (size: number, format: 'png' | 'webp') => {
+      const pipeline = cropped().resize(size, size, { fit: 'cover', position: 'centre' });
+      return format === 'png'
+        ? pipeline.png({ compressionLevel: 9 }).toBuffer()
+        : pipeline.webp({ quality: 82, effort: 4 }).toBuffer();
+    };
+    try {
+      outputs.push({
+        key: `public/${base}/192x192.png`,
+        body: await square(192, 'png'),
+        contentType: 'image/png',
+      });
+      outputs.push({
+        key: `public/${base}/512x512.png`,
+        body: await square(512, 'png'),
+        contentType: 'image/png',
+      });
+      outputs.push({
+        key: `public/${base}/180x180.png`,
+        body: await square(180, 'png'),
+        contentType: 'image/png',
+      });
+      outputs.push({
+        key: `public/${base}/320x320.webp`,
+        body: await square(320, 'webp'),
+        contentType: 'image/webp',
+      });
+      // Maskable: logo inside the 80% safe zone, centered on an opaque
+      // background so platform masking never clips the mark itself.
+      const safe = await cropped()
+        .resize(410, 410, { fit: 'inside' })
+        .png({ compressionLevel: 9 })
+        .toBuffer();
+      const maskable = await sharp({
+        create: {
+          width: 512,
+          height: 512,
+          channels: 4,
+          background: { r: 255, g: 255, b: 255, alpha: 1 },
+        },
+      })
+        .composite([{ input: safe, gravity: 'centre' }])
+        .png({ compressionLevel: 9 })
+        .toBuffer();
+      outputs.push({
+        key: `public/${base}/512x512-maskable.png`,
+        body: maskable,
+        contentType: 'image/png',
+      });
+    } catch (error) {
+      throw new PermanentImageError(
+        error instanceof Error ? error.message.slice(0, 500) : 'Logo processing failed',
+      );
+    }
+    for (const output of outputs) {
+      await this.s3.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: output.key,
+          Body: output.body,
+          ContentType: output.contentType,
+          CacheControl: 'public,max-age=31536000,immutable',
+          Metadata: { purpose: 'tenant-logo', tenantId: media.tenantId },
+        }),
+      );
+      uploadedKeys.push(output.key);
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const tenant = await tx.tenant.findUnique({ where: { id: media.tenantId } });
+      if (!tenant) throw new PermanentImageError('Target restaurant no longer exists');
+      if (media.expectedItemVersion == null || tenant.version !== media.expectedItemVersion) {
+        throw new PermanentImageError(
+          'Restaurant branding changed during processing; upload again',
+        );
+      }
+      const attached = await tx.tenant.updateMany({
+        where: { id: tenant.id, version: media.expectedItemVersion },
+        data: { logoMediaId: media.id, version: { increment: 1 } },
+      });
+      if (attached.count !== 1)
+        throw new PermanentImageError(
+          'Restaurant branding changed during processing; upload again',
+        );
+      await tx.mediaObject.update({
+        where: { id: media.id },
+        data: {
+          processingStatus: 'READY',
+          scanStatus: 'CLEAN',
+          originalWidth: metadata.width,
+          originalHeight: metadata.height,
+          outputWidth: 512,
+          outputHeight: 512,
+          outputFormat: 'png',
+          cdnKeyBase: base,
+          processedAt: new Date(),
+          rejectionReason: null,
+          processingLeaseExpiresAt: null,
+          cleanupAfter: null,
+        },
+      });
+      if (tenant.logoMediaId && tenant.logoMediaId !== media.id) {
+        await tx.mediaObject.updateMany({
+          where: { id: tenant.logoMediaId, tenantId: media.tenantId },
+          data: { cleanupAfter: new Date(Date.now() + CLEANUP_GRACE_MS) },
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          actorUserId: media.uploadedByUserId ?? null,
+          tenantId: media.tenantId,
+          action: 'BRANDING_LOGO_PROCESS_COMPLETE',
+          entityType: 'MediaObject',
+          entityId: media.id,
+          afterJson: { tenantId: tenant.id, cdnKeyBase: base },
         },
       });
     });
@@ -208,31 +522,50 @@ export class MenuImageProcessor implements OnModuleInit, OnModuleDestroy {
   /**
    * Hourly janitor: removes replaced/removed/rejected media after the 7-day
    * grace period, abandoned upload intents, and dead jobs — always skipping
-   * any media object still attached to a menu item.
+   * any media object still attached to a menu item or the tenant logo slot.
    */
   async sweep() {
     try {
       const staleIntentCutoff = new Date(Date.now() - CLEANUP_GRACE_MS);
       const expired = await prisma.mediaObject.findMany({
         where: {
-          purpose: 'MENU_ITEM_IMAGE', deletedAt: null,
+          purpose: { in: [...PROCESSED_PURPOSES] },
+          deletedAt: null,
           OR: [
             { cleanupAfter: { lte: new Date() } },
             { processingStatus: 'PENDING_UPLOAD', uploadExpiresAt: { lte: staleIntentCutoff } },
-            { processingStatus: { in: ['PENDING_PROCESSING', 'PROCESSING'] }, createdAt: { lte: staleIntentCutoff } },
+            {
+              processingStatus: { in: ['PENDING_PROCESSING', 'PROCESSING'] },
+              createdAt: { lte: staleIntentCutoff },
+            },
           ],
         },
         take: 10,
       });
       for (const media of expired) {
         const active = await prisma.menuItem.count({ where: { imageMediaId: media.id } });
-        if (active) continue;
-        const keys = [
-          media.objectKey,
-          ...(media.cdnKeyBase ? OUTPUTS.map(([w, h]) => `public/${media.cdnKeyBase}/${w}x${h}.webp`) : []),
-        ].filter((key) => key.length > 0);
-        for (const key of keys) await this.s3.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key })).catch(() => undefined);
-        await prisma.mediaObject.update({ where: { id: media.id }, data: { deletedAt: new Date() } });
+        const attachedToTenant =
+          media.purpose === 'TENANT_LOGO'
+            ? await prisma.tenant.count({ where: { logoMediaId: media.id } })
+            : 0;
+        if (active || attachedToTenant) continue;
+        const outputs =
+          media.purpose === 'TENANT_LOGO'
+            ? LOGO_OUTPUTS.map((file) => `public/${media.cdnKeyBase}/${file}`)
+            : media.cdnKeyBase
+              ? OUTPUTS.map(([w, h]) => `public/${media.cdnKeyBase}/${w}x${h}.webp`)
+              : [];
+        const keys = [media.objectKey, ...(media.cdnKeyBase ? outputs : [])].filter(
+          (key) => key.length > 0,
+        );
+        for (const key of keys)
+          await this.s3
+            .send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }))
+            .catch(() => undefined);
+        await prisma.mediaObject.update({
+          where: { id: media.id },
+          data: { deletedAt: new Date() },
+        });
       }
     } catch (error) {
       this.logger.error(`Menu image cleanup sweep failed: ${String(error)}`);

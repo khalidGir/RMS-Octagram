@@ -1,6 +1,7 @@
 export const settings = {
   permissionDenied: 'Permission denied',
-  ownerOnlyHint: 'Restaurant settings are available to the owner and manager only. Ask your restaurant owner for access.',
+  ownerOnlyHint:
+    'Restaurant settings are available to the owner and manager only. Ask your restaurant owner for access.',
   noRestaurantHint: 'Your platform account has no restaurant to configure.',
   eyebrow: 'Restaurant settings',
   pageTitle: 'Branding & configuration',
@@ -29,4 +30,15 @@ export const settings = {
   toggleDisable: 'Disable',
   toggleEnable: 'Enable',
   toggleAria: '{action} {feature}',
+  logoTitle: 'Restaurant logo',
+  logoHint:
+    'Shown on your customer menu and installable app. Square JPEG, PNG, or WebP image, at least 256×256 px, up to 10 MB.',
+  logoUpload: 'Upload logo',
+  logoReplace: 'Replace logo',
+  logoRemove: 'Remove logo',
+  logoProcessing: 'Processing your logo…',
+  logoRejected: 'Logo processing failed: {reason}',
+  logoInvalidType: 'Choose a JPEG, PNG, or WebP image.',
+  logoTooLarge: 'The image must be 10 MB or smaller.',
+  logoUploadError: 'The logo upload failed. Please try again.',
 } as const;

@@ -29,4 +29,15 @@ export const settings = {
   toggleDisable: 'አጥፍ',
   toggleEnable: 'አንቃ',
   toggleAria: '{action} {feature}',
+  logoTitle: 'የሬስቶራንት ሎጎ',
+  logoHint:
+    'በደንበኛው ዝርዝር እና በመጫወት የሚቻል መተግበሪያ ላይ ይታያል። ከ256×256 ፒክስል በላይ ያለ ቆንሽ JPEG፣ PNG ወይም WebP ምስል፣ እስከ 10 ሚጋባይት።',
+  logoUpload: 'ሎጎ ያስገቡ',
+  logoReplace: 'ሎጎ ይቀይሩ',
+  logoRemove: 'ሎጎ ያስወግዱ',
+  logoProcessing: 'ሎጎዎ በማቀባበል ላይ…',
+  logoRejected: 'የሎጎ ማቀባበል አልተሳካም፦ {reason}',
+  logoInvalidType: 'JPEG፣ PNG ወይም WebP ምስል ይምረጡ።',
+  logoTooLarge: 'ምስሉ ከ10 ሚጋባይት ጋር የበለጠ መሆን አይችልም።',
+  logoUploadError: 'የሎጎ ማስገባት አልተሳካም። እባክዎ እንደገና ይሞክሩ።',
 } as const;

@@ -7,7 +7,8 @@ export const ordering = {
   table: 'Table {table}',
   chooseMeal: 'Choose your meal',
   pickupIntro: 'Order ahead for pickup. Payment is available by bank transfer or Telebirr.',
-  tableIntro: 'Order for this table or choose takeaway using the options configured by the restaurant.',
+  tableIntro:
+    'Order for this table or choose takeaway using the options configured by the restaurant.',
   pickupUnavailable: 'Pickup ordering is unavailable.',
   contactRestaurant: 'Please contact the restaurant directly.',
   menuCategories: 'Menu categories',
@@ -84,8 +85,10 @@ export const ordering = {
   stepPreparing: 'Preparing',
   stepReady: 'Ready',
   stepCompleted: 'Completed',
-  awaitingCash: 'Awaiting cashier confirmation. The order will enter the kitchen only after confirmation.',
-  awaitingManual: 'Awaiting manual payment verification. The order will enter the kitchen only after confirmation.',
+  awaitingCash:
+    'Awaiting cashier confirmation. The order will enter the kitchen only after confirmation.',
+  awaitingManual:
+    'Awaiting manual payment verification. The order will enter the kitchen only after confirmation.',
   paymentRejected: 'Payment could not be verified. Please ask restaurant staff for help.',
   refreshing: 'Refreshing status…',
   statusCurrent: 'Status is current',
@@ -130,4 +133,7 @@ export const ordering = {
   serviceError: 'We could not send your request. Please try again.',
   assistanceGroup: 'Table assistance',
   viewReceipt: 'View receipt',
+  installApp: 'Add to home screen',
+  installIosHint: 'Tap the Share button, then choose "Add to Home Screen".',
+  offlineBanner: "You're offline — showing the last loaded menu.",
 } as const;

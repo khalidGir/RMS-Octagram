@@ -4,6 +4,7 @@ import {
   Post,
   Patch,
   Put,
+  Delete,
   Body,
   Param,
   Inject,
@@ -15,11 +16,12 @@ import {
 import { ApiTags, ApiOperation, ApiCookieAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { TenantRole } from '@rms/contracts';
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import { TenancyService } from './tenancy.service';
+import { BrandingService } from './branding.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles, type TenantContext } from '../auth/types';
+import { Throttle } from '../rate-limit/throttle.decorator';
 import type {
   UpdateTenantDto,
   CreateBranchDto,
@@ -29,11 +31,16 @@ import type {
   ReplaceBranchAssignmentsDto,
   SetFeatureDto,
 } from './dto';
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports -- logo DTOs must be runtime values: Nest ValidationPipe reads design:paramtypes, and a type-only import compiles to Object, silently skipping validation
+import { CreateLogoUploadDto, FinalizeLogoDto, RemoveLogoDto } from './dto';
 
 @ApiTags('Tenancy')
 @Controller()
 export class TenancyController {
-  constructor(@Inject(TenancyService) private readonly tenancyService: TenancyService) {}
+  constructor(
+    @Inject(TenancyService) private readonly tenancyService: TenancyService,
+    @Inject(BrandingService) private readonly branding: BrandingService,
+  ) {}
 
   @Get('tenants/current')
   @UseGuards(JwtAuthGuard)
@@ -57,6 +64,55 @@ export class TenancyController {
     const ctx = req.tenantContext as TenantContext;
     const tenant = await this.tenancyService.updateTenant(ctx.tenantId!, body);
     return { data: tenant };
+  }
+
+  @Post('tenants/current/logo/upload-intent')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TenantRole.OWNER)
+  @ApiCookieAuth()
+  @Throttle({ ttl: 60_000, limit: 10, name: 'logo-upload' })
+  @ApiOperation({ summary: 'Create a restaurant logo upload intent (owner only)' })
+  async createLogoUploadIntent(@Req() req: Request, @Body() body: CreateLogoUploadDto) {
+    const ctx = req.tenantContext as TenantContext;
+    return { data: await this.branding.createUploadIntent(ctx.tenantId!, ctx.userId, body) };
+  }
+
+  @Post('tenants/current/logo/finalize')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TenantRole.OWNER)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Verify and queue a restaurant logo for processing (owner only)' })
+  async finalizeLogo(@Req() req: Request, @Body() body: FinalizeLogoDto) {
+    const ctx = req.tenantContext as TenantContext;
+    return {
+      data: await this.branding.finalize(
+        ctx.tenantId!,
+        ctx.userId,
+        body.mediaObjectId,
+        body.expectedVersion,
+      ),
+    };
+  }
+
+  @Get('tenants/current/logo/status')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TenantRole.OWNER)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Restaurant logo processing status (owner only)' })
+  async logoStatus(@Req() req: Request) {
+    const ctx = req.tenantContext as TenantContext;
+    const mediaObjectId = (req.query.mediaObjectId as string) || undefined;
+    return { data: await this.branding.status(ctx.tenantId!, mediaObjectId) };
+  }
+
+  @Delete('tenants/current/logo')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(TenantRole.OWNER)
+  @ApiCookieAuth()
+  @ApiOperation({ summary: 'Remove the restaurant logo (owner only)' })
+  async removeLogo(@Req() req: Request, @Body() body: RemoveLogoDto) {
+    const ctx = req.tenantContext as TenantContext;
+    return { data: await this.branding.remove(ctx.tenantId!, ctx.userId, body.expectedVersion) };
   }
 
   @Get('branches')
@@ -99,7 +155,11 @@ export class TenancyController {
   ) {
     const ctx = req.tenantContext as TenantContext;
     const branch = await this.tenancyService.updateBranch(
-      branchId, ctx.tenantId!, body, ctx.tenantRole, ctx.branchIds,
+      branchId,
+      ctx.tenantId!,
+      body,
+      ctx.tenantRole,
+      ctx.branchIds,
     );
     return { data: branch };
   }
@@ -140,10 +200,7 @@ export class TenancyController {
   @ApiOperation({ summary: 'Accept invitation' })
   async acceptInvitation(@Req() req: Request, @Body() body: { invitationToken: string }) {
     const ctx = req.tenantContext as TenantContext;
-    const membership = await this.tenancyService.acceptInvitation(
-      body.invitationToken,
-      ctx.userId,
-    );
+    const membership = await this.tenancyService.acceptInvitation(body.invitationToken, ctx.userId);
     return { data: membership };
   }
 
@@ -180,7 +237,12 @@ export class TenancyController {
   ) {
     const ctx = req.tenantContext as TenantContext;
     await this.tenancyService.replaceBranchAssignments(
-      membershipId, ctx.tenantId!, body.branchIds, ctx.userId, ctx.tenantRole, ctx.branchIds,
+      membershipId,
+      ctx.tenantId!,
+      body.branchIds,
+      ctx.userId,
+      ctx.tenantRole,
+      ctx.branchIds,
     );
     return { data: { success: true } };
   }
@@ -208,7 +270,10 @@ export class TenancyController {
   ) {
     const ctx = req.tenantContext as TenantContext;
     const feature = await this.tenancyService.setTenantFeature(
-      ctx.tenantId!, featureKey, body.enabled, ctx.userId,
+      ctx.tenantId!,
+      featureKey,
+      body.enabled,
+      ctx.userId,
     );
     return { data: feature };
   }
@@ -236,8 +301,13 @@ export class TenancyController {
   ) {
     const ctx = req.tenantContext as TenantContext;
     const feature = await this.tenancyService.setFeature(
-      ctx.tenantId!, branchId, featureKey, body.enabled, ctx.userId,
-      ctx.tenantRole, ctx.branchIds,
+      ctx.tenantId!,
+      branchId,
+      featureKey,
+      body.enabled,
+      ctx.userId,
+      ctx.tenantRole,
+      ctx.branchIds,
     );
     return { data: feature };
   }

@@ -44,84 +44,84 @@ Use stable machine-readable codes. Never expose stack traces, SQL errors, secret
 
 ## 3. Authentication and Session
 
-| Method | Path | Purpose |
-| :--- | :--- | :--- |
-| `POST` | `/auth/login` | Staff login; rate limited. |
-| `POST` | `/auth/refresh` | Rotate refresh session. |
-| `POST` | `/auth/logout` | Revoke current session and clear cookies. |
-| `POST` | `/auth/logout-all` | Revoke all sessions for the user. |
-| `GET` | `/auth/me` | User, memberships, roles, branch assignments, and effective features. |
-| `POST` | `/auth/forgot-password` | Begin reset without revealing account existence. |
-| `POST` | `/auth/reset-password` | Complete one-time reset and revoke old sessions. |
+| Method | Path                    | Purpose                                                               |
+| :----- | :---------------------- | :-------------------------------------------------------------------- |
+| `POST` | `/auth/login`           | Staff login; rate limited.                                            |
+| `POST` | `/auth/refresh`         | Rotate refresh session.                                               |
+| `POST` | `/auth/logout`          | Revoke current session and clear cookies.                             |
+| `POST` | `/auth/logout-all`      | Revoke all sessions for the user.                                     |
+| `GET`  | `/auth/me`              | User, memberships, roles, branch assignments, and effective features. |
+| `POST` | `/auth/forgot-password` | Begin reset without revealing account existence.                      |
+| `POST` | `/auth/reset-password`  | Complete one-time reset and revoke old sessions.                      |
 
 ## 4. Platform and Tenancy
 
-| Method | Path | Roles | Purpose |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/platform/tenants` | Super Admin | Provision tenant and first owner invitation. |
-| `GET` | `/platform/tenants` | Super Admin | List tenants by status/search. |
-| `GET` | `/platform/tenants/:tenantId` | Super Admin | Tenant summary with audited access. |
-| `PATCH` | `/platform/tenants/:tenantId/status` | Super Admin | Activate or suspend tenant. |
-| `GET` | `/tenants/current` | Staff | Current tenant profile. |
-| `PATCH` | `/tenants/current` | Owner | Update tenant settings. |
-| `GET` | `/branches` | Staff | Authorized branches. |
-| `POST` | `/branches` | Owner | Create branch. |
-| `GET` | `/branches/:branchId` | Assigned staff | Branch details. |
-| `PATCH` | `/branches/:branchId` | Owner/Manager policy | Update branch. |
-| `GET` | `/branches/:branchId/features` | Assigned staff | Effective features. |
-| `PUT` | `/branches/:branchId/features/:featureKey` | Owner/Manager | Set authorized override. |
-| `GET` | `/memberships` | Owner/Manager | List scoped staff. |
-| `POST` | `/memberships/invitations` | Owner/Manager | Invite within grant rules. |
-| `PATCH` | `/memberships/:membershipId` | Owner/Manager | Role/status changes within grant rules. |
-| `PUT` | `/memberships/:membershipId/branches` | Owner/Manager | Replace allowed branches. |
+| Method  | Path                                       | Roles                | Purpose                                      |
+| :------ | :----------------------------------------- | :------------------- | :------------------------------------------- |
+| `POST`  | `/platform/tenants`                        | Super Admin          | Provision tenant and first owner invitation. |
+| `GET`   | `/platform/tenants`                        | Super Admin          | List tenants by status/search.               |
+| `GET`   | `/platform/tenants/:tenantId`              | Super Admin          | Tenant summary with audited access.          |
+| `PATCH` | `/platform/tenants/:tenantId/status`       | Super Admin          | Activate or suspend tenant.                  |
+| `GET`   | `/tenants/current`                         | Staff                | Current tenant profile.                      |
+| `PATCH` | `/tenants/current`                         | Owner                | Update tenant settings.                      |
+| `GET`   | `/branches`                                | Staff                | Authorized branches.                         |
+| `POST`  | `/branches`                                | Owner                | Create branch.                               |
+| `GET`   | `/branches/:branchId`                      | Assigned staff       | Branch details.                              |
+| `PATCH` | `/branches/:branchId`                      | Owner/Manager policy | Update branch.                               |
+| `GET`   | `/branches/:branchId/features`             | Assigned staff       | Effective features.                          |
+| `PUT`   | `/branches/:branchId/features/:featureKey` | Owner/Manager        | Set authorized override.                     |
+| `GET`   | `/memberships`                             | Owner/Manager        | List scoped staff.                           |
+| `POST`  | `/memberships/invitations`                 | Owner/Manager        | Invite within grant rules.                   |
+| `PATCH` | `/memberships/:membershipId`               | Owner/Manager        | Role/status changes within grant rules.      |
+| `PUT`   | `/memberships/:membershipId/branches`      | Owner/Manager        | Replace allowed branches.                    |
 
 ## 5. Catalog
 
-| Method | Path | Purpose |
-| :--- | :--- | :--- |
-| `GET/POST` | `/catalog/categories` | List/create tenant categories. |
-| `PATCH/DELETE` | `/catalog/categories/:categoryId` | Update/retire category. |
-| `GET/POST` | `/catalog/items` | Search/create items. |
-| `GET/PATCH/DELETE` | `/catalog/items/:itemId` | Read/update/retire item. |
-| `POST` | `/catalog/items/:itemId/variants` | Add variant. |
-| `PATCH` | `/catalog/variants/:variantId` | Update variant. |
-| `POST` | `/catalog/modifier-groups` | Create modifier group/options. |
-| `PATCH` | `/catalog/modifier-groups/:groupId` | Update modifier rules. |
-| `PUT` | `/branches/:branchId/menu-items/:itemId` | Branch price/availability override. |
-| `GET` | `/public/branches/:branchSlug/menu` | Public branch menu and ordering policy. |
+| Method             | Path                                     | Purpose                                 |
+| :----------------- | :--------------------------------------- | :-------------------------------------- |
+| `GET/POST`         | `/catalog/categories`                    | List/create tenant categories.          |
+| `PATCH/DELETE`     | `/catalog/categories/:categoryId`        | Update/retire category.                 |
+| `GET/POST`         | `/catalog/items`                         | Search/create items.                    |
+| `GET/PATCH/DELETE` | `/catalog/items/:itemId`                 | Read/update/retire item.                |
+| `POST`             | `/catalog/items/:itemId/variants`        | Add variant.                            |
+| `PATCH`            | `/catalog/variants/:variantId`           | Update variant.                         |
+| `POST`             | `/catalog/modifier-groups`               | Create modifier group/options.          |
+| `PATCH`            | `/catalog/modifier-groups/:groupId`      | Update modifier rules.                  |
+| `PUT`              | `/branches/:branchId/menu-items/:itemId` | Branch price/availability override.     |
+| `GET`              | `/public/branches/:branchSlug/menu`      | Public branch menu and ordering policy. |
 
 Catalog write endpoints are Owner/Manager only and tenant scoped. Public output excludes internal IDs/fields not required to order.
 
 ## 6. Tables and Sessions
 
-| Method | Path | Purpose |
-| :--- | :--- | :--- |
-| `GET/POST` | `/branches/:branchId/tables` | List/create tables. |
-| `PATCH` | `/tables/:tableId` | Update table. |
-| `POST` | `/tables/:tableId/qr-token` | Create/rotate opaque QR token. |
-| `POST` | `/public/table-context/resolve` | Resolve QR token to safe branch/table/menu context. |
-| `GET` | `/branches/:branchId/sessions` | List open sessions. |
-| `POST` | `/tables/:tableId/sessions` | Staff opens a session. |
-| `POST` | `/sessions/:sessionId/close` | Close a settled session. |
+| Method     | Path                            | Purpose                                             |
+| :--------- | :------------------------------ | :-------------------------------------------------- |
+| `GET/POST` | `/branches/:branchId/tables`    | List/create tables.                                 |
+| `PATCH`    | `/tables/:tableId`              | Update table.                                       |
+| `POST`     | `/tables/:tableId/qr-token`     | Create/rotate opaque QR token.                      |
+| `POST`     | `/public/table-context/resolve` | Resolve QR token to safe branch/table/menu context. |
+| `GET`      | `/branches/:branchId/sessions`  | List open sessions.                                 |
+| `POST`     | `/tables/:tableId/sessions`     | Staff opens a session.                              |
+| `POST`     | `/sessions/:sessionId/close`    | Close a settled session.                            |
 
 QR tokens are secrets: accept them in a POST body for resolution where practical and prevent them from appearing in server logs.
 
 ## 7. Orders
 
-| Method | Path | Roles/context | Purpose |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/public/orders` | Customer context | Create table/pickup order. Idempotent. |
-| `GET` | `/public/orders/:trackingToken` | Customer context | Safe order tracking view. |
-| `PATCH` | `/public/orders/:trackingToken` | Customer context | Policy-limited edit before confirmation. |
-| `POST` | `/branches/:branchId/orders` | Cashier+ | Create POS order. Idempotent. |
-| `GET` | `/branches/:branchId/orders` | Assigned staff | Filter by status/type/date/search. |
-| `GET` | `/orders/:orderId` | Scoped staff | Detailed order. |
-| `PATCH` | `/orders/:orderId` | Cashier+ | Edit allowed draft/unconfirmed order. |
-| `POST` | `/orders/:orderId/confirm` | Cashier+ | Confirm under pay-later/manual staff policy. |
-| `POST` | `/orders/:orderId/cancel` | Authorized actor | Cancel before confirmation. |
-| `POST` | `/orders/:orderId/void` | Policy-authorized staff | Void with reason and compensations. |
-| `POST` | `/orders/:orderId/split` | Manager/Cashier policy | Split eligible lines. |
-| `POST` | `/orders/merge` | Manager/Cashier policy | Merge compatible unpaid orders. |
+| Method  | Path                            | Roles/context           | Purpose                                      |
+| :------ | :------------------------------ | :---------------------- | :------------------------------------------- |
+| `POST`  | `/public/orders`                | Customer context        | Create table/pickup order. Idempotent.       |
+| `GET`   | `/public/orders/:trackingToken` | Customer context        | Safe order tracking view.                    |
+| `PATCH` | `/public/orders/:trackingToken` | Customer context        | Policy-limited edit before confirmation.     |
+| `POST`  | `/branches/:branchId/orders`    | Cashier+                | Create POS order. Idempotent.                |
+| `GET`   | `/branches/:branchId/orders`    | Assigned staff          | Filter by status/type/date/search.           |
+| `GET`   | `/orders/:orderId`              | Scoped staff            | Detailed order.                              |
+| `PATCH` | `/orders/:orderId`              | Cashier+                | Edit allowed draft/unconfirmed order.        |
+| `POST`  | `/orders/:orderId/confirm`      | Cashier+                | Confirm under pay-later/manual staff policy. |
+| `POST`  | `/orders/:orderId/cancel`       | Authorized actor        | Cancel before confirmation.                  |
+| `POST`  | `/orders/:orderId/void`         | Policy-authorized staff | Void with reason and compensations.          |
+| `POST`  | `/orders/:orderId/split`        | Manager/Cashier policy  | Split eligible lines.                        |
+| `POST`  | `/orders/merge`                 | Manager/Cashier policy  | Merge compatible unpaid orders.              |
 
 Representative create request:
 
@@ -149,18 +149,18 @@ Response returns server-calculated totals, current status, permitted next action
 
 ## 8. Payments and Proof Uploads
 
-| Method | Path | Purpose |
-| :--- | :--- | :--- |
-| `GET` | `/public/orders/:trackingToken/payment-options` | Safe branch payment instructions and payable balance. |
-| `POST` | `/public/orders/:trackingToken/payments/manual-transfer` | Create/reuse pending manual payment. |
-| `POST` | `/public/payments/:paymentToken/proof-upload` | Obtain constrained presigned upload. |
-| `POST` | `/public/payments/:paymentToken/proof-finalize` | Verify metadata/checksum and submit proof. Idempotent. |
-| `POST` | `/orders/:orderId/payments/cash` | Cashier records cash and confirms order. |
-| `GET` | `/branches/:branchId/payments?status=PENDING_VERIFICATION` | Cashier review queue. |
-| `GET` | `/payments/:paymentId` | Authorized payment details. |
-| `GET` | `/payments/:paymentId/proof-url` | Short-lived authorized proof URL. |
-| `POST` | `/payments/:paymentId/approve` | Cashier/Manager approval. Idempotent. |
-| `POST` | `/payments/:paymentId/reject` | Reject with required reason. Idempotent. |
+| Method | Path                                                       | Purpose                                                |
+| :----- | :--------------------------------------------------------- | :----------------------------------------------------- |
+| `GET`  | `/public/orders/:trackingToken/payment-options`            | Safe branch payment instructions and payable balance.  |
+| `POST` | `/public/orders/:trackingToken/payments/manual-transfer`   | Create/reuse pending manual payment.                   |
+| `POST` | `/public/payments/:paymentToken/proof-upload`              | Obtain constrained presigned upload.                   |
+| `POST` | `/public/payments/:paymentToken/proof-finalize`            | Verify metadata/checksum and submit proof. Idempotent. |
+| `POST` | `/orders/:orderId/payments/cash`                           | Cashier records cash and confirms order.               |
+| `GET`  | `/branches/:branchId/payments?status=PENDING_VERIFICATION` | Cashier review queue.                                  |
+| `GET`  | `/payments/:paymentId`                                     | Authorized payment details.                            |
+| `GET`  | `/payments/:paymentId/proof-url`                           | Short-lived authorized proof URL.                      |
+| `POST` | `/payments/:paymentId/approve`                             | Cashier/Manager approval. Idempotent.                  |
+| `POST` | `/payments/:paymentId/reject`                              | Reject with required reason. Idempotent.               |
 
 Approval request:
 
@@ -176,14 +176,14 @@ Do not create a generic endpoint that lets clients set arbitrary payment status 
 
 ## 9. Kitchen
 
-| Method | Path | Purpose |
-| :--- | :--- | :--- |
-| `GET/POST` | `/branches/:branchId/kitchen/stations` | List/configure stations. |
-| `GET` | `/branches/:branchId/kitchen/tickets` | Authoritative queue by station/status. |
-| `POST` | `/kitchen/tickets/:ticketId/start` | Queue to in-progress. |
-| `POST` | `/kitchen/tickets/:ticketId/ready` | Mark ready. |
-| `POST` | `/kitchen/tickets/:ticketId/complete` | Mark completed. |
-| `POST` | `/kitchen/tickets/:ticketId/recall` | Recall with reason. |
+| Method     | Path                                   | Purpose                                |
+| :--------- | :------------------------------------- | :------------------------------------- |
+| `GET/POST` | `/branches/:branchId/kitchen/stations` | List/configure stations.               |
+| `GET`      | `/branches/:branchId/kitchen/tickets`  | Authoritative queue by station/status. |
+| `POST`     | `/kitchen/tickets/:ticketId/start`     | Queue to in-progress.                  |
+| `POST`     | `/kitchen/tickets/:ticketId/ready`     | Mark ready.                            |
+| `POST`     | `/kitchen/tickets/:ticketId/complete`  | Mark completed.                        |
+| `POST`     | `/kitchen/tickets/:ticketId/recall`    | Recall with reason.                    |
 
 WebSocket namespace: `/operations`.
 
@@ -203,35 +203,35 @@ The client refetches the resource/queue; events are not the sole source of state
 
 ## 10. Inventory
 
-| Method | Path | Purpose |
-| :--- | :--- | :--- |
-| `GET/POST` | `/branches/:branchId/inventory/items` | List/create items. |
-| `PATCH` | `/inventory/items/:itemId` | Update threshold/settings. |
-| `POST` | `/inventory/items/:itemId/batches` | Receive a batch. |
-| `GET` | `/inventory/items/:itemId/movements` | Ledger history. |
-| `POST` | `/inventory/items/:itemId/adjustments` | Audited adjustment. Idempotent. |
-| `GET/PUT` | `/catalog/variants/:variantId/recipe` | Read/version recipe. |
-| `GET` | `/branches/:branchId/inventory/alerts` | Low-stock list. |
+| Method     | Path                                   | Purpose                         |
+| :--------- | :------------------------------------- | :------------------------------ |
+| `GET/POST` | `/branches/:branchId/inventory/items`  | List/create items.              |
+| `PATCH`    | `/inventory/items/:itemId`             | Update threshold/settings.      |
+| `POST`     | `/inventory/items/:itemId/batches`     | Receive a batch.                |
+| `GET`      | `/inventory/items/:itemId/movements`   | Ledger history.                 |
+| `POST`     | `/inventory/items/:itemId/adjustments` | Audited adjustment. Idempotent. |
+| `GET/PUT`  | `/catalog/variants/:variantId/recipe`  | Read/version recipe.            |
+| `GET`      | `/branches/:branchId/inventory/alerts` | Low-stock list.                 |
 
 ## 11. Reporting and Audit
 
-| Method | Path | Purpose |
-| :--- | :--- | :--- |
-| `GET` | `/reports/revenue` | Branch or authorized tenant aggregate. |
-| `GET` | `/reports/best-sellers` | Quantity and revenue by item snapshot. |
-| `GET` | `/reports/peak-hours` | Branch-local hourly aggregates. |
-| `GET` | `/reports/inventory-consumption` | Movement-ledger aggregate. |
-| `GET` | `/audit-logs` | Owner or scoped manager audit view. |
+| Method | Path                             | Purpose                                |
+| :----- | :------------------------------- | :------------------------------------- |
+| `GET`  | `/reports/revenue`               | Branch or authorized tenant aggregate. |
+| `GET`  | `/reports/best-sellers`          | Quantity and revenue by item snapshot. |
+| `GET`  | `/reports/peak-hours`            | Branch-local hourly aggregates.        |
+| `GET`  | `/reports/inventory-consumption` | Movement-ledger aggregate.             |
+| `GET`  | `/audit-logs`                    | Owner or scoped manager audit view.    |
 
 Common report parameters: `branchId`, `fromLocalDate`, `toLocalDate`, `timezone`. API validates scope and returns the effective timezone and UTC range.
 
 ## 12. Health and Operations
 
-| Method | Path | Purpose |
-| :--- | :--- | :--- |
-| `GET` | `/health/live` | Process liveness only. |
-| `GET` | `/health/ready` | Required dependency readiness. |
-| `GET` | `/version` | Non-secret release identifier. |
+| Method | Path            | Purpose                        |
+| :----- | :-------------- | :----------------------------- |
+| `GET`  | `/health/live`  | Process liveness only.         |
+| `GET`  | `/health/ready` | Required dependency readiness. |
+| `GET`  | `/version`      | Non-secret release identifier. |
 
 ## 13. HTTP Status Guidance
 
@@ -261,12 +261,12 @@ The following routes and rules supersede conflicting role or public-context exam
 
 ### Localization and public entry
 
-| Method | Path | Context | Purpose |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/public/restaurants/:publicSlug` | Public | Safe active restaurant/branch identity, locale availability and pickup policy. |
-| `GET` | `/public/restaurants/:publicSlug/menu` | Public | Pickup-only localized menu and bank/Telebirr methods. |
-| `POST` | `/public/table-context/resolve` | QR token body | Safe table identity, localized menu context and configured dine-in/takeaway methods. |
-| `PUT` | `/me/preferences/locale` | Staff | Persist `en`, `am`, or `ar`. |
+| Method | Path                                   | Context       | Purpose                                                                              |
+| :----- | :------------------------------------- | :------------ | :----------------------------------------------------------------------------------- |
+| `GET`  | `/public/restaurants/:publicSlug`      | Public        | Safe active restaurant/branch identity, locale availability and pickup policy.       |
+| `GET`  | `/public/restaurants/:publicSlug/menu` | Public        | Pickup-only localized menu and bank/Telebirr methods.                                |
+| `POST` | `/public/table-context/resolve`        | QR token body | Safe table identity, localized menu context and configured dine-in/takeaway methods. |
+| `PUT`  | `/me/preferences/locale`               | Staff         | Persist `en`, `am`, or `ar`.                                                         |
 
 Public responses accept `Accept-Language` or explicit validated locale and return `contentLocale` plus fallback metadata where translated restaurant content is incomplete.
 
@@ -274,20 +274,20 @@ Public responses accept `Accept-Language` or explicit validated locale and retur
 
 Separate commands prevent a client from manufacturing entry context:
 
-| Method | Path | Allowed choices |
-| :--- | :--- | :--- |
-| `POST` | `/public/table-orders` | Verified QR token; DINE_IN or TAKEAWAY; configured cash/bank/Telebirr. |
-| `POST` | `/public/pickup-orders` | Verified public slug/branch resolver; PICKUP; bank/Telebirr only. |
+| Method | Path                    | Allowed choices                                                        |
+| :----- | :---------------------- | :--------------------------------------------------------------------- |
+| `POST` | `/public/table-orders`  | Verified QR token; DINE_IN or TAKEAWAY; configured cash/bank/Telebirr. |
+| `POST` | `/public/pickup-orders` | Verified public slug/branch resolver; PICKUP; bank/Telebirr only.      |
 
 Both require `Idempotency-Key` and return immutable subtotal, VAT rate/amount, total, instruction snapshot identifier and tracking token exactly once. Public pickup rejects cash even when a crafted request includes it.
 
 ### VAT configuration
 
-| Method | Path | Role | Purpose |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/tenants/current/tax-configurations` | Owner | Current/history VAT configuration. |
-| `POST` | `/tenants/current/tax-configurations` | Owner | Add future/current version with confirmation metadata. |
-| `GET` | `/branches/:branchId/checkout-policy` | Scoped staff | Effective tax/payment/day-boundary policy. |
+| Method | Path                                  | Role         | Purpose                                                |
+| :----- | :------------------------------------ | :----------- | :----------------------------------------------------- |
+| `GET`  | `/tenants/current/tax-configurations` | Owner        | Current/history VAT configuration.                     |
+| `POST` | `/tenants/current/tax-configurations` | Owner        | Add future/current version with confirmation metadata. |
+| `GET`  | `/branches/:branchId/checkout-policy` | Scoped staff | Effective tax/payment/day-boundary policy.             |
 
 Money fields are decimal strings for transport where BigInt applies. Rate fields use decimal strings, never binary floats. Service charge is absent from public configuration and always zero in legacy stored fields.
 
@@ -297,48 +297,48 @@ Money fields are decimal strings for transport where BigInt applies. Rate fields
 
 ### Cashier shifts
 
-| Method | Path | Role | Purpose |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/branches/:branchId/shifts/current` | Cashier/Owner | Current actor shift. |
-| `POST` | `/branches/:branchId/shifts` | Cashier/Owner | Open one shift; idempotent. |
-| `GET` | `/branches/:branchId/shifts` | Owner/Manager read policy | Paginated scoped history. |
-| `GET` | `/shifts/:shiftId` | Owner/own Cashier | Shift details/current calculated summary. |
-| `POST` | `/shifts/:shiftId/close` | Owner/own Cashier | Close with counted cash and variance reason; idempotent/versioned. |
-| `GET` | `/shifts/:shiftId/report` | Owner/own Cashier | Immutable printable report data. |
+| Method | Path                                 | Role                      | Purpose                                                            |
+| :----- | :----------------------------------- | :------------------------ | :----------------------------------------------------------------- |
+| `GET`  | `/branches/:branchId/shifts/current` | Cashier/Owner             | Current actor shift.                                               |
+| `POST` | `/branches/:branchId/shifts`         | Cashier/Owner             | Open one shift; idempotent.                                        |
+| `GET`  | `/branches/:branchId/shifts`         | Owner/Manager read policy | Paginated scoped history.                                          |
+| `GET`  | `/shifts/:shiftId`                   | Owner/own Cashier         | Shift details/current calculated summary.                          |
+| `POST` | `/shifts/:shiftId/close`             | Owner/own Cashier         | Close with counted cash and variance reason; idempotent/versioned. |
+| `GET`  | `/shifts/:shiftId/report`            | Owner/own Cashier         | Immutable printable report data.                                   |
 
 Cash confirmation endpoints derive the active shift from server membership/branch context and reject `SHIFT_REQUIRED` when absent. Clients cannot submit arbitrary shift IDs to reattribute payment.
 
 ### Table sessions and waiter operations
 
-| Method | Path | Role | Purpose |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/branches/:branchId/table-operations` | Owner/Manager/Cashier/Waiter policy | Safe occupancy and Ready-order projection. |
-| `GET` | `/sessions/:sessionId` | Scoped staff | Session and terminal eligibility. |
-| `POST` | `/sessions/:sessionId/clear` | Owner/Waiter | Clear after all linked orders terminal; versioned/idempotent. |
-| `POST` | `/orders/:orderId/complete` | Owner/Manager/Cashier/Waiter | Complete Ready order under role policy. |
+| Method | Path                                   | Role                                | Purpose                                                       |
+| :----- | :------------------------------------- | :---------------------------------- | :------------------------------------------------------------ |
+| `GET`  | `/branches/:branchId/table-operations` | Owner/Manager/Cashier/Waiter policy | Safe occupancy and Ready-order projection.                    |
+| `GET`  | `/sessions/:sessionId`                 | Scoped staff                        | Session and terminal eligibility.                             |
+| `POST` | `/sessions/:sessionId/clear`           | Owner/Waiter                        | Clear after all linked orders terminal; versioned/idempotent. |
+| `POST` | `/orders/:orderId/complete`            | Owner/Manager/Cashier/Waiter        | Complete Ready order under role policy.                       |
 
 Scanning a QR or creating a draft never opens a session. Session assignment occurs transactionally when the first dine-in order is confirmed.
 
 ### Business-day close
 
-| Method | Path | Role | Purpose |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/branches/:branchId/business-days/:localDate/preview` | Owner | Exact current totals, blockers and exception items. |
-| `POST` | `/branches/:branchId/business-days/:localDate/close` | Owner | Normal or exception close with expected version/reason. |
-| `GET` | `/branches/:branchId/business-days/:localDate` | Owner | Immutable close snapshot/history. |
-| `POST` | `/business-days/:closeId/reopen` | Owner | Reopen with mandatory reason; audited/versioned. |
-| `GET` | `/business-days/:closeId/report` | Owner | Printable/downloadable snapshot data. |
+| Method | Path                                                   | Role  | Purpose                                                 |
+| :----- | :----------------------------------------------------- | :---- | :------------------------------------------------------ |
+| `GET`  | `/branches/:branchId/business-days/:localDate/preview` | Owner | Exact current totals, blockers and exception items.     |
+| `POST` | `/branches/:branchId/business-days/:localDate/close`   | Owner | Normal or exception close with expected version/reason. |
+| `GET`  | `/branches/:branchId/business-days/:localDate`         | Owner | Immutable close snapshot/history.                       |
+| `POST` | `/business-days/:closeId/reopen`                       | Owner | Reopen with mandatory reason; audited/versioned.        |
+| `GET`  | `/business-days/:closeId/report`                       | Owner | Printable/downloadable snapshot data.                   |
 
 Normal close returns a stable business error listing blocker counts/links when shifts or pending payments remain. Pending totals are excluded from recognized income.
 
 ### Super-admin menu support context
 
-| Method | Path | Role | Purpose |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/platform/support-contexts` | Super Admin | Enter selected tenant menu-support mode with reason and short expiry. |
-| `GET` | `/platform/support-contexts/current` | Super Admin | Current target and expiry. |
-| `DELETE` | `/platform/support-contexts/:contextId` | Super Admin | Explicitly leave/revoke context. |
-| catalog routes | Existing catalog mutations | Super Admin with active context | Menu-only operations against selected tenant. |
+| Method         | Path                                    | Role                            | Purpose                                                               |
+| :------------- | :-------------------------------------- | :------------------------------ | :-------------------------------------------------------------------- |
+| `POST`         | `/platform/support-contexts`            | Super Admin                     | Enter selected tenant menu-support mode with reason and short expiry. |
+| `GET`          | `/platform/support-contexts/current`    | Super Admin                     | Current target and expiry.                                            |
+| `DELETE`       | `/platform/support-contexts/:contextId` | Super Admin                     | Explicitly leave/revoke context.                                      |
+| catalog routes | Existing catalog mutations              | Super Admin with active context | Menu-only operations against selected tenant.                         |
 
 Support context is carried in a secure server-validated session/header binding and cannot authorize other tenant modules. Operational routes reject it even when a valid tenant ID is known.
 
@@ -351,36 +351,49 @@ Support context is carried in a secure server-validated session/header binding a
 
 ### Non-fiscal receipts
 
-| Method | Path | Role | Purpose |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/public/orders/:trackingToken/receipt` | Customer with opaque tracking token | Stored order/payment snapshot after an approved payment. |
-| `GET` | `/orders/:orderId/receipt` | Scoped staff | Reprint the same stored receipt projection. |
+| Method | Path                                    | Role                                | Purpose                                                  |
+| :----- | :-------------------------------------- | :---------------------------------- | :------------------------------------------------------- |
+| `GET`  | `/public/orders/:trackingToken/receipt` | Customer with opaque tracking token | Stored order/payment snapshot after an approved payment. |
+| `GET`  | `/orders/:orderId/receipt`              | Scoped staff                        | Reprint the same stored receipt projection.              |
 
 Receipt reads never recalculate current menu prices. They return snapshotted item, variant, modifier, tax, discount and total values plus the approved payment method/reference. Public reads expose no internal IDs, staff identities, kitchen metadata or audit data. A `409` response means payment is not yet approved. This RestaurantMS document is explicitly non-fiscal; regulated Ethiopian fiscal-device integration remains outside the pilot.
 
 ### Table assistance service requests
 
-| Method | Path | Role | Purpose |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/public/service-requests` | Customer with table QR | Raise Call waiter/Request bill; tenant, branch and table resolve server-side from the QR token. Returns `{ request, created, alreadyOpen }`. |
-| `POST` | `/public/service-requests/status` | Customer with table QR | Active assistance requests for the table (state restore); no internal staff identifiers exposed. |
-| `GET` | `/branches/:branchId/service-requests` | Owner/Manager/Waiter | List active requests (open/claimed/escalated); overdue escalation applied on read. |
-| `POST` | `/branches/:branchId/service-requests/:id/claim` | Owner/Manager/Waiter | Claim an open/escalated request; `expectedVersion` required; duplicate claim by the same waiter is idempotent. |
-| `POST` | `/branches/:branchId/service-requests/:id/resolve` | Owner/Manager/Waiter | Resolve a claimed request; a waiter may resolve only their own claim; `expectedVersion` required. |
-| `POST` | `/branches/:branchId/service-requests/:id/cancel` | Owner/Manager/Waiter | Cancel an active request; a waiter may cancel only their own or assigned request; `expectedVersion` required. |
+| Method | Path                                               | Role                   | Purpose                                                                                                                                      |
+| :----- | :------------------------------------------------- | :--------------------- | :------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST` | `/public/service-requests`                         | Customer with table QR | Raise Call waiter/Request bill; tenant, branch and table resolve server-side from the QR token. Returns `{ request, created, alreadyOpen }`. |
+| `POST` | `/public/service-requests/status`                  | Customer with table QR | Active assistance requests for the table (state restore); no internal staff identifiers exposed.                                             |
+| `GET`  | `/branches/:branchId/service-requests`             | Owner/Manager/Waiter   | List active requests (open/claimed/escalated); overdue escalation applied on read.                                                           |
+| `POST` | `/branches/:branchId/service-requests/:id/claim`   | Owner/Manager/Waiter   | Claim an open/escalated request; `expectedVersion` required; duplicate claim by the same waiter is idempotent.                               |
+| `POST` | `/branches/:branchId/service-requests/:id/resolve` | Owner/Manager/Waiter   | Resolve a claimed request; a waiter may resolve only their own claim; `expectedVersion` required.                                            |
+| `POST` | `/branches/:branchId/service-requests/:id/cancel`  | Owner/Manager/Waiter   | Cancel an active request; a waiter may cancel only their own or assigned request; `expectedVersion` required.                                |
 
 A request requires the table's open dining session, which is opened only by a confirmed dine-in order; scanning or drafting a cart never occupies a table. The session's assigned waiter is inherited at creation. One open request per type per session is enforced by a partial unique index; concurrent duplicates return the existing request with `alreadyOpen: true`, and idempotency-key replays return the same row. Cashier and kitchen roles are denied. Escalation moves requests open longer than the branch `assistanceEscalationSeconds` threshold (default 180 seconds) to `ESCALATED` on the 30-second escalation poll.
 
 ### Menu item photo uploads
 
-| Method | Path | Role | Purpose |
-| :--- | :--- | :--- | :--- |
-| `POST` | `/items/:itemId/image/upload-intent` | Owner/Manager | Validate `contentType` (JPEG/PNG/WebP), `sizeBytes` (≤ 10 MB), `sha256`, `crop` (normalized fractions plus rotation) and `expectedVersion`; return a `mediaObjectId`, presigned S3 upload URL, and form `fields` for direct browser upload. |
-| `POST` | `/items/:itemId/image/finalize` | Owner/Manager | After the direct upload, verify the stored object (size, checksum, content type), snapshot immutable thumbnail/standard/high-resolution URLs on the item, and queue background processing. Idempotent for an already-confirmed object. |
-| `GET` | `/items/:itemId/image/status?mediaObjectId=` | Owner/Manager | Poll `PENDING_PROCESSING`, `READY`, or `REJECTED` with a safe `rejectionReason`. |
-| `DELETE` | `/items/:itemId/image` | Owner/Manager | Remove the photo, version-checked via `expectedVersion`; the replaced object is scheduled for cleanup. |
+| Method   | Path                                         | Role          | Purpose                                                                                                                                                                                                                                     |
+| :------- | :------------------------------------------- | :------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST`   | `/items/:itemId/image/upload-intent`         | Owner/Manager | Validate `contentType` (JPEG/PNG/WebP), `sizeBytes` (≤ 10 MB), `sha256`, `crop` (normalized fractions plus rotation) and `expectedVersion`; return a `mediaObjectId`, presigned S3 upload URL, and form `fields` for direct browser upload. |
+| `POST`   | `/items/:itemId/image/finalize`              | Owner/Manager | After the direct upload, verify the stored object (size, checksum, content type), snapshot immutable thumbnail/standard/high-resolution URLs on the item, and queue background processing. Idempotent for an already-confirmed object.      |
+| `GET`    | `/items/:itemId/image/status?mediaObjectId=` | Owner/Manager | Poll `PENDING_PROCESSING`, `READY`, or `REJECTED` with a safe `rejectionReason`.                                                                                                                                                            |
+| `DELETE` | `/items/:itemId/image`                       | Owner/Manager | Remove the photo, version-checked via `expectedVersion`; the replaced object is scheduled for cleanup.                                                                                                                                      |
 
 The browser uploads bytes directly to S3 — the API never proxies file content — and a successful presigned upload alone never changes catalog state; only `finalize` does. Statuses: `201` for created intent and finalized upload, `200` for status and delete, `400` for invalid type/size/checksum or a missing/unreadable object, `403` for insufficient role or mismatched tenant context, `404` for unknown items or foreign-tenant resources, and `409` for a stale `expectedVersion` or expired intent. Finalize moves the object to `PENDING_PROCESSING` and writes the outbox event consumed by the SQS worker pipeline (ADR-027) in one transaction; a duplicate finalize returns success without queueing a second job.
+
+### Restaurant logo uploads
+
+Owner-only branding pipeline (ADR-029) that installs per-restaurant PWA icons and the customer-menu logo tile. The browser uploads bytes directly to S3; a presigned upload alone never changes tenant state; only `finalize` does.
+
+| Method   | Path                                          | Role  | Purpose                                                                                                                                                                                                                                                                                                      |
+| :------- | :-------------------------------------------- | :---- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/tenants/current/logo/upload-intent`         | Owner | Validate `contentType` (JPEG/PNG/WebP), `sizeBytes` (≤ 10 MB), lowercase `sha256`, full-image `crop`, and `expectedVersion`; enforce at most two active intents tenant-wide; return `mediaObjectId`, presigned S3 POST URL, form `fields`, and the current `tenantVersion`. Throttled to 10 requests/minute. |
+| `POST`   | `/tenants/current/logo/finalize`              | Owner | Verify the stored object, flip it to `PENDING_PROCESSING`, and append the pointer-only `menu.image.process_requested` outbox event in one transaction guarded by `Tenant.version`. Idempotent for an already-finalized object; never reveals foreign-tenant ids.                                             |
+| `GET`    | `/tenants/current/logo/status?mediaObjectId=` | Owner | Current `processingStatus` (`NONE`, `PENDING_UPLOAD`, `PENDING_PROCESSING`, `PROCESSING`, `READY`, `REJECTED`), safe `rejectionReason`, `uploadExpiresAt` while an upload is pending, derivative `logo` URLs when `READY`, and `tenantVersion`.                                                              |
+| `DELETE` | `/tenants/current/logo`                       | Owner | Detach the logo with `expectedVersion` CAS, bump `Tenant.version`, and schedule the old object for cleanup after seven days.                                                                                                                                                                                 |
+
+Statuses: `201` for intent and finalize, `200` for status and delete, `400` for invalid type/size/checksum or an unreadable object, `403` for non-owner roles or mismatched tenant context, `404` for finalize/removal against unknown or foreign resources, and `409` for a stale `expectedVersion`, an expired intent, or more than two active intents. The worker renders `192x192.png`, `512x512.png`, `512x512-maskable.png`, `180x180.png`, and `320x320.webp` under a public-token CDN key (never tenant/media ids) and attaches them transactionally. Public restaurant and table contexts expose a `logo` object with those derivative URLs, and each customer route serves a five-minute-cached manifest (`/r/{slug}/manifest.webmanifest`, `start_url`/`id`/`scope` = `/r/{slug}`, never a table token).
 
 ### New stable errors
 
@@ -403,4 +416,3 @@ The browser uploads bytes directly to S3 — the API never proxies file content 
 - `REQUEST_ASSIGNED_OTHER`
 - `REQUEST_NOT_YOURS`
 - `TRANSLATION_FALLBACK_USED` is metadata, not an error.
-
