@@ -67,8 +67,14 @@ async function waitForReady(url: string, timeoutMs: number): Promise<void> {
     }
     try {
       const res = await fetch(`${url}/api/v1/health/ready`);
-      if (res.ok) return;
-      lastError = `health/ready -> ${res.status}`;
+      const body: unknown = await res.json().catch(() => null);
+      const checks = (body as { checks?: Record<string, string> } | null)?.checks;
+      // Strict: only a 200 with BOTH dependencies healthy counts as ready.
+      // A 503 (e.g. Redis unreachable in CI) must fail the probe, not pass it.
+      if (res.status === 200 && checks?.postgres === 'ok' && checks?.redis === 'ok') {
+        return;
+      }
+      lastError = `health/ready -> ${res.status} checks=${JSON.stringify(checks ?? body)}`;
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
     }
@@ -138,7 +144,8 @@ describe('Compiled API bootstrap (dist/main.js)', () => {
         MEDIA_CDN_URL: process.env.MEDIA_CDN_URL || 'https://media.example.test',
         AWS_ACCESS_KEY_ID: 'test-key',
         AWS_SECRET_ACCESS_KEY: 'test-secret',
-        REDIS_HOST: '127.0.0.1',
+        REDIS_HOST: process.env.REDIS_HOST || 'localhost',
+        REDIS_PORT: process.env.REDIS_PORT || '6379',
         SQS_QUEUE_URL: '',
         SQS_ENDPOINT: '',
         LOG_LEVEL: 'error',
@@ -198,15 +205,23 @@ describe('Compiled API bootstrap (dist/main.js)', () => {
       });
     }
     child = null;
-    await prisma.auditLog.deleteMany({ where: { tenantId } }).catch(() => {});
-    await prisma.mediaObject.deleteMany({ where: { tenantId } }).catch(() => {});
-    await prisma.featureSetting.deleteMany({ where: { tenantId } }).catch(() => {});
-    await cleanupEntitlements(prisma, tenantId).catch(() => {});
-    await prisma.branchAssignment.deleteMany({ where: { tenantId } }).catch(() => {});
-    await prisma.tenantMembership.deleteMany({ where: { tenantId } }).catch(() => {});
+    // Tenant-scoped cleanup only when startup actually created the tenant:
+    // on a failed beforeAll `tenantId` is empty, and an empty filter must not
+    // widen these deletes onto other suites' rows. Stopping the child and
+    // disconnecting Prisma always runs.
+    if (tenantId) {
+      await prisma.auditLog.deleteMany({ where: { tenantId } }).catch(() => {});
+      await prisma.mediaObject.deleteMany({ where: { tenantId } }).catch(() => {});
+      await prisma.featureSetting.deleteMany({ where: { tenantId } }).catch(() => {});
+      await cleanupEntitlements(prisma, tenantId).catch(() => {});
+      await prisma.branchAssignment.deleteMany({ where: { tenantId } }).catch(() => {});
+      await prisma.tenantMembership.deleteMany({ where: { tenantId } }).catch(() => {});
+      await prisma.branch.deleteMany({ where: { tenantId } }).catch(() => {});
+      await prisma.tenant.deleteMany({ where: { id: tenantId } }).catch(() => {});
+    }
+    // Email is unique to this run (timestamped), so it can never match
+    // another suite's user even when tenant creation never happened.
     await prisma.user.deleteMany({ where: { email: ownerEmail } }).catch(() => {});
-    await prisma.branch.deleteMany({ where: { tenantId } }).catch(() => {});
-    await prisma.tenant.deleteMany({ where: { id: tenantId } }).catch(() => {});
     await prisma.$disconnect();
   }, 30_000);
 

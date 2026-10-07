@@ -15,6 +15,11 @@ jobs:
       DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
       TEST_DATABASE_URL: postgresql://rms:rms_test@localhost:5432/rms_test?schema=public
       NODE_ENV: test
+      # /health/ready requires Redis to answer PONG (strict readiness), so the
+      # compiled-bootstrap e2e probe and the API under test point at this
+      # service explicitly instead of relying on config defaults.
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: '6379'
 
     services:
       postgres:
@@ -27,6 +32,16 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
