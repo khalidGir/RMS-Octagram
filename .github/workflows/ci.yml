@@ -55,7 +55,7 @@ jobs:
 
       # Node 22 matches the proven local environment; the web unit suite
       # (jsdom 30) fails on Node 20 with "webidl.util.markAsUncloneable is not
-      # a function". engines allows >=20, CI runs the version we validate with.
+      # a function". engines requires >=22, CI runs the version we validate with.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
