@@ -1,19 +1,41 @@
 #!/usr/bin/env node
 /**
- * Public menu read load ramp against a staging/production API.
+ * Public menu read load ramp. Read-only GET traffic, one run per invocation.
  *
  * Usage:
- *   node load/menu-read.mjs [baseUrl] [menuPath]
- *   node load/menu-read.mjs https://100.57.8.66.nip.io /api/v1/public/restaurants/main-branch/menu
+ *   node load/menu-read.mjs <full-url>
+ *   node load/menu-read.mjs "https://100.57.8.66.nip.io/api/v1/public/restaurants/main-branch/menu?locale=en"
  *
+ * The target URL is required; its port and query string are preserved.
  * Stages: 10/25/50 VUs x 15s, 100 VUs x 10s (keep-alive, closed-loop).
- * Reports rps and p50/p95/p99 latency per stage. Read-only GET traffic.
+ * Reports rps and p50/p95/p99 latency per stage.
+ * Exits 1 if any transport error or non-200 response occurs, 2 on usage errors.
  */
+import http from 'node:http';
 import https from 'node:https';
 import { performance } from 'node:perf_hooks';
 
-const baseUrl = process.argv[2] ?? 'https://100.57.8.66.nip.io';
-const menuPath = process.argv[3] ?? '/api/v1/public/restaurants/main-branch/menu';
+const targetArg = process.argv[2];
+if (!targetArg) {
+  console.error('usage: node load/menu-read.mjs <full-url>');
+  process.exit(2);
+}
+let target;
+try {
+  target = new URL(targetArg);
+} catch {
+  console.error(`invalid URL: ${targetArg}`);
+  process.exit(2);
+}
+if (target.protocol !== 'http:' && target.protocol !== 'https:') {
+  console.error(`unsupported protocol: ${target.protocol} (use http: or https:)`);
+  process.exit(2);
+}
+
+const mod = target.protocol === 'https:' ? https : http;
+const requestPath = `${target.pathname}${target.search}`;
+const agent = new mod.Agent({ keepAlive: true, maxSockets: 100 });
+
 const stages = [
   { vu: 10, secs: 15 },
   { vu: 25, secs: 15 },
@@ -21,26 +43,22 @@ const stages = [
   { vu: 100, secs: 10 },
 ];
 
-const agent = new https.Agent({ keepAlive: true, maxSockets: 100 });
-const target = new URL(menuPath, baseUrl);
-
 function once() {
   return new Promise((resolve) => {
     const start = performance.now();
-    const req = https.request(
+    const req = mod.request(
       {
         agent,
         hostname: target.hostname,
-        path: target.pathname,
+        port: target.port || undefined,
+        path: requestPath,
         method: 'GET',
         headers: { accept: 'application/json' },
         timeout: 30_000,
       },
       (res) => {
         res.on('data', () => {});
-        res.on('end', () =>
-          resolve({ ms: performance.now() - start, status: res.statusCode }),
-        );
+        res.on('end', () => resolve({ ms: performance.now() - start, status: res.statusCode }));
       },
     );
     req.on('error', () => resolve({ ms: performance.now() - start, status: 0 }));
@@ -68,7 +86,7 @@ async function runStage({ vu, secs }) {
   await Promise.all(workers);
   const elapsedSec = (performance.now() - t0) / 1000;
   const latencies = samples.map((s) => s.ms).sort((a, b) => a - b);
-  const errors = samples.filter((s) => s.status !== 200).length;
+  const failures = samples.filter((s) => s.status !== 200);
   return {
     vu,
     secs,
@@ -78,7 +96,8 @@ async function runStage({ vu, secs }) {
     p95: +percentile(latencies, 95).toFixed(0),
     p99: +percentile(latencies, 99).toFixed(0),
     max: +(latencies.at(-1) ?? 0).toFixed(0),
-    non200: errors,
+    non200: failures.length,
+    transportErrors: failures.filter((s) => s.status === 0).length,
   };
 }
 
@@ -89,4 +108,20 @@ for (const stage of stages) {
   results.push(row);
   process.stderr.write(`${JSON.stringify(row)}\n`);
 }
-console.log(JSON.stringify({ target: target.href, results }, null, 2));
+
+const totals = results.reduce(
+  (acc, r) => ({
+    requests: acc.requests + r.requests,
+    non200: acc.non200 + r.non200,
+    transportErrors: acc.transportErrors + r.transportErrors,
+  }),
+  { requests: 0, non200: 0, transportErrors: 0 },
+);
+console.log(JSON.stringify({ target: target.href, requestPath, results, totals }, null, 2));
+
+if (totals.non200 > 0) {
+  console.error(
+    `FAIL: ${totals.non200} non-200 response(s) (${totals.transportErrors} transport error(s))`,
+  );
+  process.exit(1);
+}
