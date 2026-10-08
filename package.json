@@ -4,7 +4,7 @@
   "private": true,
   "description": "Restaurant Management System - Multi-tenant POS, ordering, kitchen, and inventory platform",
   "engines": {
-    "node": ">=20",
+    "node": ">=22",
     "pnpm": ">=9"
   },
   "packageManager": "pnpm@9.15.0",

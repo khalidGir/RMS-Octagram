@@ -9,6 +9,9 @@ async function bootstrap() {
   const app = await NestFactory.createApplicationContext(WorkerModule, {
     bufferLogs: true,
   });
+  // bufferLogs defers all Nest output until an explicit flush; without this
+  // call the worker never emits a single line (boot, consumer, shutdown).
+  app.flushLogs();
 
   Logger.log('RMS Worker started', 'Bootstrap');
   // A Nest application context has no HTTP listener to keep Node alive. When

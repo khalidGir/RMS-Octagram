@@ -1,4 +1,5 @@
-FROM node:20-alpine AS base
+# Node 22 LTS (v22.23.3). Digest-pinned for reproducible, reviewable bumps.
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS base
 RUN apk add --no-cache libc6-compat openssl
 ENV COREPACK_HOME=/usr/local/share/corepack
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
@@ -43,6 +44,9 @@ COPY --from=builder --chown=rms:rms /app/packages /app/packages
 COPY --from=builder --chown=rms:rms /app/apps/api/package.json ./package.json
 COPY --from=builder --chown=rms:rms /app/apps/api/node_modules ./node_modules
 COPY --from=builder --chown=rms:rms /app/apps/api/dist ./dist
+
+# Fail the build if Prisma or Argon2 cannot load inside this image.
+RUN node -e "require('@prisma/client'); require('argon2'); console.log('api runtime deps ok')"
 
 USER rms
 
